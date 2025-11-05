@@ -1,12 +1,22 @@
 // Telegram Web App API
-const tg = window.Telegram.WebApp;
+// Проверяем, что мы в Telegram
+let tg = null;
+if (window.Telegram && window.Telegram.WebApp) {
+    tg = window.Telegram.WebApp;
+} else {
+    console.error('Telegram WebApp не доступен! Убедитесь, что Mini App открыт через Telegram');
+}
 
 // Версия Mini App (для проверки обновлений)
 const APP_VERSION = '2.0.0';
 
 // Инициализация Mini App
-tg.ready();
-tg.expand();
+if (tg) {
+    tg.ready();
+    tg.expand();
+} else {
+    console.error('Не удалось инициализировать Telegram WebApp');
+}
 
 // Базовый URL API игры
 // Вариант 1: Прямое обращение (может быть заблокировано CORS)
@@ -31,12 +41,31 @@ console.log('Используется прокси:', !!API_SERVER_URL);
 document.addEventListener('DOMContentLoaded', async () => {
     updateStatus(false);
     
+    // Проверяем, что мы в Telegram WebApp
+    console.log('Проверка Telegram WebApp:');
+    console.log('- tg доступен:', !!tg);
+    console.log('- tg.initData:', tg?.initData ? tg.initData.substring(0, 50) + '...' : 'недоступен');
+    console.log('- tg.initDataUnsafe:', tg?.initDataUnsafe ? 'доступен' : 'недоступен');
+    console.log('- tg.version:', tg?.version);
+    console.log('- tg.platform:', tg?.platform);
+    console.log('- window.location:', window.location.href);
+    
     // Проверяем наличие токена в localStorage
     let token = getAccessToken();
     
     // Если токена нет, пытаемся авторизоваться
     if (!token) {
         console.log('Токен не найден, пытаемся авторизоваться...');
+        
+        // Проверяем, что initData доступен перед авторизацией
+        if (!tg?.initData || tg.initData.length < 10) {
+            console.error('initData не доступен! Убедитесь, что Mini App открыт через Telegram');
+            console.error('Попробуйте:');
+            console.error('1. Открыть Mini App через бота в Telegram');
+            console.error('2. Обновить страницу');
+            console.error('3. Использовать ручную авторизацию (кнопка ниже)');
+        }
+        
         token = await loginWithInitData();
     }
     
@@ -158,13 +187,16 @@ async function attackBoss() {
             return;
         }
         
+        const attackBody = { type: 'punchChest' };
+        console.log('Отправка атаки:', attackBody);
+        
         const response = await fetch(`${GAME_API_URL}/boss/attack`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ type: 'punchChest' })
+            body: JSON.stringify(attackBody)
         });
         
         if (!response.ok) {
@@ -333,12 +365,14 @@ async function startPrisonWalk() {
         const max_clicks = 10; // Максимум кликов за один запрос
         
         for (let i = 0; i < max_clicks; i++) {
+            // POST запрос для работы в тюрьме (без body, только query параметры)
             const response = await fetch(`${GAME_API_URL}/player/prison/${prisonId}/work?isDay=${isDay}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
-                }
+                },
+                body: JSON.stringify({}) // Пустой body, но он должен быть
             });
             
             if (!response.ok) {
@@ -444,28 +478,82 @@ function getAccessToken() {
 async function loginWithInitData() {
     try {
         // Проверяем доступность Telegram WebApp
-        if (!tg || !tg.initData) {
-            console.error('Telegram WebApp не доступен или initData пустой');
+        if (!tg) {
+            console.error('Telegram WebApp не доступен');
             console.log('Проверка Telegram WebApp:', {
                 tg: typeof tg,
-                initData: tg?.initData,
-                initDataUnsafe: tg?.initDataUnsafe,
-                version: tg?.version,
-                platform: tg?.platform
+                windowTelegram: typeof window.Telegram,
+                WebApp: typeof window.Telegram?.WebApp
             });
             return null;
         }
         
-        const initData = tg.initData;
+        // Получаем initData - это строка с данными от Telegram
+        // initData должен содержать query_id, user, auth_date, hash и т.д.
+        let initData = tg.initData || '';
+        
+        console.log('Получение initData:');
+        console.log('- tg.initData тип:', typeof tg.initData);
+        console.log('- tg.initData длина:', tg.initData ? tg.initData.length : 0);
+        console.log('- tg.initData значение (первые 100 символов):', tg.initData ? tg.initData.substring(0, 100) : 'пусто');
+        
+        // Если initData пустой или слишком короткий, пробуем другие способы
+        if (!initData || initData.length < 50) {
+            console.warn('tg.initData пустой или слишком короткий, пробуем другие способы...');
+            
+            // Пробуем получить из initDataUnsafe (если доступен как строка)
+            if (tg.initDataUnsafe) {
+                console.log('- tg.initDataUnsafe тип:', typeof tg.initDataUnsafe);
+                if (typeof tg.initDataUnsafe === 'string' && tg.initDataUnsafe.length > 50) {
+                    initData = tg.initDataUnsafe;
+                    console.log('✓ initData получен из initDataUnsafe');
+                } else if (typeof tg.initDataUnsafe === 'object') {
+                    console.log('- initDataUnsafe - объект, содержимое:', Object.keys(tg.initDataUnsafe));
+                    // Объект initDataUnsafe содержит распарсенные данные, но нам нужна строка
+                    // Попробуем получить из window.location
+                }
+            }
+            
+            // Пробуем получить из URL параметров (если есть)
+            if (!initData || initData.length < 50) {
+                const urlParams = new URLSearchParams(window.location.search);
+                const urlInitData = urlParams.get('tgWebAppData') || urlParams.get('_auth') || urlParams.get('initData');
+                if (urlInitData && urlInitData.length > 50) {
+                    initData = decodeURIComponent(urlInitData);
+                    console.log('✓ initData получен из URL параметров');
+                }
+            }
+            
+            // Пробуем получить из hash в URL
+            if (!initData || initData.length < 50) {
+                const hash = window.location.hash.substring(1);
+                if (hash && hash.includes('query_id=')) {
+                    initData = hash;
+                    console.log('✓ initData получен из URL hash');
+                }
+            }
+        }
+        
         console.log('initData получен, длина:', initData?.length);
         
-        // Проверяем, что initData не пустой
+        // Проверяем, что initData не пустой и содержит нужные данные
         if (!initData || initData.length < 10) {
             console.error('initData пустой или слишком короткий');
+            console.error('Проверьте, что Mini App открыт через Telegram');
+            console.error('Попробуйте обновить страницу или использовать ручную авторизацию');
+            return null;
+        }
+        
+        // Проверяем, что это не тестовое значение
+        if (initData === 'test' || initData === 'test123') {
+            console.error('Обнаружено тестовое значение initData!');
+            console.error('initData должен быть получен из Telegram WebApp');
+            console.error('Проверьте, что Mini App открыт через Telegram, а не напрямую в браузере');
             return null;
         }
         
         console.log('Попытка авторизации через initData...');
+        console.log('initData значение (первые 100 символов):', initData ? initData.substring(0, 100) + '...' : 'null/undefined');
         
         // Если используем API сервер, отправляем initData через него
         // Иначе пытаемся напрямую к API игры (может быть заблокировано CORS)
@@ -473,16 +561,49 @@ async function loginWithInitData() {
             ? `${API_SERVER_URL}/auth/login`
             : `${GAME_API_URL}/auth/login`;
         
+        // Проверяем, что initData содержит необходимые поля
+        if (!initData.includes('query_id=') || !initData.includes('user=') || !initData.includes('hash=')) {
+            console.error('initData не содержит необходимые поля!');
+            console.error('Ожидаемый формат: query_id=...&user=...&hash=...');
+            console.error('Получен:', initData.substring(0, 200));
+            throw new Error('Некорректный формат initData. Убедитесь, что Mini App открыт через Telegram');
+        }
+        
+        const requestBody = { initData: initData };
+        const requestBodyString = JSON.stringify(requestBody);
+        
+        console.log('URL запроса:', loginUrl);
+        console.log('Body запроса (первые 200 символов):', requestBodyString.substring(0, 200) + '...');
+        console.log('Длина initData в body:', initData.length);
+        
         const response = await fetch(loginUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
-            body: JSON.stringify({ initData: initData })
+            body: requestBodyString
         });
         
         console.log('Ответ сервера:', response.status, response.statusText);
+        
+        // Обрабатываем 204 (No Content) - некоторые прокси/туннели могут возвращать его
+        if (response.status === 204) {
+            console.warn('Получен статус 204 (No Content)');
+            console.warn('Возможно, прокси не передает тело ответа');
+            console.warn('Попробуем получить данные из заголовков или использовать другой метод');
+            
+            // Проверяем заголовки на наличие данных
+            const authHeader = response.headers.get('X-Access-Token') || response.headers.get('Access-Token');
+            if (authHeader) {
+                console.log('Токен найден в заголовках');
+                localStorage.setItem('game_access_token', authHeader);
+                return authHeader;
+            }
+            
+            // Если нет данных, возвращаем ошибку
+            throw new Error('Получен ответ 204 без данных. Возможно, проблема с прокси-сервером.');
+        }
         
         if (!response.ok) {
             const errorText = await response.text();
@@ -499,7 +620,26 @@ async function loginWithInitData() {
             throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
         }
         
-        const data = await response.json();
+        // Проверяем, есть ли тело ответа
+        const contentType = response.headers.get('content-type');
+        console.log('Content-Type ответа:', contentType);
+        
+        let data;
+        if (contentType && contentType.includes('application/json')) {
+            const responseText = await response.text();
+            console.log('Тело ответа:', responseText.substring(0, 200));
+            if (responseText.trim()) {
+                data = JSON.parse(responseText);
+            } else {
+                console.error('Пустое тело ответа');
+                throw new Error('Пустой ответ от сервера');
+            }
+        } else {
+            // Если не JSON, пытаемся распарсить как текст
+            const responseText = await response.text();
+            console.log('Не-JSON ответ:', responseText.substring(0, 200));
+            throw new Error(`Неожиданный Content-Type: ${contentType}`);
+        }
         console.log('Данные авторизации:', { 
             success: data.success, 
             hasToken: !!data.accessToken,
