@@ -218,6 +218,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('boss-section').style.display = 'none';
         document.getElementById('prison-section').style.display = 'none';
         document.getElementById('stats-section').style.display = 'none';
+        document.getElementById('biceps-section').style.display = 'none';
         
         // НЕ прерываем загрузку - продолжаем авторизацию
         // Пользователь может настроить позже через кнопку "Настройки"
@@ -291,6 +292,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('boss-section').style.display = 'block';
         document.getElementById('prison-section').style.display = 'block';
         document.getElementById('stats-section').style.display = 'block';
+        document.getElementById('biceps-section').style.display = 'block';
         
         // Загружаем данные только после успешной авторизации
         console.log('Загрузка данных после авторизации...');
@@ -302,6 +304,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Обновляем статистику каждые 30 секунд
         setInterval(loadStats, 30000);
+        
+        // Показываем секцию бицухи
+        document.getElementById('biceps-section').style.display = 'block';
     } else {
         console.error('❌ Авторизация не удалась');
         updateStatus(false);
@@ -310,6 +315,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('boss-section').style.display = 'block';
         document.getElementById('prison-section').style.display = 'block';
         document.getElementById('stats-section').style.display = 'block';
+        document.getElementById('biceps-section').style.display = 'block';
         
         const errorMsg = `
             <p class="error">
@@ -327,6 +333,118 @@ document.addEventListener('DOMContentLoaded', async () => {
         showManualAuthButton();
     }
 });
+
+// Прокачка бицухи
+async function startBicepsUpgrade() {
+    const input = document.getElementById('biceps-user-ids');
+    const resultsDiv = document.getElementById('biceps-results');
+    const resultsContent = document.getElementById('biceps-results-content');
+    
+    const userIdsInput = input.value.trim();
+    if (!userIdsInput) {
+        tg.showAlert('Введите ID пользователей');
+        return;
+    }
+    
+    // Парсим ID (могут быть через запятую или пробел)
+    const userIds = userIdsInput
+        .split(/[,,\s]+/)
+        .map(id => id.trim())
+        .filter(id => id && /^\d+$/.test(id))
+        .map(id => parseInt(id));
+    
+    if (userIds.length === 0) {
+        tg.showAlert('Неверный формат ID. Используйте числа, разделенные запятыми или пробелами');
+        return;
+    }
+    
+    // Получаем токен
+    const token = localStorage.getItem('game_access_token');
+    if (!token) {
+        tg.showAlert('Токен не найден. Выполните авторизацию');
+        return;
+    }
+    
+    // Получаем свой User ID из токена или из localStorage
+    let fromUserId = localStorage.getItem('game_user_id');
+    if (!fromUserId) {
+        // Пытаемся получить из токена или используем значение по умолчанию
+        fromUserId = 270721017; // Замените на ваш User ID
+        console.warn('User ID не найден, используется значение по умолчанию:', fromUserId);
+    }
+    
+    // Показываем результаты
+    resultsDiv.style.display = 'block';
+    resultsContent.innerHTML = '<p>⏳ Начинаю прокачку бицухи...</p>';
+    
+    let successCount = 0;
+    let alreadyDoneCount = 0;
+    let errorCount = 0;
+    const results = [];
+    
+    for (const toUserId of userIds) {
+        try {
+            const response = await fetch(`${GAME_API_URL}/interaction/perform`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    fromUserId: parseInt(fromUserId),
+                    toUserId: toUserId,
+                    type: 'UpgradeBiceps'
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                successCount++;
+                results.push(`✅ ${toUserId}: ${result.message || 'Успешно'}`);
+            } else {
+                const message = result.message || result.detail || 'Ошибка';
+                if (message.includes('уже сегодня') || message.includes('already')) {
+                    alreadyDoneCount++;
+                    results.push(`⚠️ ${toUserId}: уже качали сегодня`);
+                } else {
+                    errorCount++;
+                    results.push(`❌ ${toUserId}: ${message}`);
+                }
+            }
+            
+            // Обновляем результаты в реальном времени
+            resultsContent.innerHTML = `
+                <p><strong>Обработано:</strong> ${results.length} / ${userIds.length}</p>
+                <div style="max-height: 200px; overflow-y: auto; margin-top: 10px;">
+                    ${results.map(r => `<div style="margin: 5px 0; font-size: 12px;">${r}</div>`).join('')}
+                </div>
+            `;
+            
+            // Небольшая задержка между запросами
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+        } catch (error) {
+            errorCount++;
+            results.push(`❌ ${toUserId}: ${error.message}`);
+            console.error(`Ошибка при прокачке бицухи для ${toUserId}:`, error);
+        }
+    }
+    
+    // Итоговые результаты
+    resultsContent.innerHTML = `
+        <h4>📊 Итоги:</h4>
+        <p>✅ Успешно: ${successCount}</p>
+        <p>⚠️ Уже качали сегодня: ${alreadyDoneCount}</p>
+        <p>❌ Ошибки: ${errorCount}</p>
+        <p><strong>Всего: ${userIds.length}</strong></p>
+        <div style="max-height: 200px; overflow-y: auto; margin-top: 10px; padding: 10px; background: #f5f5f5; border-radius: 5px;">
+            ${results.map(r => `<div style="margin: 5px 0; font-size: 12px;">${r}</div>`).join('')}
+        </div>
+    `;
+    
+    tg.showAlert(`Готово!\n\nУспешно: ${successCount}\nУже качали: ${alreadyDoneCount}\nОшибки: ${errorCount}`);
+}
 
 // Обновление статуса подключения
 function updateStatus(connected) {
