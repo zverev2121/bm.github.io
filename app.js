@@ -74,41 +74,40 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.warn('initData доступен ТОЛЬКО когда Mini App открыт через бота в Telegram');
     }
     
-    // Проверяем наличие токена в localStorage
-    let token = getAccessToken();
+    // ВСЕГДА пытаемся авторизоваться (даже если есть токен в localStorage)
+    // Это гарантирует, что токен свежий и валидный
+    console.log('Начало авторизации...');
     
-    // Если токена нет, пытаемся авторизоваться
-    if (!token) {
-        console.log('Токен не найден, пытаемся авторизоваться...');
-        
-        // Проверяем, что initData доступен перед авторизацией
-        if (!tg?.initData || tg.initData.length < 10) {
-            console.error('initData не доступен! Убедитесь, что Mini App открыт через Telegram');
-            console.error('Попробуйте:');
-            console.error('1. Открыть Mini App через бота в Telegram');
-            console.error('2. Обновить страницу');
-            console.error('3. Использовать ручную авторизацию (кнопка ниже)');
-        }
-        
-        token = await loginWithInitData();
-    }
+    let token = await loginWithInitData();
     
     if (token) {
-        console.log('Авторизация успешна, токен получен');
+        console.log('✓ Авторизация успешна, токен получен');
+        console.log('Токен длина:', token.length);
+        console.log('Токен первые 20 символов:', token.substring(0, 20) + '...');
+        
+        // Сохраняем токен в localStorage
+        localStorage.setItem('game_access_token', token);
+        
         updateStatus(true);
-        loadBossInfo();
-        loadPrisons();
-        loadStats();
+        
+        // Загружаем данные только после успешной авторизации
+        console.log('Загрузка данных после авторизации...');
+        await Promise.all([
+            loadBossInfo(),
+            loadPrisons(),
+            loadStats()
+        ]);
         
         // Обновляем статистику каждые 30 секунд
         setInterval(loadStats, 30000);
     } else {
+        console.error('❌ Авторизация не удалась');
         updateStatus(false);
         const errorMsg = `
             <p class="error">
                 ❌ Ошибка авторизации<br><br>
                 Возможные причины:<br>
-                1. initData не доступен<br>
+                1. initData не валиден<br>
                 2. CORS блокирует запросы<br>
                 3. API недоступен<br><br>
                 <small>Откройте консоль (F12) для подробностей</small>
