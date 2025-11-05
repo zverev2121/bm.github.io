@@ -159,9 +159,7 @@ async function loadBossInfo() {
         
         const response = await fetch(`${GAME_API_URL}/boss/bootstrap`, {
             method: 'GET',
-            headers: headers,
-            mode: 'cors',
-            credentials: 'omit'
+            headers: headers
         });
         
         if (!response.ok) {
@@ -221,9 +219,7 @@ async function attackBoss() {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify(attackBody),
-            mode: 'cors',
-            credentials: 'omit'
+            body: JSON.stringify(attackBody)
         });
         
         if (!response.ok) {
@@ -260,14 +256,13 @@ async function attackBoss() {
 async function loadPrisons() {
     const select = document.getElementById('prison-select');
     
-    const token = getAccessToken();
-    if (!token) {
-        console.warn('Токен не доступен для загрузки списка тюрем');
-        return;
-    }
-    
-    try {
-        console.log('Загрузка списка тюрем...');
+        const token = getAccessToken();
+        if (!token) {
+            console.warn('Токен не доступен');
+            return;
+        }
+        
+        try {
         const response = await fetch(`${GAME_API_URL}/prisons/tops-all`, {
             method: 'GET',
             headers: {
@@ -288,21 +283,12 @@ async function loadPrisons() {
                 14: 'Гронецкая крытка', 15: 'Александровский Централ'
             };
             
-            // Очищаем список перед заполнением (кроме первой опции)
-            while (select.options.length > 1) {
-                select.remove(1);
-            }
-            
             data.tops.forEach(top => {
                 const option = document.createElement('option');
                 option.value = top.prisonId;
                 option.textContent = `#${top.prisonId} - ${prisonNames[top.prisonId] || `Тюрьма ${top.prisonId}`}`;
                 select.appendChild(option);
             });
-            
-            console.log(`✓ Загружено ${data.tops.length} тюрем`);
-        } else {
-            console.error('Не удалось загрузить список тюрем:', data);
         }
     } catch (error) {
         console.error('Ошибка загрузки тюрем:', error);
@@ -329,16 +315,11 @@ async function loadPrisonInfo() {
         return;
     }
     
-    prisonInfo.innerHTML = '<p class="loading">⏳ Загрузка информации о тюрьме и чекпоинтах...</p>';
+    prisonInfo.innerHTML = '<p class="loading">Загрузка...</p>';
     walkBtn.disabled = true;
-    
-    console.log(`Загрузка информации о тюрьме #${prisonId} (режим: ${isDay ? 'День' : 'Ночь'})...`);
     
     try {
         // Загружаем информацию о тюрьме и чекпоинты параллельно
-        // ВАЖНО: информация о тюрьме БЕЗ параметра isDay, чекпоинты С параметром isDay
-        console.log(`Запрос 1: /player/prison/${prisonId} (без параметров)`);
-        console.log(`Запрос 2: /player/prison/${prisonId}/checkpoints?isDay=${isDay}`);
         const [prisonResponse, checkpointsResponse] = await Promise.all([
             fetch(`${GAME_API_URL}/player/prison/${prisonId}`, {
                 method: 'GET',
@@ -375,15 +356,7 @@ async function loadPrisonInfo() {
         
         // Находим текущий чекпоинт в списке
         const checkpoints = checkpointsData.data || [];
-        console.log(`✓ Загружено ${checkpoints.length} чекпоинтов`);
-        
-        // Находим текущий чекпоинт (checkpointId начинается с 1, а currentCheckpoint с 0)
-        const currentCheckpointData = checkpoints.find(cp => cp.checkpointId === currentCheckpoint + 1);
-        
-        if (!currentCheckpointData && checkpoints.length > 0) {
-            // Если текущий чекпоинт не найден, показываем первый
-            console.warn(`Текущий чекпоинт ${currentCheckpoint + 1} не найден, показываем первый чекпоинт`);
-        }
+        const currentCheckpointData = checkpoints.find(cp => cp.checkpointId === currentCheckpoint + 1) || checkpoints[0];
         
         const prisonNames = {
             1: 'Бутырка', 2: 'Красная пресня', 3: 'Софийка', 4: 'Кресты',
@@ -394,28 +367,23 @@ async function loadPrisonInfo() {
         };
         
         let checkpointInfo = '';
-        const checkpointToShow = currentCheckpointData || checkpoints[0];
-        
-        if (checkpointToShow) {
-            const progressPercent = Math.min(100, (clicksInCheckpoint / checkpointToShow.clicksRequired) * 100);
+        if (currentCheckpointData) {
+            const clicksLeft = Math.max(0, currentCheckpointData.clicksRequired - clicksInCheckpoint);
             checkpointInfo = `
                 <div class="checkpoint-info">
-                    <h4>📍 Текущий чекпоинт: ${checkpointToShow.title}</h4>
+                    <h4>📍 Текущий чекпоинт: ${currentCheckpointData.title}</h4>
                     <div class="progress-bar">
-                        <div class="progress-fill" style="width: ${progressPercent}%"></div>
-                        <span class="progress-text">${clicksInCheckpoint} / ${checkpointToShow.clicksRequired} кликов</span>
+                        <div class="progress-fill" style="width: ${(clicksInCheckpoint / currentCheckpointData.clicksRequired) * 100}%"></div>
+                        <span class="progress-text">${clicksInCheckpoint} / ${currentCheckpointData.clicksRequired} кликов</span>
                     </div>
                     <div class="checkpoint-rewards">
-                        <div class="reward-item">⚡ Энергия: <strong>${checkpointToShow.energyCost}</strong></div>
-                        <div class="reward-item">🚬 Сигареты: <strong>+${checkpointToShow.rewardCigarettes}</strong></div>
-                        <div class="reward-item">⭐ Рейтинг: <strong>+${checkpointToShow.rewardRating}</strong></div>
-                        <div class="reward-item">👑 Авторитет: <strong>+${checkpointToShow.rewardAuthority}</strong></div>
+                        <div class="reward-item">⚡ Энергия: <strong>${currentCheckpointData.energyCost}</strong></div>
+                        <div class="reward-item">🚬 Сигареты: <strong>+${currentCheckpointData.rewardCigarettes}</strong></div>
+                        <div class="reward-item">⭐ Рейтинг: <strong>+${currentCheckpointData.rewardRating}</strong></div>
+                        <div class="reward-item">👑 Авторитет: <strong>+${currentCheckpointData.rewardAuthority}</strong></div>
                     </div>
                 </div>
             `;
-            console.log(`✓ Информация о чекпоинте: ${checkpointToShow.title}, прогресс: ${clicksInCheckpoint}/${checkpointToShow.clicksRequired}`);
-        } else {
-            console.warn('⚠️ Нет данных о чекпоинтах');
         }
         
         prisonInfo.innerHTML = `
@@ -447,15 +415,9 @@ async function loadPrisonInfo() {
             </div>
         `;
         walkBtn.disabled = false;
-        console.log('✓ Информация о тюрьме загружена успешно');
-        console.log(`- Тюрьма: ${prisonNames[prisonId] || `#${prisonId}`}`);
-        console.log(`- Режим: ${isDay ? 'День' : 'Ночь'}`);
-        console.log(`- Чекпоинт: ${currentCheckpoint + 1}/${checkpoints.length}`);
-        console.log(`- Кликов в чекпоинте: ${clicksInCheckpoint}`);
     } catch (error) {
         console.error('Ошибка загрузки информации о тюрьме:', error);
         prisonInfo.innerHTML = `<p class="error">❌ Ошибка: ${error.message}</p>`;
-        walkBtn.disabled = true;
     }
 }
 
@@ -797,17 +759,15 @@ async function loginWithInitData() {
             console.warn('Не удалось проверить JSON:', e);
         }
         
-        // Отправляем запрос БЕЗ лишних заголовков, чтобы избежать CORS preflight (OPTIONS)
-        // Используем только необходимые заголовки
+        // Отправляем запрос
         console.log('Отправка запроса...');
         const response = await fetch(loginUrl, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
-            body: requestBodyString,
-            mode: 'cors',
-            credentials: 'omit'  // Не отправляем cookies, чтобы избежать preflight
+            body: requestBodyString
         });
         
         console.log('Ответ сервера:', response.status, response.statusText);
