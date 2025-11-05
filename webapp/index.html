@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Priston Bot Control</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏛️ Priston Bot</h1>
+            <div class="status" id="status">
+                <span class="status-dot"></span>
+                <span>Подключение...</span>
+            </div>
+        </header>
+
+        <main>
+            <!-- Раздел босса -->
+            <section class="card" id="boss-section">
+                <h2>👹 Босс</h2>
+                <div class="boss-info" id="boss-info">
+                    <p>Загрузка информации...</p>
+                </div>
+                <button class="btn btn-primary" onclick="attackBoss()">⚔️ Атаковать</button>
+            </section>
+
+            <!-- Раздел тюрем -->
+            <section class="card" id="prison-section">
+                <h2>🏛️ Тюрьмы</h2>
+                <div class="prison-select">
+                    <select id="prison-select" onchange="loadPrisonInfo()">
+                        <option value="">Выберите тюрьму...</option>
+                    </select>
+                    <select id="mode-select" onchange="loadPrisonInfo()">
+                        <option value="day">День</option>
+                        <option value="night">Ночь</option>
+                    </select>
+                </div>
+                <div class="prison-info" id="prison-info">
+                    <p>Выберите тюрьму для просмотра информации</p>
+                </div>
+                <button class="btn btn-success" onclick="startPrisonWalk()" id="prison-walk-btn" disabled>
+                    🚀 Начать прохождение
+                </button>
+            </section>
+
+            <!-- Статистика -->
+            <section class="card" id="stats-section">
+                <h2>📊 Статистика</h2>
+                <div class="stats" id="stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Всего атак:</span>
+                        <span class="stat-value" id="total-attacks">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Энергия:</span>
+                        <span class="stat-value" id="energy">-</span>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+
