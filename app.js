@@ -497,7 +497,25 @@ async function startBicepsUpgrade() {
     }
     
     // Получаем выбранный тип взаимодействия
+    if (!interactionTypeSelect) {
+        console.error('Селектор interaction-type не найден!');
+        tg.showAlert('Ошибка: селектор типа взаимодействия не найден');
+        return;
+    }
+    
     const interactionType = interactionTypeSelect.value;
+    
+    console.log('=== НАЧАЛО ВЗАИМОДЕЙСТВИЯ ===');
+    console.log('Выбранный тип взаимодействия:', interactionType);
+    console.log('Селектор найден:', !!interactionTypeSelect);
+    console.log('Все опции селектора:', Array.from(interactionTypeSelect.options).map(opt => `${opt.value} (${opt.text})`));
+    console.log('Выбранная опция:', interactionTypeSelect.options[interactionTypeSelect.selectedIndex]);
+    
+    if (!interactionType || interactionType === '') {
+        console.error('Тип взаимодействия не выбран!');
+        tg.showAlert('Выберите тип взаимодействия');
+        return;
+    }
     
     // Парсим ID пользователей
     const userIds = userIdsStr.split(/[,\s]+/).map(id => parseInt(id.trim())).filter(id => !isNaN(id));
@@ -601,17 +619,21 @@ async function startBicepsUpgrade() {
     
     for (const toUserId of userIds) {
         try {
+            const requestBody = {
+                fromUserId: parseInt(fromUserId),
+                toUserId: toUserId,
+                type: interactionType
+            };
+            
+            console.log(`Отправка запроса для ${toUserId}:`, JSON.stringify(requestBody, null, 2));
+            
             let response = await fetch(`${GAME_API_URL}/interaction/perform`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({
-                    fromUserId: parseInt(fromUserId),
-                    toUserId: toUserId,
-                    type: interactionType
-                })
+                body: JSON.stringify(requestBody)
             });
             
             // Если получили 401, пытаемся обновить токен через сохраненный initData
@@ -622,18 +644,15 @@ async function startBicepsUpgrade() {
                     const newToken = await loginWithInitData();
                     if (newToken) {
                         token = newToken;
-                        // Повторяем запрос с новым токеном
+                        // Повторяем запрос с новым токеном (используем тот же requestBody с правильным типом)
+                        console.log(`Повторная отправка запроса для ${toUserId} с новым токеном, тип: ${interactionType}`);
                         response = await fetch(`${GAME_API_URL}/interaction/perform`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                                 'Authorization': `Bearer ${token}`
                             },
-                            body: JSON.stringify({
-                                fromUserId: parseInt(fromUserId),
-                                toUserId: toUserId,
-                                type: interactionType
-                            })
+                            body: JSON.stringify(requestBody)
                         });
                     }
                 }
