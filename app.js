@@ -332,7 +332,8 @@ async function loadPrisonInfo() {
     
     try {
         // Загружаем информацию о тюрьме и чекпоинты параллельно
-        console.log(`Запрос 1: /player/prison/${prisonId}`);
+        // ВАЖНО: информация о тюрьме БЕЗ параметра isDay, чекпоинты С параметром isDay
+        console.log(`Запрос 1: /player/prison/${prisonId} (без параметров)`);
         console.log(`Запрос 2: /player/prison/${prisonId}/checkpoints?isDay=${isDay}`);
         const [prisonResponse, checkpointsResponse] = await Promise.all([
             fetch(`${GAME_API_URL}/player/prison/${prisonId}`, {
