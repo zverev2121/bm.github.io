@@ -1,6 +1,9 @@
 // Telegram Web App API
 const tg = window.Telegram.WebApp;
 
+// Версия Mini App (для проверки обновлений)
+const APP_VERSION = '2.0.0';
+
 // Инициализация Mini App
 tg.ready();
 tg.expand();
@@ -8,14 +11,25 @@ tg.expand();
 // Базовый URL API игры - обращаемся напрямую к API игры
 const GAME_API_URL = 'https://the-prison.ru/api';
 
+// Проверяем, что используется правильная версия
+console.log('Mini App версия:', APP_VERSION);
+console.log('API URL:', GAME_API_URL);
+
 // Инициализация
 document.addEventListener('DOMContentLoaded', async () => {
     updateStatus(false);
     
-    // Сначала пытаемся авторизоваться
-    const token = await loginWithInitData();
+    // Проверяем наличие токена в localStorage
+    let token = getAccessToken();
+    
+    // Если токена нет, пытаемся авторизоваться
+    if (!token) {
+        console.log('Токен не найден, пытаемся авторизоваться...');
+        token = await loginWithInitData();
+    }
     
     if (token) {
+        console.log('Авторизация успешна, токен получен');
         updateStatus(true);
         loadBossInfo();
         loadPrisons();
@@ -25,7 +39,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         setInterval(loadStats, 30000);
     } else {
         updateStatus(false);
-        document.getElementById('boss-info').innerHTML = '<p class="error">❌ Ошибка авторизации<br>Проверьте initData</p>';
+        const errorMsg = `
+            <p class="error">
+                ❌ Ошибка авторизации<br><br>
+                Возможные причины:<br>
+                1. initData не доступен<br>
+                2. CORS блокирует запросы<br>
+                3. API недоступен<br><br>
+                <small>Откройте консоль (F12) для подробностей</small>
+            </p>
+        `;
+        document.getElementById('boss-info').innerHTML = errorMsg;
+        
+        // Показываем кнопку для ручной авторизации
+        showManualAuthButton();
     }
 });
 
@@ -386,37 +413,43 @@ async function loadStats() {
 }
 
 // Получение токена доступа
-// В реальном приложении токен должен передаваться безопасно через API сервер
-// Для тестирования можно использовать токен из .env (но это небезопасно!)
 function getAccessToken() {
-    // Вариант 1: Получить токен через API сервер (безопасно)
-    // Нужно создать endpoint для получения токена с проверкой initData
-    
-    // Вариант 2: Временно использовать токен из localStorage (небезопасно, только для теста)
-    // В реальном приложении токен должен получаться через ваш API сервер
+    // Проверяем localStorage
     const storedToken = localStorage.getItem('game_access_token');
     
-    if (storedToken) {
+    if (storedToken && storedToken.length > 10) {
+        console.log('Токен найден в localStorage');
         return storedToken;
     }
     
     // Если токена нет, пытаемся получить через initData
     // Для этого нужно авторизоваться через /auth/login
+    console.log('Токен не найден в localStorage');
     return null;
 }
 
 // Авторизация через initData
 async function loginWithInitData() {
     try {
-        const initData = tg.initData;
-        
-        if (!initData) {
-            console.error('initData не доступен');
+        // Проверяем доступность Telegram WebApp
+        if (!tg || !tg.initData) {
+            console.error('Telegram WebApp не доступен или initData пустой');
             console.log('Проверка Telegram WebApp:', {
-                initData: tg.initData,
-                initDataUnsafe: tg.initDataUnsafe,
-                version: tg.version
+                tg: typeof tg,
+                initData: tg?.initData,
+                initDataUnsafe: tg?.initDataUnsafe,
+                version: tg?.version,
+                platform: tg?.platform
             });
+            return null;
+        }
+        
+        const initData = tg.initData;
+        console.log('initData получен, длина:', initData?.length);
+        
+        // Проверяем, что initData не пустой
+        if (!initData || initData.length < 10) {
+            console.error('initData пустой или слишком короткий');
             return null;
         }
         
@@ -431,13 +464,29 @@ async function loginWithInitData() {
             body: JSON.stringify({ initData: initData })
         });
         
+        console.log('Ответ сервера:', response.status, response.statusText);
+        
         if (!response.ok) {
             const errorText = await response.text();
             console.error(`Ошибка авторизации: ${response.status}`, errorText);
+            
+            // Пробуем распарсить как JSON
+            try {
+                const errorData = JSON.parse(errorText);
+                console.error('Детали ошибки:', errorData);
+            } catch (e) {
+                console.error('Текст ошибки:', errorText);
+            }
+            
             throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
         }
         
         const data = await response.json();
+        console.log('Данные авторизации:', { 
+            success: data.success, 
+            hasToken: !!data.accessToken,
+            userId: data.userId 
+        });
         
         if (data.success && data.accessToken) {
             console.log('Авторизация успешна!');
@@ -448,16 +497,59 @@ async function loginWithInitData() {
             
             return data.accessToken;
         } else {
-            console.error('Ошибка авторизации:', data);
+            console.error('Ошибка авторизации: нет токена в ответе', data);
             return null;
         }
     } catch (error) {
         console.error('Ошибка авторизации:', error);
+        console.error('Тип ошибки:', error.name);
+        console.error('Сообщение:', error.message);
+        console.error('Стек:', error.stack);
+        
         // Показываем более подробную ошибку
         if (error.message.includes('Failed to fetch') || error.message.includes('CORS')) {
+            console.error('CORS ошибка - браузер блокирует запросы');
             document.getElementById('boss-info').innerHTML = 
-                '<p class="error">❌ Ошибка CORS<br>Браузер блокирует запросы к API<br><br>Это нормально для Mini App, попробуйте обновить страницу</p>';
+                '<p class="error">❌ Ошибка CORS<br>Браузер блокирует запросы к API<br><br>Попробуйте:<br>1. Обновить страницу<br>2. Использовать токен вручную</p>';
+        } else if (error.message.includes('NetworkError') || error.message.includes('Network request failed')) {
+            console.error('Ошибка сети');
+            document.getElementById('boss-info').innerHTML = 
+                '<p class="error">❌ Ошибка сети<br>Проверьте подключение к интернету</p>';
         }
         return null;
     }
 }
+
+// Показать кнопку для ручной авторизации
+function showManualAuthButton() {
+    const bossInfo = document.getElementById('boss-info');
+    if (!bossInfo) return;
+    
+    const manualAuthHTML = `
+        <div style="margin-top: 10px;">
+            <button onclick="manualAuth()" style="
+                padding: 10px 20px;
+                background: #007bff;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 14px;
+            ">
+                🔑 Ввести токен вручную
+            </button>
+        </div>
+    `;
+    
+    bossInfo.innerHTML += manualAuthHTML;
+}
+
+// Ручная авторизация через токен
+window.manualAuth = function() {
+    const token = prompt('Введите access token (JWT):');
+    if (token && token.trim()) {
+        localStorage.setItem('game_access_token', token.trim());
+        // Перезагружаем страницу
+        location.reload();
+    }
+};
