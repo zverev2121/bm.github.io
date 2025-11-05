@@ -503,19 +503,38 @@ async function startBicepsUpgrade() {
         return;
     }
     
+    // Читаем значение селектора ДИНАМИЧЕСКИ
     const interactionType = interactionTypeSelect.value;
     
     console.log('=== НАЧАЛО ВЗАИМОДЕЙСТВИЯ ===');
-    console.log('Выбранный тип взаимодействия:', interactionType);
     console.log('Селектор найден:', !!interactionTypeSelect);
-    console.log('Все опции селектора:', Array.from(interactionTypeSelect.options).map(opt => `${opt.value} (${opt.text})`));
-    console.log('Выбранная опция:', interactionTypeSelect.options[interactionTypeSelect.selectedIndex]);
+    console.log('Селектор element:', interactionTypeSelect);
+    console.log('Значение селектора (.value):', interactionTypeSelect.value);
+    console.log('Выбранный индекс:', interactionTypeSelect.selectedIndex);
+    console.log('Все опции селектора:', Array.from(interactionTypeSelect.options).map((opt, idx) => 
+        `[${idx}] ${opt.value} (${opt.text}) - selected: ${opt.selected}`
+    ));
+    console.log('Выбранная опция по индексу:', interactionTypeSelect.options[interactionTypeSelect.selectedIndex]?.value);
+    console.log('Выбранный тип взаимодействия (переменная):', interactionType);
+    
+    // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: читаем значение еще раз разными способами
+    const typeFromSelectedIndex = interactionTypeSelect.options[interactionTypeSelect.selectedIndex]?.value;
+    const typeFromValue = interactionTypeSelect.value;
+    
+    console.log('Проверка консистентности:');
+    console.log('  - typeFromValue:', typeFromValue);
+    console.log('  - typeFromSelectedIndex:', typeFromSelectedIndex);
+    console.log('  - Они совпадают?', typeFromValue === typeFromSelectedIndex);
     
     if (!interactionType || interactionType === '') {
         console.error('Тип взаимодействия не выбран!');
         tg.showAlert('Выберите тип взаимодействия');
         return;
     }
+    
+    // Используем значение из селектора (самый надежный способ)
+    const finalInteractionType = typeFromSelectedIndex || typeFromValue || interactionType;
+    console.log('ИСПОЛЬЗУЕМЫЙ ТИП ВЗАИМОДЕЙСТВИЯ:', finalInteractionType);
     
     // Парсим ID пользователей
     const userIds = userIdsStr.split(/[,\s]+/).map(id => parseInt(id.trim())).filter(id => !isNaN(id));
@@ -531,7 +550,7 @@ async function startBicepsUpgrade() {
         'TossDroj': 'Харкнуть в баланду',
         'Harknut': 'Подкинуть в парашу'
     };
-    const actionName = actionNames[interactionType] || interactionType;
+    const actionName = actionNames[finalInteractionType] || finalInteractionType;
     
     // Тексты для кнопок
     const buttonTexts = {
@@ -619,13 +638,28 @@ async function startBicepsUpgrade() {
     
     for (const toUserId of userIds) {
         try {
+            // ВАЖНО: Получаем актуальное значение селектора каждый раз ПРЯМО ИЗ DOM
+            const selector = document.getElementById('interaction-type');
+            const currentInteractionType = selector?.options[selector.selectedIndex]?.value || 
+                                          selector?.value || 
+                                          finalInteractionType || 
+                                          interactionType;
+            
             const requestBody = {
                 fromUserId: parseInt(fromUserId),
                 toUserId: toUserId,
-                type: interactionType
+                type: currentInteractionType
             };
             
-            console.log(`Отправка запроса для ${toUserId}:`, JSON.stringify(requestBody, null, 2));
+            console.log(`=== ОТПРАВКА ЗАПРОСА ДЛЯ ${toUserId} ===`);
+            console.log(`Селектор при отправке:`, selector);
+            console.log(`selectedIndex:`, selector?.selectedIndex);
+            console.log(`Значение опции по индексу:`, selector?.options[selector?.selectedIndex]?.value);
+            console.log(`Значение .value:`, selector?.value);
+            console.log(`finalInteractionType (из начала функции):`, finalInteractionType);
+            console.log(`currentInteractionType (из селектора в цикле):`, currentInteractionType);
+            console.log(`ИСПОЛЬЗУЕМЫЙ ТИП В requestBody:`, requestBody.type);
+            console.log(`Полный requestBody:`, JSON.stringify(requestBody, null, 2));
             
             let response = await fetch(`${GAME_API_URL}/interaction/perform`, {
                 method: 'POST',
@@ -645,7 +679,16 @@ async function startBicepsUpgrade() {
                     if (newToken) {
                         token = newToken;
                         // Повторяем запрос с новым токеном (используем тот же requestBody с правильным типом)
-                        console.log(`Повторная отправка запроса для ${toUserId} с новым токеном, тип: ${interactionType}`);
+                        // ВАЖНО: Обновляем тип из селектора перед повторной отправкой
+                        const selectorRetry = document.getElementById('interaction-type');
+                        const currentInteractionTypeRetry = selectorRetry?.options[selectorRetry.selectedIndex]?.value || 
+                                                           selectorRetry?.value || 
+                                                           finalInteractionType || 
+                                                           interactionType;
+                        requestBody.type = currentInteractionTypeRetry;
+                        console.log(`=== ПОВТОРНАЯ ОТПРАВКА ЗАПРОСА ДЛЯ ${toUserId} ===`);
+                        console.log(`Тип взаимодействия при повторе: ${currentInteractionTypeRetry}`);
+                        console.log(`Обновленный requestBody:`, JSON.stringify(requestBody, null, 2));
                         response = await fetch(`${GAME_API_URL}/interaction/perform`, {
                             method: 'POST',
                             headers: {
