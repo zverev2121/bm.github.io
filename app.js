@@ -261,14 +261,28 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.warn('initData доступен ТОЛЬКО когда Mini App открыт через бота в Telegram');
     }
     
-    // Проверяем, есть ли токен вручную введенный
+    // Проверяем, есть ли токен вручную введенный или сохраненный
     const manualToken = localStorage.getItem('manual_access_token');
+    const savedToken = localStorage.getItem('game_access_token');
     let token = null;
     
     if (manualToken) {
         console.log('Используется токен, введенный вручную');
         token = manualToken;
         localStorage.setItem('game_access_token', token);
+    } else if (savedToken) {
+        console.log('Используется сохраненный токен');
+        token = savedToken;
+        // Пытаемся авторизоваться для обновления токена (опционально)
+        // Но не блокируем, если это не удалось
+        try {
+            const freshToken = await loginWithInitData();
+            if (freshToken) {
+                token = freshToken;
+            }
+        } catch (e) {
+            console.warn('Не удалось обновить токен через login, используем сохраненный:', e);
+        }
     } else {
         // ВСЕГДА пытаемся авторизоваться (даже если есть токен в localStorage)
         // Это гарантирует, что токен свежий и валидный
@@ -297,6 +311,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Загружаем данные только после успешной авторизации
         console.log('Загрузка данных после авторизации...');
         await Promise.all([
+            loadPlayerInfo(),  // Загружаем информацию об игроке для получения userId
             loadBossInfo(),
             loadPrisons(),
             loadStats()
@@ -308,14 +323,38 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Показываем секцию бицухи
         document.getElementById('biceps-section').style.display = 'block';
     } else {
-        console.error('❌ Авторизация не удалась');
-        updateStatus(false);
-        
-        // Показываем секции, но с ошибкой
-        document.getElementById('boss-section').style.display = 'block';
-        document.getElementById('prison-section').style.display = 'block';
-        document.getElementById('stats-section').style.display = 'block';
-        document.getElementById('biceps-section').style.display = 'block';
+        // Даже если авторизация не удалась, проверяем наличие сохраненного токена
+        const savedToken = localStorage.getItem('game_access_token');
+        if (savedToken) {
+            console.log('Используется сохраненный токен для загрузки данных');
+            updateStatus(true);
+            
+            // Показываем все секции
+            document.getElementById('boss-section').style.display = 'block';
+            document.getElementById('prison-section').style.display = 'block';
+            document.getElementById('stats-section').style.display = 'block';
+            document.getElementById('biceps-section').style.display = 'block';
+            
+            // Загружаем данные с сохраненным токеном
+            console.log('Загрузка данных с сохраненным токеном...');
+            await Promise.all([
+                loadPlayerInfo(),  // Загружаем информацию об игроке для получения userId
+                loadBossInfo(),
+                loadPrisons(),
+                loadStats()
+            ]);
+            
+            // Обновляем статистику каждые 30 секунд
+            setInterval(loadStats, 30000);
+        } else {
+            console.error('❌ Авторизация не удалась и токен не найден');
+            updateStatus(false);
+            
+            // Показываем секции, но с ошибкой
+            document.getElementById('boss-section').style.display = 'block';
+            document.getElementById('prison-section').style.display = 'block';
+            document.getElementById('stats-section').style.display = 'block';
+            document.getElementById('biceps-section').style.display = 'block';
         
         const errorMsg = `
             <p class="error">
@@ -331,6 +370,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Показываем кнопку для ручной авторизации
         showManualAuthButton();
+        }
     }
 });
 
@@ -483,6 +523,45 @@ function updateStatus(connected) {
     } else {
         statusDot.classList.remove('connected');
         statusText.textContent = 'Отключено';
+    }
+}
+
+// Загрузка информации об игроке (для получения userId)
+async function loadPlayerInfo() {
+    try {
+        const token = getAccessToken();
+        if (!token) {
+            console.warn('Токен не доступен для загрузки информации об игроке');
+            return;
+        }
+        
+        console.log('Загрузка информации об игроке...');
+        const response = await fetch(`${GAME_API_URL}/player/init`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({})
+        });
+        
+        if (!response.ok) {
+            console.warn(`Ошибка при загрузке информации об игроке: HTTP ${response.status}`);
+            return;
+        }
+        
+        const data = await response.json();
+        if (data.success && data.userId) {
+            localStorage.setItem('game_user_id', data.userId.toString());
+            console.log('✅ User ID получен и сохранен:', data.userId);
+            if (data.nickname) {
+                console.log('Никнейм игрока:', data.nickname);
+            }
+        } else {
+            console.warn('Не удалось получить userId из ответа');
+        }
+    } catch (error) {
+        console.error('Ошибка при загрузке информации об игроке:', error);
     }
 }
 
