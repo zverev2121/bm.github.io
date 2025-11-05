@@ -5,8 +5,10 @@ const tg = window.Telegram.WebApp;
 tg.ready();
 tg.expand();
 
-// Базовый URL API бота (замените на ваш)
-const BOT_API_URL = 'https://your-domain.com/api'; // Или локальный для разработки
+// Базовый URL API бота
+// Для локальной разработки: используйте ngrok для создания HTTPS туннеля к api_server.py
+// Пример: https://abc123.ngrok.io/api
+const BOT_API_URL = 'https://your-domain.com/api'; // Замените на ваш URL от ngrok или сервера
 
 // Инициализация
 document.addEventListener('DOMContentLoaded', () => {
@@ -39,13 +41,23 @@ async function loadBossInfo() {
     bossInfo.innerHTML = '<p class="loading">Загрузка...</p>';
     
     try {
+        // Проверяем, что API URL настроен
+        if (BOT_API_URL.includes('your-domain.com')) {
+            bossInfo.innerHTML = '<p class="error">⚠️ API URL не настроен!<br>Настройте BOT_API_URL в app.js</p>';
+            updateStatus(false);
+            return;
+        }
+        
         const response = await fetch(`${BOT_API_URL}/boss/bootstrap`, {
+            method: 'GET',
             headers: {
-                'Authorization': `Bearer ${getToken()}`
+                'Content-Type': 'application/json'
             }
         });
         
-        if (!response.ok) throw new Error('Ошибка загрузки');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         
         const data = await response.json();
         if (data.success && data.session) {
@@ -60,11 +72,14 @@ async function loadBossInfo() {
                     Режим: ${session.mode || 'N/A'}
                 </div>
             `;
+            updateStatus(true);
         } else {
             bossInfo.innerHTML = '<p>Информация о боссе недоступна</p>';
+            updateStatus(false);
         }
     } catch (error) {
-        bossInfo.innerHTML = `<p class="error">Ошибка: ${error.message}</p>`;
+        console.error('Ошибка загрузки информации о боссе:', error);
+        bossInfo.innerHTML = `<p class="error">❌ Ошибка подключения:<br>${error.message}<br><br>Убедитесь, что API сервер запущен</p>`;
         updateStatus(false);
     }
 }
@@ -110,14 +125,21 @@ async function attackBoss() {
 async function loadPrisons() {
     const select = document.getElementById('prison-select');
     
+    // Проверяем, что API URL настроен
+    if (BOT_API_URL.includes('your-domain.com')) {
+        console.warn('API URL не настроен');
+        return;
+    }
+    
     try {
         const response = await fetch(`${BOT_API_URL}/prisons/tops-all`, {
+            method: 'GET',
             headers: {
-                'Authorization': `Bearer ${getToken()}`
+                'Content-Type': 'application/json'
             }
         });
         
-        if (!response.ok) throw new Error('Ошибка загрузки');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         
         const data = await response.json();
         if (data.success && data.tops) {
