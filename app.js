@@ -47,11 +47,15 @@ console.log('Используется прокси:', !!API_SERVER_URL);
 // Функции для работы с настройками
 function loadSettings() {
     const apiUrl = localStorage.getItem('api_server_url') || '';
+    const manualInitData = localStorage.getItem('manual_init_data') || '';
     const manualToken = localStorage.getItem('manual_access_token') || '';
     const useHardcoded = localStorage.getItem('use_hardcoded_initdata') === 'true';
     
     if (document.getElementById('api-server-url')) {
         document.getElementById('api-server-url').value = apiUrl;
+    }
+    if (document.getElementById('manual-initdata')) {
+        document.getElementById('manual-initdata').value = manualInitData;
     }
     if (document.getElementById('manual-token')) {
         document.getElementById('manual-token').value = manualToken;
@@ -63,8 +67,9 @@ function loadSettings() {
     updateSettingsDisplay();
 }
 
-function saveSettings() {
+async function saveSettings() {
     const apiUrl = document.getElementById('api-server-url').value.trim();
+    const manualInitData = document.getElementById('manual-initdata').value.trim();
     const manualToken = document.getElementById('manual-token').value.trim();
     const useHardcoded = document.getElementById('use-hardcoded-initdata').checked;
     
@@ -76,27 +81,81 @@ function saveSettings() {
         localStorage.removeItem('api_server_url');
     }
     
+    // Обновляем URL API перед использованием
+    API_SERVER_URL = getApiServerUrl();
+    GAME_API_URL = getGameApiUrl();
+    
+    // Если введен initData, выполняем login для получения токена
+    if (manualInitData) {
+        localStorage.setItem('manual_init_data', manualInitData);
+        localStorage.removeItem('manual_access_token'); // Удаляем старый токен
+        
+        try {
+            console.log('Выполнение login с введенным initData...');
+            const loginUrl = API_SERVER_URL 
+                ? `${API_SERVER_URL}/auth/login`
+                : `${GAME_API_URL}/auth/login`;
+            
+            const response = await fetch(loginUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ initData: manualInitData })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.accessToken) {
+                    localStorage.setItem('game_access_token', data.accessToken);
+                    if (data.refreshToken) {
+                        localStorage.setItem('game_refresh_token', data.refreshToken);
+                    }
+                    if (data.userId) {
+                        localStorage.setItem('game_user_id', data.userId.toString());
+                    }
+                    console.log('✅ Токен получен из initData');
+                    tg.showAlert('✅ Настройки сохранены!\n\nТокен получен из initData.\n\nПерезагрузите страницу для применения изменений.');
+                } else {
+                    const errorMsg = data.message || data.error || 'Неизвестная ошибка';
+                    console.error('Ошибка login:', errorMsg);
+                    tg.showAlert(`⚠️ Настройки сохранены, но не удалось получить токен:\n${errorMsg}`);
+                }
+            } else {
+                const errorText = await response.text();
+                console.error('Ошибка HTTP:', response.status, errorText);
+                tg.showAlert(`⚠️ Настройки сохранены, но ошибка при получении токена:\nHTTP ${response.status}`);
+            }
+        } catch (error) {
+            console.error('Ошибка при сохранении initData:', error);
+            tg.showAlert(`⚠️ Настройки сохранены, но ошибка при получении токена:\n${error.message}`);
+        }
+    } else {
+        localStorage.removeItem('manual_init_data');
+    }
+    
+    // Если введен токен вручную (устаревший способ)
     if (manualToken) {
         localStorage.setItem('manual_access_token', manualToken);
-        // Если введен токен вручную, используем его
         localStorage.setItem('game_access_token', manualToken);
+        console.warn('Используется устаревший способ - токен вручную');
     } else {
         localStorage.removeItem('manual_access_token');
     }
     
     localStorage.setItem('use_hardcoded_initdata', useHardcoded ? 'true' : 'false');
     
-    // Обновляем URL API
-    API_SERVER_URL = getApiServerUrl();
-    GAME_API_URL = getGameApiUrl();
-    
     console.log('Настройки сохранены:');
     console.log('- API Server URL:', API_SERVER_URL || 'не указан (прямое подключение)');
+    console.log('- Manual InitData:', manualInitData ? 'установлен' : 'не установлен');
     console.log('- Manual Token:', manualToken ? 'установлен' : 'не установлен');
     console.log('- Use Hardcoded initData:', useHardcoded);
     console.log('- GAME_API_URL:', GAME_API_URL);
     
-    tg.showAlert('✅ Настройки сохранены!\n\nПерезагрузите страницу для применения изменений.');
+    if (!manualInitData) {
+        tg.showAlert('✅ Настройки сохранены!\n\nПерезагрузите страницу для применения изменений.');
+    }
     updateSettingsDisplay();
     hideSettingsForm();
 }
@@ -104,6 +163,7 @@ function saveSettings() {
 function resetSettings() {
     if (confirm('Вы уверены, что хотите сбросить все настройки?')) {
         localStorage.removeItem('api_server_url');
+        localStorage.removeItem('manual_init_data');
         localStorage.removeItem('manual_access_token');
         localStorage.removeItem('use_hardcoded_initdata');
         localStorage.removeItem('game_access_token');
@@ -111,6 +171,7 @@ function resetSettings() {
         localStorage.removeItem('game_user_id');
         
         document.getElementById('api-server-url').value = '';
+        document.getElementById('manual-initdata').value = '';
         document.getElementById('manual-token').value = '';
         document.getElementById('use-hardcoded-initdata').checked = false;
         
@@ -125,6 +186,7 @@ function resetSettings() {
 function updateSettingsDisplay() {
     const apiUrl = localStorage.getItem('api_server_url') || '';
     const token = localStorage.getItem('game_access_token') || '';
+    const manualInitData = localStorage.getItem('manual_init_data') || '';
     const manualToken = localStorage.getItem('manual_access_token') || '';
     
     const currentApiUrl = document.getElementById('current-api-url');
@@ -135,8 +197,10 @@ function updateSettingsDisplay() {
     }
     
     if (currentTokenStatus) {
-        if (manualToken) {
-            currentTokenStatus.textContent = 'Введен вручную';
+        if (manualInitData) {
+            currentTokenStatus.textContent = 'Из initData (автообновление)';
+        } else if (manualToken) {
+            currentTokenStatus.textContent = 'Введен вручную (устаревший)';
         } else if (token) {
             currentTokenStatus.textContent = 'Получен автоматически';
         } else {
@@ -173,7 +237,7 @@ function toggleSettings() {
         settingsSection.style.display = 'block';
         loadSettings();
         // Показываем форму, если настройки не сохранены
-        const hasSettings = localStorage.getItem('api_server_url') || localStorage.getItem('manual_access_token');
+        const hasSettings = localStorage.getItem('api_server_url') || localStorage.getItem('manual_init_data') || localStorage.getItem('manual_access_token');
         if (!hasSettings) {
             // Показываем приветствие при первом запуске
             const welcome = document.getElementById('settings-welcome');
@@ -201,7 +265,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateSettingsDisplay();
     
     // Проверяем, нужно ли показать настройки при первом запуске
-    const hasSettings = localStorage.getItem('api_server_url') || localStorage.getItem('manual_access_token');
+    const hasSettings = localStorage.getItem('api_server_url') || localStorage.getItem('manual_init_data') || localStorage.getItem('manual_access_token');
     if (!hasSettings) {
         // Показываем настройки при первом запуске
         document.getElementById('settings-section').style.display = 'block';
@@ -261,13 +325,55 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.warn('initData доступен ТОЛЬКО когда Mini App открыт через бота в Telegram');
     }
     
-    // Проверяем, есть ли токен вручную введенный или сохраненный
+    // Проверяем, есть ли initData или токен вручную введенный или сохраненный
+    const manualInitData = localStorage.getItem('manual_init_data');
     const manualToken = localStorage.getItem('manual_access_token');
     const savedToken = localStorage.getItem('game_access_token');
     let token = null;
     
-    if (manualToken) {
-        console.log('Используется токен, введенный вручную');
+    if (manualInitData) {
+        console.log('Используется initData, введенный вручную');
+        // Пытаемся получить токен из initData
+        try {
+            const loginUrl = API_SERVER_URL 
+                ? `${API_SERVER_URL}/auth/login`
+                : `${GAME_API_URL}/auth/login`;
+            
+            const response = await fetch(loginUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ initData: manualInitData })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.accessToken) {
+                    token = data.accessToken;
+                    localStorage.setItem('game_access_token', token);
+                    if (data.refreshToken) {
+                        localStorage.setItem('game_refresh_token', data.refreshToken);
+                    }
+                    if (data.userId) {
+                        localStorage.setItem('game_user_id', data.userId.toString());
+                    }
+                    console.log('✅ Токен получен из сохраненного initData');
+                } else {
+                    console.warn('Не удалось получить токен из initData, пробуем сохраненный токен');
+                    token = savedToken;
+                }
+            } else {
+                console.warn('Ошибка при получении токена из initData, пробуем сохраненный токен');
+                token = savedToken;
+            }
+        } catch (e) {
+            console.warn('Ошибка при получении токена из initData:', e);
+            token = savedToken;
+        }
+    } else if (manualToken) {
+        console.log('Используется токен, введенный вручную (устаревший способ)');
         token = manualToken;
         localStorage.setItem('game_access_token', token);
     } else if (savedToken) {
@@ -1048,7 +1154,8 @@ async function loginWithInitData() {
             return null;
         }
         
-        // Проверяем, нужно ли использовать захардкоженный initData
+        // Проверяем, есть ли сохраненный initData от пользователя
+        const manualInitData = localStorage.getItem('manual_init_data');
         const useHardcoded = localStorage.getItem('use_hardcoded_initdata') === 'true';
         
         // Захардкоженный initData для тестирования (работающий)
@@ -1056,7 +1163,11 @@ async function loginWithInitData() {
         
         let initData = '';
         
-        if (useHardcoded) {
+        // Приоритет: 1) manualInitData, 2) Telegram initData, 3) hardcoded (если включен)
+        if (manualInitData && manualInitData.trim()) {
+            initData = manualInitData.trim();
+            console.log('✓ Используется initData, введенный пользователем в настройках');
+        } else if (useHardcoded) {
             // Используем захардкоженный initData
             initData = HARDCODED_INIT_DATA;
             console.log('⚠️ Используется захардкоженный initData для тестирования');
