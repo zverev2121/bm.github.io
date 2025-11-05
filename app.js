@@ -319,34 +319,102 @@ async function loadPrisonInfo() {
     walkBtn.disabled = true;
     
     try {
-        const response = await fetch(`${GAME_API_URL}/player/prison/${prisonId}?isDay=${isDay}`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
-        });
+        // Загружаем информацию о тюрьме и чекпоинты параллельно
+        const [prisonResponse, checkpointsResponse] = await Promise.all([
+            fetch(`${GAME_API_URL}/player/prison/${prisonId}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            }),
+            fetch(`${GAME_API_URL}/player/prison/${prisonId}/checkpoints?isDay=${isDay}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+        ]);
         
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!prisonResponse.ok) throw new Error(`HTTP ${prisonResponse.status} при загрузке тюрьмы`);
+        if (!checkpointsResponse.ok) throw new Error(`HTTP ${checkpointsResponse.status} при загрузке чекпоинтов`);
         
-        const data = await response.json();
-        if (data.success && data.data) {
-            const d = data.data;
-            const mode = isDay ? 'day' : 'night';
-            
-            prisonInfo.innerHTML = `
-                <div>
-                    <strong>Тюрьма #${prisonId}</strong><br>
-                    Режим: ${isDay ? 'День' : 'Ночь'}<br>
-                    Чекпоинт: ${d[`${mode}CurrentCheckpoint`] || 0}<br>
-                    Кликов в чекпоинте: ${d[`${mode}ClicksInCheckpoint`] || 0}<br>
-                    Рейтинг: ${d[`${mode}Rating`] || 0}
+        const prisonData = await prisonResponse.json();
+        const checkpointsData = await checkpointsResponse.json();
+        
+        if (!prisonData.success || !checkpointsData.success) {
+            throw new Error('Не удалось загрузить данные');
+        }
+        
+        const d = prisonData.data;
+        const mode = isDay ? 'day' : 'night';
+        const currentCheckpoint = d[`${mode}CurrentCheckpoint`] || 0;
+        const clicksInCheckpoint = d[`${mode}ClicksInCheckpoint`] || 0;
+        const rating = d[`${mode}Rating`] || 0;
+        const runs = d[`${mode}Runs`] || 0;
+        
+        // Находим текущий чекпоинт в списке
+        const checkpoints = checkpointsData.data || [];
+        const currentCheckpointData = checkpoints.find(cp => cp.checkpointId === currentCheckpoint + 1) || checkpoints[0];
+        
+        const prisonNames = {
+            1: 'Бутырка', 2: 'Красная пресня', 3: 'Софийка', 4: 'Кресты',
+            5: 'Владимирский Централ', 6: 'Угольки', 7: 'Матросская Тишина',
+            8: 'Вологодский пятак', 9: 'Лефортовка', 10: 'Белый лебедь',
+            11: 'Орловский Централ', 12: 'Елецкая крытка', 13: 'Черный дельфин',
+            14: 'Гронецкая крытка', 15: 'Александровский Централ'
+        };
+        
+        let checkpointInfo = '';
+        if (currentCheckpointData) {
+            const clicksLeft = Math.max(0, currentCheckpointData.clicksRequired - clicksInCheckpoint);
+            checkpointInfo = `
+                <div class="checkpoint-info">
+                    <h4>📍 Текущий чекпоинт: ${currentCheckpointData.title}</h4>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${(clicksInCheckpoint / currentCheckpointData.clicksRequired) * 100}%"></div>
+                        <span class="progress-text">${clicksInCheckpoint} / ${currentCheckpointData.clicksRequired} кликов</span>
+                    </div>
+                    <div class="checkpoint-rewards">
+                        <div class="reward-item">⚡ Энергия: <strong>${currentCheckpointData.energyCost}</strong></div>
+                        <div class="reward-item">🚬 Сигареты: <strong>+${currentCheckpointData.rewardCigarettes}</strong></div>
+                        <div class="reward-item">⭐ Рейтинг: <strong>+${currentCheckpointData.rewardRating}</strong></div>
+                        <div class="reward-item">👑 Авторитет: <strong>+${currentCheckpointData.rewardAuthority}</strong></div>
+                    </div>
                 </div>
             `;
-            walkBtn.disabled = false;
-        } else {
-            prisonInfo.innerHTML = '<p>Информация о тюрьме недоступна</p>';
         }
+        
+        prisonInfo.innerHTML = `
+            <div class="prison-details">
+                <h3>${prisonNames[prisonId] || `Тюрьма #${prisonId}`}</h3>
+                <div class="prison-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Режим:</span>
+                        <span class="stat-value">${isDay ? '☀️ День' : '🌙 Ночь'}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Чекпоинт:</span>
+                        <span class="stat-value">${currentCheckpoint + 1} / ${checkpoints.length}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Кликов в чекпоинте:</span>
+                        <span class="stat-value">${clicksInCheckpoint}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Рейтинг:</span>
+                        <span class="stat-value">${rating.toLocaleString()}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Пройдено ходок:</span>
+                        <span class="stat-value">${runs}</span>
+                    </div>
+                </div>
+                ${checkpointInfo}
+            </div>
+        `;
+        walkBtn.disabled = false;
     } catch (error) {
         console.error('Ошибка загрузки информации о тюрьме:', error);
         prisonInfo.innerHTML = `<p class="error">❌ Ошибка: ${error.message}</p>`;
@@ -380,67 +448,117 @@ async function startPrisonWalk() {
     btn.textContent = '🚀 Прохождение...';
     
     try {
-        // Выполняем несколько кликов (ограничено для безопасности)
+        // Выполняем клики до окончания энергии
         let total_clicks = 0;
         let total_cigarettes = 0;
         let total_rating = 0;
         let total_authority = 0;
-        const max_clicks = 10; // Максимум кликов за один запрос
+        let current_energy = 50; // Начальная энергия (будет обновляться из ответа)
+        let last_error = null;
+        const max_iterations = 100; // Максимум итераций для безопасности
         
-        for (let i = 0; i < max_clicks; i++) {
-            // POST запрос для работы в тюрьме (без body, только query параметры)
+        // Обновляем информацию о прогрессе в интерфейсе
+        const prisonInfo = document.getElementById('prison-info');
+        
+        for (let i = 0; i < max_iterations; i++) {
+            // Показываем прогресс
+            prisonInfo.innerHTML = `
+                <div class="prison-details">
+                    <h3>🚀 Прохождение тюрьмы...</h3>
+                    <div class="progress-info">
+                        <p>Кликов: <strong>${total_clicks}</strong></p>
+                        <p>Энергия: <strong>${current_energy}</strong></p>
+                        <p>Сигареты: <strong>+${total_cigarettes}</strong></p>
+                        <p>Рейтинг: <strong>+${total_rating}</strong></p>
+                        <p>Авторитет: <strong>+${total_authority}</strong></p>
+                    </div>
+                </div>
+            `;
+            
+            // POST запрос для работы в тюрьме
             const response = await fetch(`${GAME_API_URL}/player/prison/${prisonId}/work?isDay=${isDay}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({}) // Пустой body, но он должен быть
+                }
             });
             
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
             
             const data = await response.json();
             
+            // Обрабатываем ошибку "Too many work requests"
+            if (!data.success && data.error) {
+                if (data.error.includes('Too many work requests') || data.error.includes('Cooldown')) {
+                    console.log('⚠️ Cooldown, ждем 1 секунду...');
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    continue; // Повторяем попытку
+                } else {
+                    last_error = data.error;
+                    break;
+                }
+            }
+            
             if (!data.success) {
+                last_error = data.error || 'Неизвестная ошибка';
                 break;
             }
             
+            // Обновляем статистику
             total_clicks++;
             total_cigarettes += data.rewardCigarettes || 0;
             total_rating += data.rewardRating || 0;
             total_authority += data.rewardAuthority || 0;
+            current_energy = data.energy || 0;
             
             // Проверяем энергию
-            if (data.energy <= 0) {
+            if (current_energy <= 0) {
+                console.log('Энергия закончилась');
                 break;
             }
             
-            // Задержка между кликами
+            // Проверяем, завершен ли чекпоинт или ходка
+            if (data.runCompleted) {
+                console.log('Ходка завершена');
+                break;
+            }
+            
+            // Задержка между кликами (1 секунда)
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
         
-        const result = {
-            success: true,
-            total_clicks: total_clicks,
-            total_cigarettes: total_cigarettes,
-            total_rating: total_rating,
-            total_authority: total_authority
-        };
+        // Показываем результат
+        const message = `✅ Прохождение завершено!\n\n` +
+            `📊 Статистика:\n` +
+            `• Кликов: ${total_clicks}\n` +
+            `• Сигареты: +${total_cigarettes}\n` +
+            `• Рейтинг: +${total_rating}\n` +
+            `• Авторитет: +${total_authority}\n` +
+            `• Осталось энергии: ${current_energy}`;
         
-        if (result.success) {
+        if (last_error) {
             tg.showPopup({
-                title: 'Прохождение завершено',
-                message: `Кликов: ${result.total_clicks}\nСигареты: ${result.total_cigarettes}\nРейтинг: ${result.total_rating}\nАвторитет: ${result.total_authority}`,
+                title: '⚠️ Прохождение прервано',
+                message: message + `\n\nОшибка: ${last_error}`,
                 buttons: [{ text: 'OK', type: 'ok' }]
             });
-            loadPrisonInfo();
-            loadStats();
         } else {
-            tg.showAlert(result.error || 'Ошибка');
+            tg.showPopup({
+                title: '✅ Прохождение завершено',
+                message: message,
+                buttons: [{ text: 'OK', type: 'ok' }]
+            });
         }
+        
+        // Обновляем информацию о тюрьме и статистику
+        await Promise.all([
+            loadPrisonInfo(),
+            loadStats()
+        ]);
     } catch (error) {
         console.error('Ошибка прохождения тюрьмы:', error);
         tg.showAlert(`❌ Ошибка: ${error.message}`);
