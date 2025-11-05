@@ -569,12 +569,49 @@ async function loginWithInitData() {
             throw new Error('Некорректный формат initData. Убедитесь, что Mini App открыт через Telegram');
         }
         
+        // Проверяем возраст initData (auth_date)
+        try {
+            const authDateMatch = initData.match(/auth_date=(\d+)/);
+            if (authDateMatch) {
+                const authDate = parseInt(authDateMatch[1]);
+                const currentTime = Math.floor(Date.now() / 1000);
+                const ageSeconds = currentTime - authDate;
+                const ageMinutes = ageSeconds / 60;
+                
+                console.log('Проверка возраста initData:');
+                console.log(`- auth_date: ${authDate}`);
+                console.log(`- текущее время: ${currentTime}`);
+                console.log(`- возраст: ${ageMinutes.toFixed(1)} минут (${(ageMinutes/60).toFixed(1)} часов)`);
+                
+                if (ageSeconds > 3600) { // Более часа
+                    console.warn(`⚠️ initData устарел (${ageMinutes.toFixed(1)} минут)!`);
+                    console.warn('API игры может отклонить устаревший initData');
+                    console.warn('Попробуйте обновить страницу для получения свежего initData');
+                } else if (ageSeconds > 1800) { // Более 30 минут
+                    console.warn(`⚠️ initData довольно старый (${ageMinutes.toFixed(1)} минут)`);
+                } else {
+                    console.log('✓ initData свежий');
+                }
+            }
+        } catch (e) {
+            console.warn('Не удалось проверить возраст initData:', e);
+        }
+        
+        // Убеждаемся, что initData не искажен (проверяем начало и конец)
+        console.log('Проверка initData перед отправкой:');
+        console.log('- Начинается с query_id:', initData.startsWith('query_id='));
+        console.log('- Содержит hash:', initData.includes('hash='));
+        console.log('- Длина:', initData.length);
+        console.log('- Первые 50 символов:', initData.substring(0, 50));
+        console.log('- Последние 50 символов:', initData.substring(initData.length - 50));
+        
         const requestBody = { initData: initData };
         const requestBodyString = JSON.stringify(requestBody);
         
         console.log('URL запроса:', loginUrl);
-        console.log('Body запроса (первые 200 символов):', requestBodyString.substring(0, 200) + '...');
+        console.log('Body запроса (первые 300 символов):', requestBodyString.substring(0, 300) + '...');
         console.log('Длина initData в body:', initData.length);
+        console.log('Длина JSON body:', requestBodyString.length);
         
         const response = await fetch(loginUrl, {
             method: 'POST',
