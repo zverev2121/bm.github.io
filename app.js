@@ -613,6 +613,8 @@ async function loginWithInitData() {
         console.log('Длина initData в body:', initData.length);
         console.log('Длина JSON body:', requestBodyString.length);
         
+        // Отправляем запрос
+        console.log('Отправка запроса...');
         const response = await fetch(loginUrl, {
             method: 'POST',
             headers: {
@@ -623,6 +625,7 @@ async function loginWithInitData() {
         });
         
         console.log('Ответ сервера:', response.status, response.statusText);
+        console.log('Заголовки ответа:', Object.fromEntries(response.headers.entries()));
         
         // Обрабатываем 204 (No Content) - некоторые прокси/туннели могут возвращать его
         if (response.status === 204) {
@@ -662,26 +665,39 @@ async function loginWithInitData() {
         console.log('Content-Type ответа:', contentType);
         
         let data;
+        const responseText = await response.text();
+        console.log('Тело ответа (первые 500 символов):', responseText.substring(0, 500));
+        
         if (contentType && contentType.includes('application/json')) {
-            const responseText = await response.text();
-            console.log('Тело ответа:', responseText.substring(0, 200));
             if (responseText.trim()) {
-                data = JSON.parse(responseText);
+                try {
+                    data = JSON.parse(responseText);
+                    console.log('Данные авторизации:', { 
+                        success: data.success, 
+                        hasToken: !!data.accessToken,
+                        userId: data.userId,
+                        error: data.error || data.message
+                    });
+                } catch (e) {
+                    console.error('Ошибка парсинга JSON:', e);
+                    console.error('Ответ:', responseText);
+                    throw new Error(`Не удалось распарсить ответ: ${e.message}`);
+                }
             } else {
                 console.error('Пустое тело ответа');
                 throw new Error('Пустой ответ от сервера');
             }
         } else {
             // Если не JSON, пытаемся распарсить как текст
-            const responseText = await response.text();
-            console.log('Не-JSON ответ:', responseText.substring(0, 200));
+            console.log('Не-JSON ответ:', responseText.substring(0, 500));
             throw new Error(`Неожиданный Content-Type: ${contentType}`);
         }
-        console.log('Данные авторизации:', { 
-            success: data.success, 
-            hasToken: !!data.accessToken,
-            userId: data.userId 
-        });
+        
+        // Если есть ошибка, логируем подробно
+        if (!data.success) {
+            console.error('Ошибка авторизации:', data.error || data.message);
+            console.error('Полный ответ:', JSON.stringify(data, null, 2));
+        }
         
         if (data.success && data.accessToken) {
             console.log('Авторизация успешна!');
