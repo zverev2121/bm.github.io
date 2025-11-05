@@ -159,7 +159,9 @@ async function loadBossInfo() {
         
         const response = await fetch(`${GAME_API_URL}/boss/bootstrap`, {
             method: 'GET',
-            headers: headers
+            headers: headers,
+            mode: 'cors',
+            credentials: 'omit'
         });
         
         if (!response.ok) {
@@ -219,7 +221,9 @@ async function attackBoss() {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify(attackBody)
+            body: JSON.stringify(attackBody),
+            mode: 'cors',
+            credentials: 'omit'
         });
         
         if (!response.ok) {
@@ -793,15 +797,17 @@ async function loginWithInitData() {
             console.warn('Не удалось проверить JSON:', e);
         }
         
-        // Отправляем запрос
+        // Отправляем запрос БЕЗ лишних заголовков, чтобы избежать CORS preflight (OPTIONS)
+        // Используем только необходимые заголовки
         console.log('Отправка запроса...');
         const response = await fetch(loginUrl, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                'Content-Type': 'application/json'
             },
-            body: requestBodyString
+            body: requestBodyString,
+            mode: 'cors',
+            credentials: 'omit'  // Не отправляем cookies, чтобы избежать preflight
         });
         
         console.log('Ответ сервера:', response.status, response.statusText);
