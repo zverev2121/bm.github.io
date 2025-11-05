@@ -8,12 +8,24 @@ const APP_VERSION = '2.0.0';
 tg.ready();
 tg.expand();
 
-// Базовый URL API игры - обращаемся напрямую к API игры
-const GAME_API_URL = 'https://the-prison.ru/api';
+// Базовый URL API игры
+// Вариант 1: Прямое обращение (может быть заблокировано CORS)
+// const GAME_API_URL = 'https://the-prison.ru/api';
+
+// Вариант 2: Через API сервер (РЕКОМЕНДУЕТСЯ для обхода CORS)
+// Используйте любой туннелирующий сервис:
+// - CloudPub.ru: https://cloudpub.ru
+// - ngrok: ngrok http 5002
+// - localtunnel: npx localtunnel --port 5002
+// 
+// Замените URL ниже на ваш туннель URL (должен заканчиваться на /api)
+const API_SERVER_URL = ''; // Пример: 'https://abc123.cloudpub.ru/api' или 'https://abc123.ngrok.io/api'
+const GAME_API_URL = API_SERVER_URL || 'https://the-prison.ru/api';
 
 // Проверяем, что используется правильная версия
 console.log('Mini App версия:', APP_VERSION);
 console.log('API URL:', GAME_API_URL);
+console.log('Используется прокси:', !!API_SERVER_URL);
 
 // Инициализация
 document.addEventListener('DOMContentLoaded', async () => {
@@ -455,7 +467,13 @@ async function loginWithInitData() {
         
         console.log('Попытка авторизации через initData...');
         
-        const response = await fetch(`${GAME_API_URL}/auth/login`, {
+        // Если используем API сервер, отправляем initData через него
+        // Иначе пытаемся напрямую к API игры (может быть заблокировано CORS)
+        const loginUrl = API_SERVER_URL 
+            ? `${API_SERVER_URL}/auth/login`
+            : `${GAME_API_URL}/auth/login`;
+        
+        const response = await fetch(loginUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -509,8 +527,17 @@ async function loginWithInitData() {
         // Показываем более подробную ошибку
         if (error.message.includes('Failed to fetch') || error.message.includes('CORS')) {
             console.error('CORS ошибка - браузер блокирует запросы');
-            document.getElementById('boss-info').innerHTML = 
-                '<p class="error">❌ Ошибка CORS<br>Браузер блокирует запросы к API<br><br>Попробуйте:<br>1. Обновить страницу<br>2. Использовать токен вручную</p>';
+            const errorMsg = `
+                <p class="error">
+                    ❌ Ошибка CORS<br><br>
+                    Браузер блокирует прямые запросы к API игры.<br><br>
+                    <strong>Решения:</strong><br>
+                    1. Используйте API сервер через ngrok (см. инструкцию)<br>
+                    2. Или введите токен вручную (кнопка ниже)
+                </p>
+            `;
+            document.getElementById('boss-info').innerHTML = errorMsg;
+            showManualAuthButton();
         } else if (error.message.includes('NetworkError') || error.message.includes('Network request failed')) {
             console.error('Ошибка сети');
             document.getElementById('boss-info').innerHTML = 
