@@ -5,20 +5,28 @@ const tg = window.Telegram.WebApp;
 tg.ready();
 tg.expand();
 
-// Базовый URL API бота
-// Для локальной разработки: используйте ngrok для создания HTTPS туннеля к api_server.py
-// Пример: https://abc123.ngrok.io/api
-const BOT_API_URL = 'https://your-domain.com/api'; // Замените на ваш URL от ngrok или сервера
+// Базовый URL API игры - обращаемся напрямую к API игры
+const GAME_API_URL = 'https://the-prison.ru/api';
 
 // Инициализация
-document.addEventListener('DOMContentLoaded', () => {
-    updateStatus(true);
-    loadBossInfo();
-    loadPrisons();
-    loadStats();
+document.addEventListener('DOMContentLoaded', async () => {
+    updateStatus(false);
     
-    // Обновляем статистику каждые 30 секунд
-    setInterval(loadStats, 30000);
+    // Сначала пытаемся авторизоваться
+    const token = await loginWithInitData();
+    
+    if (token) {
+        updateStatus(true);
+        loadBossInfo();
+        loadPrisons();
+        loadStats();
+        
+        // Обновляем статистику каждые 30 секунд
+        setInterval(loadStats, 30000);
+    } else {
+        updateStatus(false);
+        document.getElementById('boss-info').innerHTML = '<p class="error">❌ Ошибка авторизации<br>Проверьте initData</p>';
+    }
 });
 
 // Обновление статуса подключения
@@ -41,18 +49,26 @@ async function loadBossInfo() {
     bossInfo.innerHTML = '<p class="loading">Загрузка...</p>';
     
     try {
-        // Проверяем, что API URL настроен
-        if (BOT_API_URL.includes('your-domain.com')) {
-            bossInfo.innerHTML = '<p class="error">⚠️ API URL не настроен!<br>Настройте BOT_API_URL в app.js</p>';
-            updateStatus(false);
-            return;
+        // Получаем токен из initData
+        const initData = tg.initData;
+        const userId = tg.initDataUnsafe?.user?.id;
+        
+        // Создаем заголовки для авторизации
+        const headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        };
+        
+        // Добавляем токен, если есть (из настроек бота)
+        // В реальном приложении токен должен передаваться безопасно
+        const token = getAccessToken();
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
         }
         
-        const response = await fetch(`${BOT_API_URL}/boss/bootstrap`, {
+        const response = await fetch(`${GAME_API_URL}/boss/bootstrap`, {
             method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+            headers: headers
         });
         
         if (!response.ok) {
@@ -91,21 +107,37 @@ async function attackBoss() {
     btn.textContent = '⚔️ Атака...';
     
     try {
-        const response = await fetch(`${BOT_API_URL}/boss/attack`, {
+        const token = getAccessToken();
+        if (!token) {
+            tg.showAlert('❌ Требуется авторизация!\nОбновите страницу');
+            btn.disabled = false;
+            btn.textContent = '⚔️ Атаковать';
+            return;
+        }
+        
+        const response = await fetch(`${GAME_API_URL}/boss/attack`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${getToken()}`,
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ attack_type: 'punchChest' })
+            body: JSON.stringify({ type: 'punchChest' })
         });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         
         const data = await response.json();
         
         if (data.success) {
+            // Увеличиваем счетчик атак
+            const currentAttacks = parseInt(localStorage.getItem('total_attacks') || '0');
+            localStorage.setItem('total_attacks', (currentAttacks + 1).toString());
+            
             tg.showPopup({
                 title: 'Успех!',
-                message: `Атака выполнена!\nУрон: ${data.damage || 'N/A'}`,
+                message: `Атака выполнена!`,
                 buttons: [{ text: 'OK', type: 'ok' }]
             });
             loadBossInfo();
@@ -114,7 +146,8 @@ async function attackBoss() {
             tg.showAlert(data.error || 'Ошибка атаки');
         }
     } catch (error) {
-        tg.showAlert(`Ошибка: ${error.message}`);
+        console.error('Ошибка атаки:', error);
+        tg.showAlert(`❌ Ошибка: ${error.message}`);
     } finally {
         btn.disabled = false;
         btn.textContent = '⚔️ Атаковать';
@@ -125,17 +158,18 @@ async function attackBoss() {
 async function loadPrisons() {
     const select = document.getElementById('prison-select');
     
-    // Проверяем, что API URL настроен
-    if (BOT_API_URL.includes('your-domain.com')) {
-        console.warn('API URL не настроен');
-        return;
-    }
-    
-    try {
-        const response = await fetch(`${BOT_API_URL}/prisons/tops-all`, {
+        const token = getAccessToken();
+        if (!token) {
+            console.warn('Токен не доступен');
+            return;
+        }
+        
+        try {
+        const response = await fetch(`${GAME_API_URL}/prisons/tops-all`, {
             method: 'GET',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
             }
         });
         
@@ -176,17 +210,26 @@ async function loadPrisonInfo() {
         return;
     }
     
+    const token = getAccessToken();
+    if (!token) {
+        prisonInfo.innerHTML = '<p class="error">❌ Требуется авторизация!</p>';
+        walkBtn.disabled = true;
+        return;
+    }
+    
     prisonInfo.innerHTML = '<p class="loading">Загрузка...</p>';
     walkBtn.disabled = true;
     
     try {
-        const response = await fetch(`${BOT_API_URL}/prison/${prisonId}?isDay=${isDay}`, {
+        const response = await fetch(`${GAME_API_URL}/player/prison/${prisonId}?isDay=${isDay}`, {
+            method: 'GET',
             headers: {
-                'Authorization': `Bearer ${getToken()}`
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
             }
         });
         
-        if (!response.ok) throw new Error('Ошибка загрузки');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         
         const data = await response.json();
         if (data.success && data.data) {
@@ -207,7 +250,8 @@ async function loadPrisonInfo() {
             prisonInfo.innerHTML = '<p>Информация о тюрьме недоступна</p>';
         }
     } catch (error) {
-        prisonInfo.innerHTML = `<p class="error">Ошибка: ${error.message}</p>`;
+        console.error('Ошибка загрузки информации о тюрьме:', error);
+        prisonInfo.innerHTML = `<p class="error">❌ Ошибка: ${error.message}</p>`;
     }
 }
 
@@ -222,6 +266,12 @@ async function startPrisonWalk() {
         return;
     }
     
+    const token = getAccessToken();
+    if (!token) {
+        tg.showAlert('❌ Требуется авторизация!\nОбновите страницу');
+        return;
+    }
+    
     const confirmed = await new Promise(resolve => {
         tg.showConfirm('Начать автоматическое прохождение?', resolve);
     });
@@ -232,29 +282,68 @@ async function startPrisonWalk() {
     btn.textContent = '🚀 Прохождение...';
     
     try {
-        const response = await fetch(`${BOT_API_URL}/prison/${prisonId}/walk?isDay=${isDay}`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${getToken()}`,
-                'Content-Type': 'application/json'
+        // Выполняем несколько кликов (ограничено для безопасности)
+        let total_clicks = 0;
+        let total_cigarettes = 0;
+        let total_rating = 0;
+        let total_authority = 0;
+        const max_clicks = 10; // Максимум кликов за один запрос
+        
+        for (let i = 0; i < max_clicks; i++) {
+            const response = await fetch(`${GAME_API_URL}/player/prison/${prisonId}/work?isDay=${isDay}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
             }
-        });
+            
+            const data = await response.json();
+            
+            if (!data.success) {
+                break;
+            }
+            
+            total_clicks++;
+            total_cigarettes += data.rewardCigarettes || 0;
+            total_rating += data.rewardRating || 0;
+            total_authority += data.rewardAuthority || 0;
+            
+            // Проверяем энергию
+            if (data.energy <= 0) {
+                break;
+            }
+            
+            // Задержка между кликами
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
         
-        const data = await response.json();
+        const result = {
+            success: true,
+            total_clicks: total_clicks,
+            total_cigarettes: total_cigarettes,
+            total_rating: total_rating,
+            total_authority: total_authority
+        };
         
-        if (data.success) {
+        if (result.success) {
             tg.showPopup({
-                title: 'Прохождение начато',
-                message: `Кликов: ${data.total_clicks || 0}\nСигареты: ${data.total_cigarettes || 0}`,
+                title: 'Прохождение завершено',
+                message: `Кликов: ${result.total_clicks}\nСигареты: ${result.total_cigarettes}\nРейтинг: ${result.total_rating}\nАвторитет: ${result.total_authority}`,
                 buttons: [{ text: 'OK', type: 'ok' }]
             });
             loadPrisonInfo();
             loadStats();
         } else {
-            tg.showAlert(data.error || 'Ошибка');
+            tg.showAlert(result.error || 'Ошибка');
         }
     } catch (error) {
-        tg.showAlert(`Ошибка: ${error.message}`);
+        console.error('Ошибка прохождения тюрьмы:', error);
+        tg.showAlert(`❌ Ошибка: ${error.message}`);
     } finally {
         btn.disabled = false;
         btn.textContent = '🚀 Начать прохождение';
@@ -263,30 +352,91 @@ async function startPrisonWalk() {
 
 // Загрузка статистики
 async function loadStats() {
+    const token = getAccessToken();
+    if (!token) {
+        return;
+    }
+    
     try {
-        const response = await fetch(`${BOT_API_URL}/stats`, {
+        // Получаем информацию о боссе для отображения энергии
+        const response = await fetch(`${GAME_API_URL}/boss/bootstrap`, {
+            method: 'GET',
             headers: {
-                'Authorization': `Bearer ${getToken()}`
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
             }
         });
         
         if (response.ok) {
             const data = await response.json();
-            if (data.total_attacks !== undefined) {
-                document.getElementById('total-attacks').textContent = data.total_attacks;
-            }
-            if (data.energy !== undefined) {
-                document.getElementById('energy').textContent = `${data.energy}/${data.max_energy || 50}`;
-            }
+            // TODO: Добавить счетчик атак (можно хранить в localStorage)
+            const totalAttacks = parseInt(localStorage.getItem('total_attacks') || '0');
+            document.getElementById('total-attacks').textContent = totalAttacks;
+            
+            // Энергию можно получить из других endpoints, показываем заглушку
+            document.getElementById('energy').textContent = '-';
         }
     } catch (error) {
         console.error('Ошибка загрузки статистики:', error);
     }
 }
 
-// Получение токена из Telegram WebApp
-function getToken() {
-    // В реальном приложении токен должен передаваться через initData
-    // или храниться в безопасном месте
-    return tg.initDataUnsafe?.user?.id || '';
+// Получение токена доступа
+// В реальном приложении токен должен передаваться безопасно через API сервер
+// Для тестирования можно использовать токен из .env (но это небезопасно!)
+function getAccessToken() {
+    // Вариант 1: Получить токен через API сервер (безопасно)
+    // Нужно создать endpoint для получения токена с проверкой initData
+    
+    // Вариант 2: Временно использовать токен из localStorage (небезопасно, только для теста)
+    // В реальном приложении токен должен получаться через ваш API сервер
+    const storedToken = localStorage.getItem('game_access_token');
+    
+    if (storedToken) {
+        return storedToken;
+    }
+    
+    // Если токена нет, пытаемся получить через initData
+    // Для этого нужно авторизоваться через /auth/login
+    return null;
+}
+
+// Авторизация через initData
+async function loginWithInitData() {
+    try {
+        const initData = tg.initData;
+        
+        if (!initData) {
+            console.error('initData не доступен');
+            return null;
+        }
+        
+        const response = await fetch(`${GAME_API_URL}/auth/login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ initData: initData })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success && data.accessToken) {
+            // Сохраняем токен (в реальном приложении нужно использовать безопасное хранилище)
+            localStorage.setItem('game_access_token', data.accessToken);
+            localStorage.setItem('game_refresh_token', data.refreshToken || '');
+            localStorage.setItem('game_user_id', data.userId || '');
+            
+            return data.accessToken;
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('Ошибка авторизации:', error);
+        return null;
+    }
 }
