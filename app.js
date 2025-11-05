@@ -19,7 +19,7 @@ tg.expand();
 // - localtunnel: npx localtunnel --port 5002
 // 
 // Замените URL ниже на ваш туннель URL (должен заканчиваться на /api)
-const API_SERVER_URL = ''; // Пример: 'https://abc123.cloudpub.ru/api' или 'https://abc123.ngrok.io/api'
+const API_SERVER_URL = 'https://carelessly-pioneering-wombat.cloudpub.ru/api';
 const GAME_API_URL = API_SERVER_URL || 'https://the-prison.ru/api';
 
 // Проверяем, что используется правильная версия
