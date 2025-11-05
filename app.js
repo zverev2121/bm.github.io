@@ -95,7 +95,11 @@ async function loadBossInfo() {
         }
     } catch (error) {
         console.error('Ошибка загрузки информации о боссе:', error);
-        bossInfo.innerHTML = `<p class="error">❌ Ошибка подключения:<br>${error.message}<br><br>Убедитесь, что API сервер запущен</p>`;
+        if (error.message.includes('Failed to fetch') || error.message.includes('CORS')) {
+            bossInfo.innerHTML = `<p class="error">❌ Ошибка CORS<br>Браузер блокирует запросы<br><br>Попробуйте обновить страницу</p>`;
+        } else {
+            bossInfo.innerHTML = `<p class="error">❌ Ошибка подключения:<br>${error.message}</p>`;
+        }
         updateStatus(false);
     }
 }
@@ -408,35 +412,52 @@ async function loginWithInitData() {
         
         if (!initData) {
             console.error('initData не доступен');
+            console.log('Проверка Telegram WebApp:', {
+                initData: tg.initData,
+                initDataUnsafe: tg.initDataUnsafe,
+                version: tg.version
+            });
             return null;
         }
+        
+        console.log('Попытка авторизации через initData...');
         
         const response = await fetch(`${GAME_API_URL}/auth/login`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
             body: JSON.stringify({ initData: initData })
         });
         
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+            const errorText = await response.text();
+            console.error(`Ошибка авторизации: ${response.status}`, errorText);
+            throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
         }
         
         const data = await response.json();
         
         if (data.success && data.accessToken) {
+            console.log('Авторизация успешна!');
             // Сохраняем токен (в реальном приложении нужно использовать безопасное хранилище)
             localStorage.setItem('game_access_token', data.accessToken);
             localStorage.setItem('game_refresh_token', data.refreshToken || '');
             localStorage.setItem('game_user_id', data.userId || '');
             
             return data.accessToken;
+        } else {
+            console.error('Ошибка авторизации:', data);
+            return null;
         }
-        
-        return null;
     } catch (error) {
         console.error('Ошибка авторизации:', error);
+        // Показываем более подробную ошибку
+        if (error.message.includes('Failed to fetch') || error.message.includes('CORS')) {
+            document.getElementById('boss-info').innerHTML = 
+                '<p class="error">❌ Ошибка CORS<br>Браузер блокирует запросы к API<br><br>Это нормально для Mini App, попробуйте обновить страницу</p>';
+        }
         return null;
     }
 }
