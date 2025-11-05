@@ -18,6 +18,73 @@
         </header>
 
         <main>
+            <!-- Раздел настроек (показывается при первом запуске) -->
+            <section class="card" id="settings-section" style="display: none;">
+                <h2>⚙️ Настройки</h2>
+                
+                <div class="settings-welcome" id="settings-welcome" style="display: none;">
+                    <p><strong>👋 Добро пожаловать!</strong></p>
+                    <p>Перед началом работы необходимо настроить подключение.</p>
+                    <p><strong>Минимальные настройки:</strong></p>
+                    <ul style="text-align: left; margin: 10px 0; padding-left: 20px;">
+                        <li>Обычно ничего не нужно настраивать - авторизация происходит автоматически</li>
+                        <li>Если есть проблемы с CORS - укажите URL прокси-сервера</li>
+                    </ul>
+                    <button class="btn btn-primary" onclick="showSettingsForm()">✏️ Настроить</button>
+                </div>
+                
+                <div class="settings-form" id="settings-form">
+                    <div class="form-group">
+                        <label for="api-server-url">🌐 API Server URL (опционально):</label>
+                        <input type="text" id="api-server-url" placeholder="https://your-proxy.com/api" />
+                        <small class="form-hint">
+                            Оставьте пустым для прямого подключения к API игры<br>
+                            Или укажите URL вашего прокси-сервера (CloudPub.ru, ngrok и т.д.)<br>
+                            <strong>Пример:</strong> https://carelessly-pioneering-wombat.cloudpub.ru/api
+                        </small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="manual-token">🔑 Access Token (опционально):</label>
+                        <input type="password" id="manual-token" placeholder="Введите токен вручную (если нужно)" />
+                        <small class="form-hint">
+                            Обычно токен получается автоматически через авторизацию<br>
+                            Введите только если автоматическая авторизация не работает<br>
+                            <strong>Как получить токен:</strong> После успешной авторизации токен сохраняется автоматически
+                        </small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="use-hardcoded-initdata" />
+                            Использовать тестовый initData (для разработки)
+                        </label>
+                        <small class="form-hint">
+                            Обычно используется initData от Telegram автоматически<br>
+                            Включите только для тестирования
+                        </small>
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="saveSettings()">💾 Сохранить настройки</button>
+                    <button class="btn btn-secondary" onclick="resetSettings()" style="margin-top: 10px;">🔄 Сбросить настройки</button>
+                </div>
+                
+                <div class="settings-info" id="settings-info" style="display: none;">
+                    <p><strong>Текущие настройки:</strong></p>
+                    <div class="settings-display">
+                        <div class="setting-item">
+                            <span>API Server:</span>
+                            <span id="current-api-url">Не указан (прямое подключение)</span>
+                        </div>
+                        <div class="setting-item">
+                            <span>Токен:</span>
+                            <span id="current-token-status">Не сохранен</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" onclick="showSettingsForm()" style="margin-top: 10px;">✏️ Изменить настройки</button>
+                </div>
+            </section>
+
             <!-- Раздел босса -->
             <section class="card" id="boss-section">
                 <h2>👹 Босс</h2>
@@ -62,6 +129,11 @@
                 </div>
             </section>
         </main>
+        
+        <!-- Кнопка настроек внизу экрана -->
+        <div class="settings-button-container">
+            <button class="btn btn-secondary" onclick="toggleSettings()" id="settings-toggle-btn">⚙️ Настройки</button>
+        </div>
     </div>
 
     <script src="app.js"></script>

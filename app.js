@@ -19,27 +19,213 @@ if (tg) {
 }
 
 // Базовый URL API игры
-// Вариант 1: Прямое обращение (может быть заблокировано CORS)
-// const GAME_API_URL = 'https://the-prison.ru/api';
+// Загружается из localStorage или используется значение по умолчанию
+function getApiServerUrl() {
+    const saved = localStorage.getItem('api_server_url');
+    if (saved && saved.trim()) {
+        return saved.trim();
+    }
+    // Значение по умолчанию (можно изменить)
+    return 'https://carelessly-pioneering-wombat.cloudpub.ru/api';
+}
 
-// Вариант 2: Через API сервер (РЕКОМЕНДУЕТСЯ для обхода CORS)
-// Используйте любой туннелирующий сервис:
-// - CloudPub.ru: https://cloudpub.ru
-// - ngrok: ngrok http 5002
-// - localtunnel: npx localtunnel --port 5002
-// 
-// Замените URL ниже на ваш туннель URL (должен заканчиваться на /api)
-const API_SERVER_URL = 'https://carelessly-pioneering-wombat.cloudpub.ru/api';
-const GAME_API_URL = API_SERVER_URL || 'https://the-prison.ru/api';
+function getGameApiUrl() {
+    const apiServerUrl = getApiServerUrl();
+    // Если указан API сервер, используем его, иначе прямое подключение
+    return apiServerUrl || 'https://the-prison.ru/api';
+}
+
+// Динамически получаем URL API
+let API_SERVER_URL = getApiServerUrl();
+let GAME_API_URL = getGameApiUrl();
 
 // Проверяем, что используется правильная версия
 console.log('Mini App версия:', APP_VERSION);
 console.log('API URL:', GAME_API_URL);
 console.log('Используется прокси:', !!API_SERVER_URL);
 
+// Функции для работы с настройками
+function loadSettings() {
+    const apiUrl = localStorage.getItem('api_server_url') || '';
+    const manualToken = localStorage.getItem('manual_access_token') || '';
+    const useHardcoded = localStorage.getItem('use_hardcoded_initdata') === 'true';
+    
+    if (document.getElementById('api-server-url')) {
+        document.getElementById('api-server-url').value = apiUrl;
+    }
+    if (document.getElementById('manual-token')) {
+        document.getElementById('manual-token').value = manualToken;
+    }
+    if (document.getElementById('use-hardcoded-initdata')) {
+        document.getElementById('use-hardcoded-initdata').checked = useHardcoded;
+    }
+    
+    updateSettingsDisplay();
+}
+
+function saveSettings() {
+    const apiUrl = document.getElementById('api-server-url').value.trim();
+    const manualToken = document.getElementById('manual-token').value.trim();
+    const useHardcoded = document.getElementById('use-hardcoded-initdata').checked;
+    
+    if (apiUrl) {
+        // Проверяем, что URL заканчивается на /api
+        const normalizedUrl = apiUrl.endsWith('/api') ? apiUrl : (apiUrl.endsWith('/') ? apiUrl + 'api' : apiUrl + '/api');
+        localStorage.setItem('api_server_url', normalizedUrl);
+    } else {
+        localStorage.removeItem('api_server_url');
+    }
+    
+    if (manualToken) {
+        localStorage.setItem('manual_access_token', manualToken);
+        // Если введен токен вручную, используем его
+        localStorage.setItem('game_access_token', manualToken);
+    } else {
+        localStorage.removeItem('manual_access_token');
+    }
+    
+    localStorage.setItem('use_hardcoded_initdata', useHardcoded ? 'true' : 'false');
+    
+    // Обновляем URL API
+    API_SERVER_URL = getApiServerUrl();
+    GAME_API_URL = getGameApiUrl();
+    
+    console.log('Настройки сохранены:');
+    console.log('- API Server URL:', API_SERVER_URL || 'не указан (прямое подключение)');
+    console.log('- Manual Token:', manualToken ? 'установлен' : 'не установлен');
+    console.log('- Use Hardcoded initData:', useHardcoded);
+    console.log('- GAME_API_URL:', GAME_API_URL);
+    
+    tg.showAlert('✅ Настройки сохранены!\n\nПерезагрузите страницу для применения изменений.');
+    updateSettingsDisplay();
+    hideSettingsForm();
+}
+
+function resetSettings() {
+    if (confirm('Вы уверены, что хотите сбросить все настройки?')) {
+        localStorage.removeItem('api_server_url');
+        localStorage.removeItem('manual_access_token');
+        localStorage.removeItem('use_hardcoded_initdata');
+        localStorage.removeItem('game_access_token');
+        localStorage.removeItem('game_refresh_token');
+        localStorage.removeItem('game_user_id');
+        
+        document.getElementById('api-server-url').value = '';
+        document.getElementById('manual-token').value = '';
+        document.getElementById('use-hardcoded-initdata').checked = false;
+        
+        API_SERVER_URL = getApiServerUrl();
+        GAME_API_URL = getGameApiUrl();
+        
+        tg.showAlert('✅ Настройки сброшены!\n\nПерезагрузите страницу.');
+        updateSettingsDisplay();
+    }
+}
+
+function updateSettingsDisplay() {
+    const apiUrl = localStorage.getItem('api_server_url') || '';
+    const token = localStorage.getItem('game_access_token') || '';
+    const manualToken = localStorage.getItem('manual_access_token') || '';
+    
+    const currentApiUrl = document.getElementById('current-api-url');
+    const currentTokenStatus = document.getElementById('current-token-status');
+    
+    if (currentApiUrl) {
+        currentApiUrl.textContent = apiUrl || 'Не указан (прямое подключение)';
+    }
+    
+    if (currentTokenStatus) {
+        if (manualToken) {
+            currentTokenStatus.textContent = 'Введен вручную';
+        } else if (token) {
+            currentTokenStatus.textContent = 'Получен автоматически';
+        } else {
+            currentTokenStatus.textContent = 'Не сохранен';
+        }
+    }
+}
+
+function showSettingsForm() {
+    const welcome = document.getElementById('settings-welcome');
+    const form = document.getElementById('settings-form');
+    const info = document.getElementById('settings-info');
+    
+    if (welcome) welcome.style.display = 'none';
+    if (form) form.style.display = 'flex';
+    if (info) info.style.display = 'none';
+    loadSettings();
+}
+
+function hideSettingsForm() {
+    const welcome = document.getElementById('settings-welcome');
+    const form = document.getElementById('settings-form');
+    const info = document.getElementById('settings-info');
+    
+    if (welcome) welcome.style.display = 'none';
+    if (form) form.style.display = 'none';
+    if (info) info.style.display = 'block';
+    updateSettingsDisplay();
+}
+
+function toggleSettings() {
+    const settingsSection = document.getElementById('settings-section');
+    if (settingsSection.style.display === 'none' || !settingsSection.style.display) {
+        settingsSection.style.display = 'block';
+        loadSettings();
+        // Показываем форму, если настройки не сохранены
+        const hasSettings = localStorage.getItem('api_server_url') || localStorage.getItem('manual_access_token');
+        if (!hasSettings) {
+            // Показываем приветствие при первом запуске
+            const welcome = document.getElementById('settings-welcome');
+            if (welcome) {
+                welcome.style.display = 'block';
+                document.getElementById('settings-form').style.display = 'none';
+                document.getElementById('settings-info').style.display = 'none';
+            } else {
+                showSettingsForm();
+            }
+        } else {
+            hideSettingsForm();
+        }
+    } else {
+        settingsSection.style.display = 'none';
+    }
+}
+
 // Инициализация
 document.addEventListener('DOMContentLoaded', async () => {
     updateStatus(false);
+    
+    // Загружаем настройки
+    loadSettings();
+    updateSettingsDisplay();
+    
+    // Проверяем, нужно ли показать настройки при первом запуске
+    const hasSettings = localStorage.getItem('api_server_url') || localStorage.getItem('manual_access_token');
+    if (!hasSettings) {
+        // Показываем настройки при первом запуске
+        document.getElementById('settings-section').style.display = 'block';
+        const welcome = document.getElementById('settings-welcome');
+        if (welcome) {
+            welcome.style.display = 'block';
+            document.getElementById('settings-form').style.display = 'none';
+            document.getElementById('settings-info').style.display = 'none';
+        } else {
+            showSettingsForm();
+        }
+        
+        // Скрываем другие секции до настройки
+        document.getElementById('boss-section').style.display = 'none';
+        document.getElementById('prison-section').style.display = 'none';
+        document.getElementById('stats-section').style.display = 'none';
+        
+        // НЕ прерываем загрузку - продолжаем авторизацию
+        // Пользователь может настроить позже через кнопку "Настройки"
+    }
+    
+    // Обновляем URL API перед авторизацией
+    API_SERVER_URL = getApiServerUrl();
+    GAME_API_URL = getGameApiUrl();
     
     // Проверяем, что мы в Telegram WebApp
     console.log('Проверка Telegram WebApp:');
@@ -74,21 +260,37 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.warn('initData доступен ТОЛЬКО когда Mini App открыт через бота в Telegram');
     }
     
-    // ВСЕГДА пытаемся авторизоваться (даже если есть токен в localStorage)
-    // Это гарантирует, что токен свежий и валидный
-    console.log('Начало авторизации...');
+    // Проверяем, есть ли токен вручную введенный
+    const manualToken = localStorage.getItem('manual_access_token');
+    let token = null;
     
-    let token = await loginWithInitData();
+    if (manualToken) {
+        console.log('Используется токен, введенный вручную');
+        token = manualToken;
+        localStorage.setItem('game_access_token', token);
+    } else {
+        // ВСЕГДА пытаемся авторизоваться (даже если есть токен в localStorage)
+        // Это гарантирует, что токен свежий и валидный
+        console.log('Начало авторизации...');
+        token = await loginWithInitData();
+    }
     
     if (token) {
         console.log('✓ Авторизация успешна, токен получен');
         console.log('Токен длина:', token.length);
         console.log('Токен первые 20 символов:', token.substring(0, 20) + '...');
         
-        // Сохраняем токен в localStorage
-        localStorage.setItem('game_access_token', token);
+        // Сохраняем токен в localStorage (если не был введен вручную)
+        if (!manualToken) {
+            localStorage.setItem('game_access_token', token);
+        }
         
         updateStatus(true);
+        
+        // Показываем все секции
+        document.getElementById('boss-section').style.display = 'block';
+        document.getElementById('prison-section').style.display = 'block';
+        document.getElementById('stats-section').style.display = 'block';
         
         // Загружаем данные только после успешной авторизации
         console.log('Загрузка данных после авторизации...');
@@ -103,6 +305,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
         console.error('❌ Авторизация не удалась');
         updateStatus(false);
+        
+        // Показываем секции, но с ошибкой
+        document.getElementById('boss-section').style.display = 'block';
+        document.getElementById('prison-section').style.display = 'block';
+        document.getElementById('stats-section').style.display = 'block';
+        
         const errorMsg = `
             <p class="error">
                 ❌ Ошибка авторизации<br><br>
@@ -110,7 +318,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 1. initData не валиден<br>
                 2. CORS блокирует запросы<br>
                 3. API недоступен<br><br>
-                <small>Откройте консоль (F12) для подробностей</small>
+                <small>Проверьте настройки или введите токен вручную</small>
             </p>
         `;
         document.getElementById('boss-info').innerHTML = errorMsg;
@@ -629,15 +837,29 @@ async function loginWithInitData() {
             return null;
         }
         
+        // Проверяем, нужно ли использовать захардкоженный initData
+        const useHardcoded = localStorage.getItem('use_hardcoded_initdata') === 'true';
+        
         // Захардкоженный initData для тестирования (работающий)
-        // ВАЖНО: Используется всегда по умолчанию для тестирования
         const HARDCODED_INIT_DATA = 'query_id=AAH53yIQAAAAAPnfIhAoANyK&user=%7B%22id%22%3A270721017%2C%22first_name%22%3A%22Volodya%22%2C%22last_name%22%3A%22%22%2C%22username%22%3A%22zver_21%22%2C%22language_code%22%3A%22ru%22%2C%22allows_write_to_pm%22%3Atrue%2C%22photo_url%22%3A%22https%3A%5C%2F%5C%2Ft.me%5C%2Fi%5C%2Fuserpic%5C%2F320%5C%2Fh8b3_9CHPrRIbuB8eqQUX425Vn5wTHw-Mz23B4wNtxE.svg%22%7D&auth_date=1762342159&signature=xH22ACBKMdOOa30VHsPPme35tKQQ5dPocMiiJ-qiBcut_2wK8jzhH8EqCiZh0gST980RGyVfw2KRaI4-M4PaCw&hash=57f11925ffed739dd3b9b07c073af3059b609da38f4ddf4b5423b93a13749b7b';
         
-        // ВСЕГДА используем захардкоженный initData по умолчанию
-        let initData = HARDCODED_INIT_DATA;
+        let initData = '';
         
-        console.log('⚠️ Используется захардкоженный initData для тестирования');
-        console.log('⚠️ В продакшене это должно быть заменено на tg.initData!');
+        if (useHardcoded) {
+            // Используем захардкоженный initData
+            initData = HARDCODED_INIT_DATA;
+            console.log('⚠️ Используется захардкоженный initData для тестирования');
+        } else {
+            // Используем initData от Telegram
+            initData = tg?.initData || '';
+            if (!initData || initData.length < 50) {
+                console.warn('tg.initData недоступен, пробуем захардкоженный');
+                initData = HARDCODED_INIT_DATA;
+            } else {
+                console.log('✓ Используется initData от Telegram');
+            }
+        }
+        
         console.log('initData длина:', initData.length);
         console.log('initData первые 100 символов:', initData.substring(0, 100) + '...');
         
@@ -648,7 +870,7 @@ async function loginWithInitData() {
             console.log('- tg.initData длина:', tg.initData ? tg.initData.length : 0);
             console.log('- tg.initData значение (первые 100 символов):', tg.initData ? tg.initData.substring(0, 100) : 'пусто');
         } else {
-            console.log('Telegram WebApp недоступен (используется захардкоженный initData)');
+            console.log('Telegram WebApp недоступен');
         }
         
         console.log('initData получен, длина:', initData?.length);
