@@ -311,9 +311,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Загружаем данные только после успешной авторизации
         console.log('Загрузка данных после авторизации...');
         await Promise.all([
-            loadPlayerInfo(),  // Загружаем информацию об игроке для получения userId
             loadBossInfo(),
-            loadPrisons(),
+            loadPrisons(),  // Загружает тюрьмы и информацию об игроке параллельно
             loadStats()
         ]);
         
@@ -338,9 +337,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Загружаем данные с сохраненным токеном
             console.log('Загрузка данных с сохраненным токеном...');
             await Promise.all([
-                loadPlayerInfo(),  // Загружаем информацию об игроке для получения userId
                 loadBossInfo(),
-                loadPrisons(),
+                loadPrisons(),  // Загружает тюрьмы и информацию об игроке параллельно
                 loadStats()
             ]);
             
@@ -526,45 +524,6 @@ function updateStatus(connected) {
     }
 }
 
-// Загрузка информации об игроке (для получения userId)
-async function loadPlayerInfo() {
-    try {
-        const token = getAccessToken();
-        if (!token) {
-            console.warn('Токен не доступен для загрузки информации об игроке');
-            return;
-        }
-        
-        console.log('Загрузка информации об игроке...');
-        const response = await fetch(`${GAME_API_URL}/player/init`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({})
-        });
-        
-        if (!response.ok) {
-            console.warn(`Ошибка при загрузке информации об игроке: HTTP ${response.status}`);
-            return;
-        }
-        
-        const data = await response.json();
-        if (data.success && data.userId) {
-            localStorage.setItem('game_user_id', data.userId.toString());
-            console.log('✅ User ID получен и сохранен:', data.userId);
-            if (data.nickname) {
-                console.log('Никнейм игрока:', data.nickname);
-            }
-        } else {
-            console.warn('Не удалось получить userId из ответа');
-        }
-    } catch (error) {
-        console.error('Ошибка при загрузке информации об игроке:', error);
-    }
-}
-
 // Загрузка информации о боссе
 async function loadBossInfo() {
     const bossInfo = document.getElementById('boss-info');
@@ -683,29 +642,42 @@ async function attackBoss() {
     }
 }
 
-// Загрузка списка тюрем
+// Загрузка списка тюрем и информации об игроке (параллельно)
 async function loadPrisons() {
     const select = document.getElementById('prison-select');
     
-        const token = getAccessToken();
-        if (!token) {
-            console.warn('Токен не доступен');
-            return;
-        }
+    const token = getAccessToken();
+    if (!token) {
+        console.warn('Токен не доступен');
+        return;
+    }
+    
+    try {
+        // Запрашиваем оба эндпоинта параллельно
+        console.log('Загрузка тюрем и информации об игроке...');
+        const [prisonsResponse, playerResponse] = await Promise.all([
+            fetch(`${GAME_API_URL}/prisons/tops-all`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            }),
+            fetch(`${GAME_API_URL}/player/init`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({})
+            })
+        ]);
         
-        try {
-        const response = await fetch(`${GAME_API_URL}/prisons/tops-all`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
-        });
+        // Обрабатываем ответ с тюрьмами
+        if (!prisonsResponse.ok) throw new Error(`HTTP ${prisonsResponse.status}`);
         
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        
-        const data = await response.json();
-        if (data.success && data.tops) {
+        const prisonsData = await prisonsResponse.json();
+        if (prisonsData.success && prisonsData.tops) {
             const prisonNames = {
                 1: 'Бутырка', 2: 'Красная пресня', 3: 'Софийка', 4: 'Кресты',
                 5: 'Владимирский Централ', 6: 'Угольки', 7: 'Матросская Тишина',
@@ -714,12 +686,28 @@ async function loadPrisons() {
                 14: 'Гронецкая крытка', 15: 'Александровский Централ'
             };
             
-            data.tops.forEach(top => {
+            prisonsData.tops.forEach(top => {
                 const option = document.createElement('option');
                 option.value = top.prisonId;
                 option.textContent = `#${top.prisonId} - ${prisonNames[top.prisonId] || `Тюрьма ${top.prisonId}`}`;
                 select.appendChild(option);
             });
+        }
+        
+        // Обрабатываем ответ с информацией об игроке
+        if (playerResponse.ok) {
+            const playerData = await playerResponse.json();
+            if (playerData.success && playerData.userId) {
+                localStorage.setItem('game_user_id', playerData.userId.toString());
+                console.log('✅ User ID получен и сохранен:', playerData.userId);
+                if (playerData.nickname) {
+                    console.log('Никнейм игрока:', playerData.nickname);
+                }
+            } else {
+                console.warn('Не удалось получить userId из ответа /player/init');
+            }
+        } else {
+            console.warn(`Ошибка при загрузке информации об игроке: HTTP ${playerResponse.status}`);
         }
     } catch (error) {
         console.error('Ошибка загрузки тюрем:', error);
