@@ -268,4 +268,3 @@ function getToken() {
     // или храниться в безопасном месте
     return tg.initDataUnsafe?.user?.id || '';
 }
-
