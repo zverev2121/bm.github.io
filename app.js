@@ -932,7 +932,7 @@ async function attackBoss() {
         console.log('Отправка атаки:', attackBody);
         
         const apiUrl = API_SERVER_URL || GAME_API_URL;
-        let response = await fetch(`${apiUrl}/boss/attack`, {
+        let response = await fetch(`${apiUrl}/boss/start-attack`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -950,7 +950,7 @@ async function attackBoss() {
                 if (newToken) {
                     token = newToken;
                     // Повторяем запрос с новым токеном
-                    response = await fetch(`${apiUrl}/boss/attack`, {
+                    response = await fetch(`${apiUrl}/boss/start-attack`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -2058,7 +2058,7 @@ function renderBossList(categoriesData) {
         const categoryId = categoryData.bosses[0]?.boss?.categoryId || categoryIndex + 1;
         const categoryName = categoryId === 1 ? 'Категория 1' : 'Категория 2';
         
-        html += `<h3 style="margin-top: 15px; margin-bottom: 10px;">${categoryName}</h3>`;
+        html += `<h3 style="margin-top: 15px; margin-bottom: 10px; color: #ffffff;">${categoryName}</h3>`;
         html += '<div class="boss-category" style="margin-bottom: 20px;">';
         
         categoryData.bosses.forEach((bossData) => {
@@ -2077,19 +2077,19 @@ function renderBossList(categoriesData) {
             });
             
             html += `
-                <div class="boss-item" style="display: flex; align-items: center; margin: 5px 0; padding: 8px; background: #f5f5f5; border-radius: 5px;">
+                <div class="boss-item" style="display: flex; align-items: center; margin: 5px 0; padding: 8px; background: #2d2d2d; border-radius: 5px; color: #ffffff;">
                     <input type="checkbox" 
                            class="boss-checkbox" 
                            data-boss-id="${bossId}" 
                            data-boss-name="${bossName}"
                            onchange="updateBossOrder()"
                            style="margin-right: 10px; width: 20px; height: 20px;">
-                    <label style="flex: 1; cursor: pointer;" onclick="document.querySelector('[data-boss-id=\\'${bossId}\\']').click()">
-                        <strong>${bossName}</strong> (ID: ${bossId}, HP: ${baseHp.toLocaleString()})
+                    <label style="flex: 1; cursor: pointer; color: #ffffff;" onclick="document.querySelector('[data-boss-id=\\'${bossId}\\']').click()">
+                        <strong style="color: #ffffff;">${bossName}</strong> <span style="color: #e0e0e0;">(ID: ${bossId}, HP: ${baseHp.toLocaleString()})</span>
                     </label>
                     <div class="boss-order-controls" style="margin-left: 10px;">
-                        <button onclick="moveBossUp(${bossId})" style="padding: 2px 8px; font-size: 12px;">↑</button>
-                        <button onclick="moveBossDown(${bossId})" style="padding: 2px 8px; font-size: 12px;">↓</button>
+                        <button onclick="moveBossUp(${bossId})" style="padding: 2px 8px; font-size: 12px; background: #3d3d3d; color: #ffffff; border: 1px solid #555; border-radius: 3px; cursor: pointer;">↑</button>
+                        <button onclick="moveBossDown(${bossId})" style="padding: 2px 8px; font-size: 12px; background: #3d3d3d; color: #ffffff; border: 1px solid #555; border-radius: 3px; cursor: pointer;">↓</button>
                     </div>
                 </div>
             `;
@@ -2099,9 +2099,9 @@ function renderBossList(categoriesData) {
     });
     
     html += '</div>';
-    html += '<div id="boss-order-display" style="margin-top: 15px; padding: 10px; background: #e8f5e9; border-radius: 5px; display: none;">';
-    html += '<strong>Порядок атаки:</strong>';
-    html += '<div id="boss-order-list" style="margin-top: 5px;"></div>';
+    html += '<div id="boss-order-display" style="margin-top: 15px; padding: 10px; background: #2d2d2d; border-radius: 5px; display: none; color: #ffffff;">';
+    html += '<strong style="color: #ffffff;">Порядок атаки:</strong>';
+    html += '<div id="boss-order-list" style="margin-top: 5px; color: #e0e0e0;"></div>';
     html += '</div>';
     
     container.innerHTML = html;
@@ -2215,7 +2215,7 @@ async function attackNextBoss(mode) {
         const apiUrl = API_SERVER_URL || GAME_API_URL;
         
         // Начинаем атаку
-        let response = await fetch(`${apiUrl}/boss/attack`, {
+        let response = await fetch(`${apiUrl}/boss/start-attack`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -2235,7 +2235,7 @@ async function attackNextBoss(mode) {
                 const newToken = await loginWithInitData();
                 if (newToken) {
                     token = newToken;
-                    response = await fetch(`${apiUrl}/boss/attack`, {
+                    response = await fetch(`${apiUrl}/boss/start-attack`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -2310,7 +2310,7 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
         }
         
         const apiUrl = API_SERVER_URL || GAME_API_URL;
-        let response = await fetch(`${apiUrl}/boss/attack`, {
+        let response = await fetch(`${apiUrl}/boss/start-attack`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -2330,7 +2330,7 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
                 const newToken = await loginWithInitData();
                 if (newToken) {
                     token = newToken;
-                    response = await fetch(`${apiUrl}/boss/attack`, {
+                    response = await fetch(`${apiUrl}/boss/start-attack`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
