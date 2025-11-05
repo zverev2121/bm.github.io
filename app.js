@@ -264,6 +264,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadSettings();
     updateSettingsDisplay();
     
+    // Инициализируем селектор типа взаимодействия
+    initInteractionTypeSelector();
+    
     // Проверяем, нужно ли показать настройки при первом запуске
     const hasSettings = localStorage.getItem('api_server_url') || localStorage.getItem('manual_init_data') || localStorage.getItem('manual_access_token');
     if (!hasSettings) {
@@ -478,34 +481,57 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-// Прокачка бицухи
+// Прокачка бицухи и другие взаимодействия
 async function startBicepsUpgrade() {
     const input = document.getElementById('biceps-user-ids');
+    const interactionTypeSelect = document.getElementById('interaction-type');
+    const userIdsStr = input.value.trim();
     const resultsDiv = document.getElementById('biceps-results');
     const resultsContent = document.getElementById('biceps-results-content');
+    const startBtn = document.getElementById('biceps-start-btn');
+    const btnText = document.getElementById('biceps-btn-text');
     
-    const userIdsInput = input.value.trim();
-    if (!userIdsInput) {
+    if (!userIdsStr) {
         tg.showAlert('Введите ID пользователей');
         return;
     }
     
-    // Парсим ID (могут быть через запятую или пробел)
-    const userIds = userIdsInput
-        .split(/[,,\s]+/)
-        .map(id => id.trim())
-        .filter(id => id && /^\d+$/.test(id))
-        .map(id => parseInt(id));
+    // Получаем выбранный тип взаимодействия
+    const interactionType = interactionTypeSelect.value;
+    
+    // Парсим ID пользователей
+    const userIds = userIdsStr.split(/[,\s]+/).map(id => parseInt(id.trim())).filter(id => !isNaN(id));
     
     if (userIds.length === 0) {
         tg.showAlert('Неверный формат ID. Используйте числа, разделенные запятыми или пробелами');
         return;
     }
     
+    // Определяем название действия для отображения
+    const actionNames = {
+        'UpgradeBiceps': 'Прокачка бицухи',
+        'TossDroj': 'Харкнуть в баланду',
+        'Harknut': 'Подкинуть в парашу'
+    };
+    const actionName = actionNames[interactionType] || interactionType;
+    
+    // Тексты для кнопок
+    const buttonTexts = {
+        'UpgradeBiceps': '💪 Начать прокачку',
+        'TossDroj': '🤮 Начать харкать',
+        'Harknut': '💩 Начать подкидывать'
+    };
+    
+    // Блокируем кнопку
+    startBtn.disabled = true;
+    btnText.textContent = '⏳ Выполняется...';
+    
     // Получаем токен (с автоматическим обновлением при необходимости)
     let token = await getAccessToken();
     if (!token) {
         tg.showAlert('Токен не найден. Выполните авторизацию');
+        startBtn.disabled = false;
+        btnText.textContent = buttonTexts[interactionType] || '💪 Начать';
         return;
     }
     
@@ -566,7 +592,7 @@ async function startBicepsUpgrade() {
     
     // Показываем результаты
     resultsDiv.style.display = 'block';
-    resultsContent.innerHTML = '<p>⏳ Начинаю прокачку бицухи...</p>';
+    resultsContent.innerHTML = `<p>⏳ Начинаю ${actionName.toLowerCase()}...</p>`;
     
     let successCount = 0;
     let alreadyDoneCount = 0;
@@ -584,7 +610,7 @@ async function startBicepsUpgrade() {
                 body: JSON.stringify({
                     fromUserId: parseInt(fromUserId),
                     toUserId: toUserId,
-                    type: 'UpgradeBiceps'
+                    type: interactionType
                 })
             });
             
@@ -606,7 +632,7 @@ async function startBicepsUpgrade() {
                             body: JSON.stringify({
                                 fromUserId: parseInt(fromUserId),
                                 toUserId: toUserId,
-                                type: 'UpgradeBiceps'
+                                type: interactionType
                             })
                         });
                     }
@@ -620,9 +646,10 @@ async function startBicepsUpgrade() {
                 results.push(`✅ ${toUserId}: ${result.message || 'Успешно'}`);
             } else {
                 const message = result.message || result.detail || 'Ошибка';
-                if (message.includes('уже сегодня') || message.includes('already')) {
+                if (message.includes('уже сегодня') || message.includes('already') || 
+                    message.includes('уже') || message.includes('сегодня')) {
                     alreadyDoneCount++;
-                    results.push(`⚠️ ${toUserId}: уже качали сегодня`);
+                    results.push(`⚠️ ${toUserId}: уже выполнено сегодня`);
                 } else {
                     errorCount++;
                     results.push(`❌ ${toUserId}: ${message}`);
@@ -631,6 +658,7 @@ async function startBicepsUpgrade() {
             
             // Обновляем результаты в реальном времени
             resultsContent.innerHTML = `
+                <p><strong>${actionName}</strong></p>
                 <p><strong>Обработано:</strong> ${results.length} / ${userIds.length}</p>
                 <div style="max-height: 200px; overflow-y: auto; margin-top: 10px;">
                     ${results.map(r => `<div style="margin: 5px 0; font-size: 12px;">${r}</div>`).join('')}
@@ -643,15 +671,15 @@ async function startBicepsUpgrade() {
         } catch (error) {
             errorCount++;
             results.push(`❌ ${toUserId}: ${error.message}`);
-            console.error(`Ошибка при прокачке бицухи для ${toUserId}:`, error);
+            console.error(`Ошибка при ${actionName.toLowerCase()} для ${toUserId}:`, error);
         }
     }
     
     // Итоговые результаты
     resultsContent.innerHTML = `
-        <h4>📊 Итоги:</h4>
+        <h4>📊 Итоги: ${actionName}</h4>
         <p>✅ Успешно: ${successCount}</p>
-        <p>⚠️ Уже качали сегодня: ${alreadyDoneCount}</p>
+        <p>⚠️ Уже выполнено сегодня: ${alreadyDoneCount}</p>
         <p>❌ Ошибки: ${errorCount}</p>
         <p><strong>Всего: ${userIds.length}</strong></p>
         <div style="max-height: 200px; overflow-y: auto; margin-top: 10px; padding: 10px; background: #f5f5f5; border-radius: 5px;">
@@ -659,7 +687,35 @@ async function startBicepsUpgrade() {
         </div>
     `;
     
-    tg.showAlert(`Готово!\n\nУспешно: ${successCount}\nУже качали: ${alreadyDoneCount}\nОшибки: ${errorCount}`);
+    tg.showAlert(`Готово!\n\n${actionName}\n\nУспешно: ${successCount}\nУже выполнено: ${alreadyDoneCount}\nОшибки: ${errorCount}`);
+    
+    // Разблокируем кнопку
+    startBtn.disabled = false;
+    btnText.textContent = buttonTexts[interactionType] || '💪 Начать';
+}
+
+// Обновляем текст кнопки при изменении типа взаимодействия (добавляем после загрузки DOM)
+function initInteractionTypeSelector() {
+    const interactionTypeSelect = document.getElementById('interaction-type');
+    const btnText = document.getElementById('biceps-btn-text');
+    
+    if (interactionTypeSelect && btnText) {
+        const buttonTexts = {
+            'UpgradeBiceps': '💪 Начать прокачку',
+            'TossDroj': '🤮 Начать харкать',
+            'Harknut': '💩 Начать подкидывать'
+        };
+        
+        interactionTypeSelect.addEventListener('change', function() {
+            const selectedType = this.value;
+            btnText.textContent = buttonTexts[selectedType] || '💪 Начать';
+        });
+        
+        // Устанавливаем начальный текст
+        if (interactionTypeSelect.value) {
+            btnText.textContent = buttonTexts[interactionTypeSelect.value] || '💪 Начать';
+        }
+    }
 }
 
 // Обновление статуса подключения

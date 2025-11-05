@@ -148,24 +148,38 @@
             </section>
 
             <!-- Прокачка бицухи -->
-            <section class="card" id="biceps-section">
-                <h2>💪 Прокачка бицухи</h2>
-                <div class="biceps-controls">
-                    <div class="form-group">
-                        <label for="biceps-user-ids">ID пользователей (через запятую):</label>
-                        <input type="text" id="biceps-user-ids" placeholder="8375898768, 1234567890" />
-                        <small class="form-hint">
-                            Введите ID пользователей, которым нужно качнуть бицуху<br>
-                            Разделяйте запятыми или пробелами
-                        </small>
-                    </div>
-                    <button class="btn btn-primary" onclick="startBicepsUpgrade()">💪 Начать прокачку</button>
-                    <div class="biceps-results" id="biceps-results" style="display: none; margin-top: 15px;">
-                        <h3>Результаты:</h3>
-                        <div id="biceps-results-content"></div>
-                    </div>
+        <section class="card" id="biceps-section">
+            <h2>💪 Взаимодействия с игроками</h2>
+            <div class="biceps-controls">
+                <div class="form-group">
+                    <label for="interaction-type">Тип взаимодействия:</label>
+                    <select id="interaction-type" class="form-control">
+                        <option value="UpgradeBiceps">💪 Прокачать бицуху</option>
+                        <option value="TossDroj">🤮 Харкнуть в баланду</option>
+                        <option value="Harknut">💩 Подкинуть в парашу</option>
+                    </select>
+                    <small class="form-hint">
+                        Выберите тип взаимодействия с игроком<br>
+                        Каждый тип можно использовать только один раз в день на одного игрока
+                    </small>
                 </div>
-            </section>
+                <div class="form-group">
+                    <label for="biceps-user-ids">ID пользователей (через запятую):</label>
+                    <input type="text" id="biceps-user-ids" placeholder="8375898768, 1234567890" />
+                    <small class="form-hint">
+                        Введите ID пользователей, с которыми нужно взаимодействовать<br>
+                        Разделяйте запятыми или пробелами
+                    </small>
+                </div>
+                <button class="btn btn-primary" onclick="startBicepsUpgrade()" id="biceps-start-btn">
+                    <span id="biceps-btn-text">💪 Начать</span>
+                </button>
+                <div class="biceps-results" id="biceps-results" style="display: none; margin-top: 15px;">
+                    <h3>Результаты:</h3>
+                    <div id="biceps-results-content"></div>
+                </div>
+            </div>
+        </section>
         </main>
         
         <!-- Кнопка настроек внизу экрана -->
