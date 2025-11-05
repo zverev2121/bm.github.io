@@ -365,12 +365,38 @@ async function startBicepsUpgrade() {
         return;
     }
     
-    // Получаем свой User ID из токена или из localStorage
+    // Получаем свой User ID из localStorage или из API
     let fromUserId = localStorage.getItem('game_user_id');
     if (!fromUserId) {
-        // Пытаемся получить из токена или используем значение по умолчанию
-        fromUserId = 270721017; // Замените на ваш User ID
-        console.warn('User ID не найден, используется значение по умолчанию:', fromUserId);
+        // Пытаемся получить из API /player/init
+        try {
+            console.log('Получение User ID из API...');
+            const initResponse = await fetch(`${GAME_API_URL}/player/init`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({})
+            });
+            
+            if (initResponse.ok) {
+                const initData = await initResponse.json();
+                if (initData.success && initData.userId) {
+                    fromUserId = initData.userId.toString();
+                    localStorage.setItem('game_user_id', fromUserId);
+                    console.log('User ID получен из API:', fromUserId);
+                }
+            }
+        } catch (error) {
+            console.warn('Не удалось получить User ID из API:', error);
+        }
+        
+        // Если все еще не получили, используем значение по умолчанию
+        if (!fromUserId) {
+            fromUserId = 270721017; // Замените на ваш User ID
+            console.warn('User ID не найден, используется значение по умолчанию:', fromUserId);
+        }
     }
     
     // Показываем результаты
@@ -1208,7 +1234,34 @@ async function loginWithInitData() {
             // Сохраняем токен (в реальном приложении нужно использовать безопасное хранилище)
             localStorage.setItem('game_access_token', data.accessToken);
             localStorage.setItem('game_refresh_token', data.refreshToken || '');
-            localStorage.setItem('game_user_id', data.userId || '');
+            
+            // Сохраняем userId из login
+            if (data.userId) {
+                localStorage.setItem('game_user_id', data.userId.toString());
+                console.log('User ID сохранен из login:', data.userId);
+            }
+            
+            // Дополнительно получаем User ID из /player/init для точности
+            try {
+                const initResponse = await fetch(`${GAME_API_URL}/player/init`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${data.accessToken}`
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                if (initResponse.ok) {
+                    const initData = await initResponse.json();
+                    if (initData.success && initData.userId) {
+                        localStorage.setItem('game_user_id', initData.userId.toString());
+                        console.log('User ID обновлен из /player/init:', initData.userId);
+                    }
+                }
+            } catch (error) {
+                console.warn('Не удалось получить User ID из /player/init:', error);
+            }
             
             return data.accessToken;
         } else {
