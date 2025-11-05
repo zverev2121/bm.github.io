@@ -605,13 +605,42 @@ async function loginWithInitData() {
         console.log('- Первые 50 символов:', initData.substring(0, 50));
         console.log('- Последние 50 символов:', initData.substring(initData.length - 50));
         
+        // Проверяем hash перед отправкой
+        const hashMatch = initData.match(/hash=([a-f0-9]+)/);
+        if (hashMatch) {
+            const hashValue = hashMatch[1];
+            console.log('Hash в initData:', {
+                длина: hashValue.length,
+                значение: hashValue.substring(0, 20) + '...',
+                полнаяДлина: hashValue.length === 64 ? '✓ корректная (64)' : `⚠️ неверная (${hashValue.length})`
+            });
+            if (hashValue.length !== 64) {
+                console.error('⚠️ Hash имеет неверную длину! Это может быть причиной ошибки');
+            }
+        }
+        
         const requestBody = { initData: initData };
+        // Используем JSON.stringify без дополнительных параметров для сохранения точности
         const requestBodyString = JSON.stringify(requestBody);
         
         console.log('URL запроса:', loginUrl);
         console.log('Body запроса (первые 300 символов):', requestBodyString.substring(0, 300) + '...');
         console.log('Длина initData в body:', initData.length);
         console.log('Длина JSON body:', requestBodyString.length);
+        
+        // Проверяем, что initData не искажен при JSON.stringify
+        try {
+            const parsed = JSON.parse(requestBodyString);
+            if (parsed.initData !== initData) {
+                console.error('⚠️ ВНИМАНИЕ: initData изменился при JSON.stringify!');
+                console.error('Исходный initData длина:', initData.length);
+                console.error('initData после парсинга длина:', parsed.initData.length);
+                console.error('Исходный initData последние 50:', initData.substring(initData.length - 50));
+                console.error('initData после парсинга последние 50:', parsed.initData.substring(parsed.initData.length - 50));
+            }
+        } catch (e) {
+            console.warn('Не удалось проверить JSON:', e);
+        }
         
         // Отправляем запрос
         console.log('Отправка запроса...');
@@ -697,6 +726,24 @@ async function loginWithInitData() {
         if (!data.success) {
             console.error('Ошибка авторизации:', data.error || data.message);
             console.error('Полный ответ:', JSON.stringify(data, null, 2));
+            
+            // Если ошибка "Invalid initData", проверяем hash
+            if ((data.error && data.error.includes('Invalid initData')) || 
+                (data.message && data.message.includes('Invalid initData'))) {
+                console.error('='.repeat(60));
+                console.error('ОШИБКА: Invalid initData');
+                console.error('Возможные причины:');
+                console.error('1. Hash имеет неверную длину или значение');
+                console.error('2. Signature неверный');
+                console.error('3. initData обрезан при передаче');
+                console.error('4. initData устарел');
+                console.error('');
+                console.error('Отправленный initData:');
+                console.error('- Длина:', initData.length);
+                console.error('- Hash:', hashMatch ? hashMatch[1] : 'не найден');
+                console.error('- Hash длина:', hashMatch ? hashMatch[1].length : 'N/A');
+                console.error('='.repeat(60));
+            }
         }
         
         if (data.success && data.accessToken) {
