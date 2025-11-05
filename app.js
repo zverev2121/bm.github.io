@@ -927,7 +927,8 @@ async function attackBoss() {
         const attackBody = { type: 'punchChest' };
         console.log('Отправка атаки:', attackBody);
         
-        let response = await fetch(`${GAME_API_URL}/boss/attack`, {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        let response = await fetch(`${apiUrl}/boss/attack`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -945,7 +946,7 @@ async function attackBoss() {
                 if (newToken) {
                     token = newToken;
                     // Повторяем запрос с новым токеном
-                    response = await fetch(`${GAME_API_URL}/boss/attack`, {
+                    response = await fetch(`${apiUrl}/boss/attack`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -1897,13 +1898,40 @@ window.loadBossList = async function loadBossList() {
         
         console.log('loadBossList: токен получен, длина:', token.length);
         
+        // Определяем правильный URL для запросов (используем прокси если есть)
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        console.log('Используемый API URL для запросов:', apiUrl);
+        console.log('API_SERVER_URL:', API_SERVER_URL);
+        console.log('GAME_API_URL:', GAME_API_URL);
+        
+        // Тестовый запрос для проверки доступности API
+        console.log('Выполняю тестовый запрос для проверки доступности API...');
+        try {
+            const testResponse = await fetch(`${apiUrl}/boss/bootstrap`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            console.log('Тестовый запрос /boss/bootstrap: статус', testResponse.status);
+            if (testResponse.ok) {
+                console.log('✅ API доступен и отвечает');
+            } else {
+                console.warn('⚠️ API отвечает, но статус:', testResponse.status);
+            }
+        } catch (testError) {
+            console.error('❌ Тестовый запрос не прошел:', testError);
+            console.error('Это означает, что API недоступен или есть проблема с сетью/CORS');
+        }
+        
         // Пробуем разные варианты эндпоинтов и методов
         const endpoints = [
-            { url: `${GAME_API_URL}/boss/list`, method: 'GET' },
-            { url: `${GAME_API_URL}/boss/list?categoryId=1`, method: 'GET' },
-            { url: `${GAME_API_URL}/boss/list`, method: 'POST', body: {} },
-            { url: `${GAME_API_URL}/bosses`, method: 'GET' },
-            { url: `${GAME_API_URL}/boss/all`, method: 'GET' }
+            { url: `${apiUrl}/boss/list`, method: 'GET' },
+            { url: `${apiUrl}/boss/list?categoryId=1`, method: 'GET' },
+            { url: `${apiUrl}/boss/list`, method: 'POST', body: {} },
+            { url: `${apiUrl}/bosses`, method: 'GET' },
+            { url: `${apiUrl}/boss/all`, method: 'GET' }
         ];
         
         let category1Data = null;
@@ -2021,8 +2049,9 @@ window.loadBossList = async function loadBossList() {
         if (!category1Data || !category2Data) {
             console.log('Загружаем категории отдельно...');
             
+            const apiUrl = API_SERVER_URL || GAME_API_URL;
             const [category1Response, category2Response] = await Promise.all([
-                fetch(`${GAME_API_URL}/boss/list?categoryId=1`, {
+                fetch(`${apiUrl}/boss/list?categoryId=1`, {
                     method: 'GET',
                     headers: {
                         'Content-Type': 'application/json',
@@ -2032,7 +2061,7 @@ window.loadBossList = async function loadBossList() {
                     console.error('Ошибка загрузки категории 1:', e);
                     return null;
                 }),
-                fetch(`${GAME_API_URL}/boss/list?categoryId=2`, {
+                fetch(`${apiUrl}/boss/list?categoryId=2`, {
                     method: 'GET',
                     headers: {
                         'Content-Type': 'application/json',
@@ -2069,6 +2098,7 @@ window.loadBossList = async function loadBossList() {
             console.error('Не удалось загрузить данные ни с одного эндпоинта');
             console.error('Последняя ошибка:', lastError);
             
+            const apiUrlDisplay = API_SERVER_URL || GAME_API_URL;
             container.innerHTML = `
                 <p class="error">❌ Ошибка: ${errorMsg}</p>
                 <p style="font-size: 12px; color: #666; margin-top: 10px;">
@@ -2080,9 +2110,11 @@ window.loadBossList = async function loadBossList() {
                 </p>
                 <p style="font-size: 11px; color: #999; margin-top: 5px;">
                     Попробованные эндпоинты:<br>
-                    - ${GAME_API_URL}/boss/list<br>
-                    - ${GAME_API_URL}/bosses<br>
-                    - ${GAME_API_URL}/boss/all
+                    - ${apiUrlDisplay}/boss/list<br>
+                    - ${apiUrlDisplay}/bosses<br>
+                    - ${apiUrlDisplay}/boss/all<br><br>
+                    API Server URL: ${API_SERVER_URL || 'не установлен'}<br>
+                    Game API URL: ${GAME_API_URL}
                 </p>
             `;
             throw new Error(errorMsg);
@@ -2098,7 +2130,8 @@ window.loadBossList = async function loadBossList() {
                 <p class="error">❌ Ошибка: ${error.message}</p>
                 <p style="font-size: 12px; color: #666; margin-top: 10px;">
                     Проверьте консоль браузера (F12) для подробностей<br>
-                    GAME_API_URL: ${GAME_API_URL}
+                    GAME_API_URL: ${GAME_API_URL}<br>
+                    API_SERVER_URL: ${API_SERVER_URL || 'не установлен'}
                 </p>
             `;
         }
@@ -2272,8 +2305,11 @@ async function attackNextBoss(mode) {
             throw new Error('Токен не найден');
         }
         
+        // Используем прокси если есть
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        
         // Начинаем атаку
-        let response = await fetch(`${GAME_API_URL}/boss/attack`, {
+        let response = await fetch(`${apiUrl}/boss/attack`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -2293,7 +2329,7 @@ async function attackNextBoss(mode) {
                 const newToken = await loginWithInitData();
                 if (newToken) {
                     token = newToken;
-                    response = await fetch(`${GAME_API_URL}/boss/attack`, {
+                    response = await fetch(`${apiUrl}/boss/attack`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -2367,7 +2403,8 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
             throw new Error('Токен не найден');
         }
         
-        let response = await fetch(`${GAME_API_URL}/boss/attack`, {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        let response = await fetch(`${apiUrl}/boss/attack`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -2387,7 +2424,7 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
                 const newToken = await loginWithInitData();
                 if (newToken) {
                     token = newToken;
-                    response = await fetch(`${GAME_API_URL}/boss/attack`, {
+                    response = await fetch(`${apiUrl}/boss/attack`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
