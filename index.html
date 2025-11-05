@@ -112,6 +112,35 @@
                 <button class="btn btn-primary" onclick="attackBoss()">⚔️ Атаковать</button>
             </section>
 
+            <!-- Раздел выбора боссов для автоматической атаки -->
+            <section class="card" id="boss-select-section">
+                <h2>🎯 Выбор боссов для атаки</h2>
+                <div class="boss-select-controls">
+                    <div class="form-group">
+                        <label for="attack-mode-select">Режим атаки:</label>
+                        <select id="attack-mode-select" class="form-control">
+                            <option value="pacansky">Пацанский</option>
+                            <option value="blotnoy">Блатной</option>
+                            <option value="avtoritetny">Авторитетный</option>
+                            <option value="odin">Один</option>
+                        </select>
+                    </div>
+                    <div id="boss-list-container" style="margin-top: 15px;">
+                        <p class="loading">Загрузка списка боссов...</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="startBossAutoAttack()" id="start-boss-attack-btn" style="margin-top: 15px;">
+                        🚀 Начать атаку
+                    </button>
+                    <button class="btn btn-danger" onclick="stopBossAutoAttack()" id="stop-boss-attack-btn" style="margin-top: 10px; display: none;">
+                        🛑 Остановить атаку
+                    </button>
+                    <div id="boss-attack-status" style="margin-top: 15px; display: none;">
+                        <h4>Статус атаки:</h4>
+                        <div id="boss-attack-status-content"></div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Раздел тюрем -->
             <section class="card" id="prison-section">
                 <h2>🏛️ Тюрьмы</h2>

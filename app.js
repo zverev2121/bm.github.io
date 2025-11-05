@@ -283,6 +283,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Скрываем другие секции до настройки
         document.getElementById('boss-section').style.display = 'none';
+        document.getElementById('boss-select-section').style.display = 'none';
         document.getElementById('prison-section').style.display = 'none';
         document.getElementById('stats-section').style.display = 'none';
         document.getElementById('biceps-section').style.display = 'none';
@@ -413,6 +414,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Показываем все секции
         document.getElementById('boss-section').style.display = 'block';
+        document.getElementById('boss-select-section').style.display = 'block';
         document.getElementById('prison-section').style.display = 'block';
         document.getElementById('stats-section').style.display = 'block';
         document.getElementById('biceps-section').style.display = 'block';
@@ -421,6 +423,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Загрузка данных после авторизации...');
         await Promise.all([
             loadBossInfo(),
+            loadBossList(),
             loadPrisons(),  // Загружает тюрьмы и информацию об игроке параллельно
             loadStats()
         ]);
@@ -439,6 +442,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             // Показываем все секции
             document.getElementById('boss-section').style.display = 'block';
+            document.getElementById('boss-select-section').style.display = 'block';
             document.getElementById('prison-section').style.display = 'block';
             document.getElementById('stats-section').style.display = 'block';
             document.getElementById('biceps-section').style.display = 'block';
@@ -447,6 +451,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log('Загрузка данных с сохраненным токеном...');
             await Promise.all([
                 loadBossInfo(),
+                loadBossList(),
                 loadPrisons(),  // Загружает тюрьмы и информацию об игроке параллельно
                 loadStats()
             ]);
@@ -459,6 +464,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             // Показываем секции, но с ошибкой
             document.getElementById('boss-section').style.display = 'block';
+            document.getElementById('boss-select-section').style.display = 'block';
             document.getElementById('prison-section').style.display = 'block';
             document.getElementById('stats-section').style.display = 'block';
             document.getElementById('biceps-section').style.display = 'block';
@@ -547,16 +553,16 @@ async function startBicepsUpgrade() {
     // Определяем название действия для отображения
     const actionNames = {
         'UpgradeBiceps': 'Прокачка бицухи',
-        'TossDroj': 'Харкнуть в баланду',
-        'Harknut': 'Подкинуть в парашу'
+        'Harknut': 'Харкнуть в баланду',
+        'TossDroj': 'Подкинуть в парашу'
     };
     const actionName = actionNames[finalInteractionType] || finalInteractionType;
     
     // Тексты для кнопок
     const buttonTexts = {
         'UpgradeBiceps': '💪 Начать прокачку',
-        'TossDroj': '🤮 Начать харкать',
-        'Harknut': '💩 Начать подкидывать'
+        'Harknut': '🤮 Начать харкать',
+        'TossDroj': '💩 Начать подкидывать'
     };
     
     // Блокируем кнопку
@@ -1844,3 +1850,456 @@ window.manualAuth = function() {
         location.reload();
     }
 };
+
+// Глобальные переменные для автоматической атаки боссов
+let bossAttackInterval = null;
+let currentBossIndex = 0;
+let selectedBosses = [];
+let isAttacking = false;
+
+// Загрузка списка боссов
+async function loadBossList() {
+    const container = document.getElementById('boss-list-container');
+    container.innerHTML = '<p class="loading">Загрузка списка боссов...</p>';
+    
+    try {
+        let token = await getAccessToken();
+        if (!token) {
+            throw new Error('Токен не найден');
+        }
+        
+        // Загружаем обе категории
+        const [category1Response, category2Response] = await Promise.all([
+            fetch(`${GAME_API_URL}/boss/list?categoryId=1`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            }),
+            fetch(`${GAME_API_URL}/boss/list?categoryId=2`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+        ]);
+        
+        // Обработка 401
+        if (category1Response.status === 401 || category2Response.status === 401) {
+            const manualInitData = localStorage.getItem('manual_init_data');
+            if (manualInitData && manualInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    token = newToken;
+                    // Повторяем запросы
+                    const [retry1, retry2] = await Promise.all([
+                        fetch(`${GAME_API_URL}/boss/list?categoryId=1`, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            }
+                        }),
+                        fetch(`${GAME_API_URL}/boss/list?categoryId=2`, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            }
+                        })
+                    ]);
+                    
+                    if (retry1.ok && retry2.ok) {
+                        const data1 = await retry1.json();
+                        const data2 = await retry2.json();
+                        renderBossList([data1, data2]);
+                        return;
+                    }
+                }
+            }
+            throw new Error('Токен истек');
+        }
+        
+        if (!category1Response.ok || !category2Response.ok) {
+            throw new Error(`HTTP ${category1Response.status}`);
+        }
+        
+        const data1 = await category1Response.json();
+        const data2 = await category2Response.json();
+        renderBossList([data1, data2]);
+        
+    } catch (error) {
+        console.error('Ошибка загрузки списка боссов:', error);
+        container.innerHTML = `<p class="error">❌ Ошибка: ${error.message}</p>`;
+    }
+}
+
+// Отображение списка боссов с чекбоксами
+function renderBossList(categoriesData) {
+    const container = document.getElementById('boss-list-container');
+    let html = '<div class="boss-list">';
+    
+    // Сохраняем данные боссов для использования
+    window.allBosses = [];
+    
+    categoriesData.forEach((categoryData, categoryIndex) => {
+        if (!categoryData.success || !categoryData.bosses) return;
+        
+        const categoryId = categoryData.bosses[0]?.boss?.categoryId || categoryIndex + 1;
+        const categoryName = categoryId === 1 ? 'Категория 1' : 'Категория 2';
+        
+        html += `<h3 style="margin-top: 15px; margin-bottom: 10px;">${categoryName}</h3>`;
+        html += '<div class="boss-category" style="margin-bottom: 20px;">';
+        
+        categoryData.bosses.forEach((bossData) => {
+            const boss = bossData.boss;
+            const bossId = boss.id;
+            const bossName = boss.title;
+            const baseHp = boss.baseHp;
+            
+            // Сохраняем босса
+            window.allBosses.push({
+                id: bossId,
+                name: bossName,
+                categoryId: categoryId,
+                baseHp: baseHp,
+                battleModes: boss.battleModes || {}
+            });
+            
+            html += `
+                <div class="boss-item" style="display: flex; align-items: center; margin: 5px 0; padding: 8px; background: #f5f5f5; border-radius: 5px;">
+                    <input type="checkbox" 
+                           class="boss-checkbox" 
+                           data-boss-id="${bossId}" 
+                           data-boss-name="${bossName}"
+                           onchange="updateBossOrder()"
+                           style="margin-right: 10px; width: 20px; height: 20px;">
+                    <label style="flex: 1; cursor: pointer;" onclick="document.querySelector('[data-boss-id=\\'${bossId}\\']').click()">
+                        <strong>${bossName}</strong> (ID: ${bossId}, HP: ${baseHp.toLocaleString()})
+                    </label>
+                    <div class="boss-order-controls" style="margin-left: 10px;">
+                        <button onclick="moveBossUp(${bossId})" style="padding: 2px 8px; font-size: 12px;">↑</button>
+                        <button onclick="moveBossDown(${bossId})" style="padding: 2px 8px; font-size: 12px;">↓</button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+    });
+    
+    html += '</div>';
+    html += '<div id="boss-order-display" style="margin-top: 15px; padding: 10px; background: #e8f5e9; border-radius: 5px; display: none;">';
+    html += '<strong>Порядок атаки:</strong>';
+    html += '<div id="boss-order-list" style="margin-top: 5px;"></div>';
+    html += '</div>';
+    
+    container.innerHTML = html;
+    updateBossOrder();
+}
+
+// Обновление порядка атаки
+window.updateBossOrder = function() {
+    const checkboxes = document.querySelectorAll('.boss-checkbox:checked');
+    selectedBosses = Array.from(checkboxes).map(cb => ({
+        id: parseInt(cb.dataset.bossId),
+        name: cb.dataset.bossName
+    }));
+    
+    const orderDisplay = document.getElementById('boss-order-display');
+    const orderList = document.getElementById('boss-order-list');
+    
+    if (orderDisplay && orderList) {
+        if (selectedBosses.length > 0) {
+            orderDisplay.style.display = 'block';
+            orderList.innerHTML = selectedBosses.map((boss, index) => 
+                `${index + 1}. ${boss.name} (ID: ${boss.id})`
+            ).join('<br>');
+        } else {
+            orderDisplay.style.display = 'none';
+        }
+    }
+}
+
+// Перемещение босса вверх
+window.moveBossUp = function(bossId) {
+    const index = selectedBosses.findIndex(b => b.id === bossId);
+    if (index > 0) {
+        [selectedBosses[index], selectedBosses[index - 1]] = [selectedBosses[index - 1], selectedBosses[index]];
+        updateBossOrderDisplay();
+    }
+}
+
+// Перемещение босса вниз
+window.moveBossDown = function(bossId) {
+    const index = selectedBosses.findIndex(b => b.id === bossId);
+    if (index >= 0 && index < selectedBosses.length - 1) {
+        [selectedBosses[index], selectedBosses[index + 1]] = [selectedBosses[index + 1], selectedBosses[index]];
+        updateBossOrderDisplay();
+    }
+}
+
+// Обновление отображения порядка
+function updateBossOrderDisplay() {
+    const orderList = document.getElementById('boss-order-list');
+    if (orderList && selectedBosses.length > 0) {
+        orderList.innerHTML = selectedBosses.map((boss, index) => 
+            `${index + 1}. ${boss.name} (ID: ${boss.id})`
+        ).join('<br>');
+    }
+}
+
+// Начало автоматической атаки
+window.startBossAutoAttack = async function() {
+    if (selectedBosses.length === 0) {
+        tg.showAlert('Выберите хотя бы одного босса для атаки');
+        return;
+    }
+    
+    const mode = document.getElementById('attack-mode-select').value;
+    
+    // Проверяем доступность режима для выбранных боссов
+    const invalidBosses = selectedBosses.filter(boss => {
+        const bossData = window.allBosses.find(b => b.id === boss.id);
+        return bossData && !bossData.battleModes[mode];
+    });
+    
+    if (invalidBosses.length > 0) {
+        tg.showAlert(`Режим "${mode}" недоступен для: ${invalidBosses.map(b => b.name).join(', ')}`);
+        return;
+    }
+    
+    const confirmed = await new Promise(resolve => {
+        tg.showConfirm(`Начать атаку на ${selectedBosses.length} боссов в режиме "${mode}"?`, resolve);
+    });
+    
+    if (!confirmed) return;
+    
+    isAttacking = true;
+    currentBossIndex = 0;
+    
+    document.getElementById('start-boss-attack-btn').style.display = 'none';
+    document.getElementById('stop-boss-attack-btn').style.display = 'block';
+    document.getElementById('boss-attack-status').style.display = 'block';
+    
+    attackNextBoss(mode);
+}
+
+// Атака следующего босса
+async function attackNextBoss(mode) {
+    if (!isAttacking || currentBossIndex >= selectedBosses.length) {
+        stopBossAutoAttack();
+        return;
+    }
+    
+    const boss = selectedBosses[currentBossIndex];
+    updateAttackStatus(`Атака на ${boss.name} (${currentBossIndex + 1}/${selectedBosses.length})...`);
+    
+    try {
+        let token = await getAccessToken();
+        if (!token) {
+            throw new Error('Токен не найден');
+        }
+        
+        // Начинаем атаку
+        let response = await fetch(`${GAME_API_URL}/boss/attack`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                bossId: boss.id,
+                mode: mode,
+                comboMode: null
+            })
+        });
+        
+        // Обработка 401
+        if (response.status === 401 || response.status === 403) {
+            const manualInitData = localStorage.getItem('manual_init_data');
+            if (manualInitData && manualInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    token = newToken;
+                    response = await fetch(`${GAME_API_URL}/boss/attack`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            bossId: boss.id,
+                            mode: mode,
+                            comboMode: null
+                        })
+                    });
+                }
+            }
+        }
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            if (data.isOver) {
+                // Бой завершен
+                updateAttackStatus(`✅ ${boss.name} побежден! Переход к следующему...`);
+                currentBossIndex++;
+                
+                // Переходим к следующему боссу через небольшую задержку
+                setTimeout(() => {
+                    attackNextBoss(mode);
+                }, 1000);
+            } else if (data.sessionId) {
+                // Бой продолжается, проверяем статус каждые 5 секунд
+                updateAttackStatus(`⚔️ Бой с ${boss.name} продолжается...`);
+                
+                // Проверяем статус через 5 секунд
+                bossAttackInterval = setTimeout(() => {
+                    checkBossBattleStatus(boss.id, mode, data.sessionId);
+                }, 5000);
+            } else {
+                // Неожиданный ответ
+                updateAttackStatus(`⚠️ Неожиданный ответ от сервера для ${boss.name}`);
+                currentBossIndex++;
+                setTimeout(() => {
+                    attackNextBoss(mode);
+                }, 2000);
+            }
+        } else {
+            throw new Error(data.error || 'Неизвестная ошибка');
+        }
+        
+    } catch (error) {
+        console.error('Ошибка атаки босса:', error);
+        updateAttackStatus(`❌ Ошибка атаки ${boss.name}: ${error.message}`);
+        
+        // Переходим к следующему боссу при ошибке
+        currentBossIndex++;
+        setTimeout(() => {
+            attackNextBoss(mode);
+        }, 2000);
+    }
+}
+
+// Проверка статуса боя
+async function checkBossBattleStatus(bossId, mode, sessionId) {
+    if (!isAttacking) return;
+    
+    try {
+        let token = await getAccessToken();
+        if (!token) {
+            throw new Error('Токен не найден');
+        }
+        
+        let response = await fetch(`${GAME_API_URL}/boss/attack`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                bossId: bossId,
+                mode: mode,
+                comboMode: null
+            })
+        });
+        
+        // Обработка 401
+        if (response.status === 401 || response.status === 403) {
+            const manualInitData = localStorage.getItem('manual_init_data');
+            if (manualInitData && manualInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    token = newToken;
+                    response = await fetch(`${GAME_API_URL}/boss/attack`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            bossId: bossId,
+                            mode: mode,
+                            comboMode: null
+                        })
+                    });
+                }
+            }
+        }
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success && data.isOver) {
+            // Бой завершен
+            const boss = selectedBosses[currentBossIndex];
+            updateAttackStatus(`✅ ${boss.name} побежден! Переход к следующему...`);
+            currentBossIndex++;
+            
+            // Переходим к следующему боссу
+            setTimeout(() => {
+                attackNextBoss(mode);
+            }, 1000);
+        } else if (data.success && data.sessionId) {
+            // Бой продолжается, проверяем снова через 5 секунд
+            const boss = selectedBosses[currentBossIndex];
+            updateAttackStatus(`⚔️ Бой с ${boss.name} продолжается...`);
+            
+            bossAttackInterval = setTimeout(() => {
+                checkBossBattleStatus(bossId, mode, data.sessionId);
+            }, 5000);
+        } else {
+            // Ошибка или неожиданный ответ
+            const boss = selectedBosses[currentBossIndex];
+            updateAttackStatus(`⚠️ Неожиданный ответ для ${boss.name}`);
+            currentBossIndex++;
+            setTimeout(() => {
+                attackNextBoss(mode);
+            }, 2000);
+        }
+        
+    } catch (error) {
+        console.error('Ошибка проверки статуса боя:', error);
+        const boss = selectedBosses[currentBossIndex];
+        updateAttackStatus(`❌ Ошибка проверки статуса ${boss.name}: ${error.message}`);
+        
+        // Переходим к следующему боссу
+        currentBossIndex++;
+        setTimeout(() => {
+            attackNextBoss(mode);
+        }, 2000);
+    }
+}
+
+// Остановка автоматической атаки
+window.stopBossAutoAttack = function() {
+    isAttacking = false;
+    
+    if (bossAttackInterval) {
+        clearTimeout(bossAttackInterval);
+        bossAttackInterval = null;
+    }
+    
+    document.getElementById('start-boss-attack-btn').style.display = 'block';
+    document.getElementById('stop-boss-attack-btn').style.display = 'none';
+    updateAttackStatus('Атака остановлена');
+}
+
+// Обновление статуса атаки
+function updateAttackStatus(message) {
+    const statusContent = document.getElementById('boss-attack-status-content');
+    if (statusContent) {
+        const timestamp = new Date().toLocaleTimeString();
+        statusContent.innerHTML = `<p><strong>[${timestamp}]</strong> ${message}</p>`;
+    }
+}
