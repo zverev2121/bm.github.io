@@ -502,8 +502,8 @@ async function startBicepsUpgrade() {
         return;
     }
     
-    // Получаем токен
-    const token = localStorage.getItem('game_access_token');
+    // Получаем токен (с автоматическим обновлением при необходимости)
+    let token = await getAccessToken();
     if (!token) {
         tg.showAlert('Токен не найден. Выполните авторизацию');
         return;
@@ -515,7 +515,7 @@ async function startBicepsUpgrade() {
         // Пытаемся получить из API /player/init
         try {
             console.log('Получение User ID из API...');
-            const initResponse = await fetch(`${GAME_API_URL}/player/init`, {
+            let initResponse = await fetch(`${GAME_API_URL}/player/init`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -523,6 +523,27 @@ async function startBicepsUpgrade() {
                 },
                 body: JSON.stringify({})
             });
+            
+            // Если получили 401, пытаемся обновить токен через сохраненный initData
+            if (initResponse.status === 401 || initResponse.status === 403) {
+                console.warn('Токен протух, пытаемся обновить через сохраненный initData...');
+                const manualInitData = localStorage.getItem('manual_init_data');
+                if (manualInitData && manualInitData.trim()) {
+                    const newToken = await loginWithInitData();
+                    if (newToken) {
+                        token = newToken;
+                        // Повторяем запрос с новым токеном
+                        initResponse = await fetch(`${GAME_API_URL}/player/init`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({})
+                        });
+                    }
+                }
+            }
             
             if (initResponse.ok) {
                 const initData = await initResponse.json();
@@ -554,7 +575,7 @@ async function startBicepsUpgrade() {
     
     for (const toUserId of userIds) {
         try {
-            const response = await fetch(`${GAME_API_URL}/interaction/perform`, {
+            let response = await fetch(`${GAME_API_URL}/interaction/perform`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -566,6 +587,31 @@ async function startBicepsUpgrade() {
                     type: 'UpgradeBiceps'
                 })
             });
+            
+            // Если получили 401, пытаемся обновить токен через сохраненный initData
+            if (response.status === 401 || response.status === 403) {
+                console.warn('Токен протух, пытаемся обновить через сохраненный initData...');
+                const manualInitData = localStorage.getItem('manual_init_data');
+                if (manualInitData && manualInitData.trim()) {
+                    const newToken = await loginWithInitData();
+                    if (newToken) {
+                        token = newToken;
+                        // Повторяем запрос с новым токеном
+                        response = await fetch(`${GAME_API_URL}/interaction/perform`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({
+                                fromUserId: parseInt(fromUserId),
+                                toUserId: toUserId,
+                                type: 'UpgradeBiceps'
+                            })
+                        });
+                    }
+                }
+            }
             
             const result = await response.json();
             
@@ -636,27 +682,61 @@ async function loadBossInfo() {
     bossInfo.innerHTML = '<p class="loading">Загрузка...</p>';
     
     try {
-        // Получаем токен из initData
-        const initData = tg.initData;
-        const userId = tg.initDataUnsafe?.user?.id;
+        // Получаем токен (с автоматическим обновлением при необходимости)
+        let token = await getAccessToken();
+        if (!token) {
+            throw new Error('Токен не найден');
+        }
         
         // Создаем заголовки для авторизации
         const headers = {
             'Content-Type': 'application/json',
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${token}`
         };
-        
-        // Добавляем токен, если есть (из настроек бота)
-        // В реальном приложении токен должен передаваться безопасно
-        const token = getAccessToken();
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
         
         const response = await fetch(`${GAME_API_URL}/boss/bootstrap`, {
             method: 'GET',
             headers: headers
         });
+        
+        // Если получили 401, пытаемся обновить токен через сохраненный initData
+        if (response.status === 401 || response.status === 403) {
+            console.warn('Токен протух, пытаемся обновить через сохраненный initData...');
+            const manualInitData = localStorage.getItem('manual_init_data');
+            if (manualInitData && manualInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    token = newToken;
+                    headers['Authorization'] = `Bearer ${token}`;
+                    // Повторяем запрос с новым токеном
+                    const retryResponse = await fetch(`${GAME_API_URL}/boss/bootstrap`, {
+                        method: 'GET',
+                        headers: headers
+                    });
+                    if (!retryResponse.ok) {
+                        throw new Error(`HTTP ${retryResponse.status}: ${retryResponse.statusText}`);
+                    }
+                    // Продолжаем с retryResponse
+                    const data = await retryResponse.json();
+                    if (data.success && data.session) {
+                        const session = data.session;
+                        const hpPercent = ((session.currentHp / session.maxHp) * 100).toFixed(1);
+                        bossInfo.innerHTML = `
+                            <div>
+                                <strong>${session.title || 'Босс'}</strong><br>
+                                HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
+                                Фаза: ${session.phase}<br>
+                                Режим: ${session.mode || 'N/A'}
+                            </div>
+                        `;
+                        updateStatus(true);
+                        return;
+                    }
+                }
+            }
+            throw new Error(`HTTP ${response.status}: Токен протух и не удалось обновить`);
+        }
         
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -698,7 +778,7 @@ async function attackBoss() {
     btn.textContent = '⚔️ Атака...';
     
     try {
-        const token = getAccessToken();
+        let token = await getAccessToken();
         if (!token) {
             tg.showAlert('❌ Требуется авторизация!\nОбновите страницу');
             btn.disabled = false;
@@ -709,7 +789,7 @@ async function attackBoss() {
         const attackBody = { type: 'punchChest' };
         console.log('Отправка атаки:', attackBody);
         
-        const response = await fetch(`${GAME_API_URL}/boss/attack`, {
+        let response = await fetch(`${GAME_API_URL}/boss/attack`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -717,6 +797,27 @@ async function attackBoss() {
             },
             body: JSON.stringify(attackBody)
         });
+        
+        // Если получили 401, пытаемся обновить токен через сохраненный initData
+        if (response.status === 401 || response.status === 403) {
+            console.warn('Токен протух, пытаемся обновить через сохраненный initData...');
+            const manualInitData = localStorage.getItem('manual_init_data');
+            if (manualInitData && manualInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    token = newToken;
+                    // Повторяем запрос с новым токеном
+                    response = await fetch(`${GAME_API_URL}/boss/attack`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify(attackBody)
+                    });
+                }
+            }
+        }
         
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -752,7 +853,7 @@ async function attackBoss() {
 async function loadPrisons() {
     const select = document.getElementById('prison-select');
     
-    const token = getAccessToken();
+    let token = await getAccessToken();
     if (!token) {
         console.warn('Токен не доступен');
         return;
@@ -761,23 +862,53 @@ async function loadPrisons() {
     try {
         // Запрашиваем оба эндпоинта параллельно
         console.log('Загрузка тюрем и информации об игроке...');
-        const [prisonsResponse, playerResponse] = await Promise.all([
-            fetch(`${GAME_API_URL}/prisons/tops-all`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+        let prisonsResponse = await fetch(`${GAME_API_URL}/prisons/tops-all`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        let playerResponse = await fetch(`${GAME_API_URL}/player/init`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({})
+        });
+        
+        // Если получили 401, пытаемся обновить токен через сохраненный initData
+        if ((prisonsResponse.status === 401 || prisonsResponse.status === 403) || 
+            (playerResponse.status === 401 || playerResponse.status === 403)) {
+            console.warn('Токен протух, пытаемся обновить через сохраненный initData...');
+            const manualInitData = localStorage.getItem('manual_init_data');
+            if (manualInitData && manualInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    token = newToken;
+                    // Повторяем запросы с новым токеном
+                    [prisonsResponse, playerResponse] = await Promise.all([
+                        fetch(`${GAME_API_URL}/prisons/tops-all`, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            }
+                        }),
+                        fetch(`${GAME_API_URL}/player/init`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({})
+                        })
+                    ]);
                 }
-            }),
-            fetch(`${GAME_API_URL}/player/init`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({})
-            })
-        ]);
+            }
+        }
         
         // Обрабатываем ответ с тюрьмами
         if (!prisonsResponse.ok) throw new Error(`HTTP ${prisonsResponse.status}`);
@@ -833,7 +964,7 @@ async function loadPrisonInfo() {
         return;
     }
     
-    const token = getAccessToken();
+    let token = await getAccessToken();
     if (!token) {
         prisonInfo.innerHTML = '<p class="error">❌ Требуется авторизация!</p>';
         walkBtn.disabled = true;
@@ -845,22 +976,51 @@ async function loadPrisonInfo() {
     
     try {
         // Загружаем информацию о тюрьме и чекпоинты параллельно
-        const [prisonResponse, checkpointsResponse] = await Promise.all([
-            fetch(`${GAME_API_URL}/player/prison/${prisonId}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+        let prisonResponse = await fetch(`${GAME_API_URL}/player/prison/${prisonId}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        let checkpointsResponse = await fetch(`${GAME_API_URL}/player/prison/${prisonId}/checkpoints?isDay=${isDay}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        // Если получили 401, пытаемся обновить токен через сохраненный initData
+        if ((prisonResponse.status === 401 || prisonResponse.status === 403) || 
+            (checkpointsResponse.status === 401 || checkpointsResponse.status === 403)) {
+            console.warn('Токен протух, пытаемся обновить через сохраненный initData...');
+            const manualInitData = localStorage.getItem('manual_init_data');
+            if (manualInitData && manualInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    token = newToken;
+                    // Повторяем запросы с новым токеном
+                    [prisonResponse, checkpointsResponse] = await Promise.all([
+                        fetch(`${GAME_API_URL}/player/prison/${prisonId}`, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            }
+                        }),
+                        fetch(`${GAME_API_URL}/player/prison/${prisonId}/checkpoints?isDay=${isDay}`, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            }
+                        })
+                    ]);
                 }
-            }),
-            fetch(`${GAME_API_URL}/player/prison/${prisonId}/checkpoints?isDay=${isDay}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                }
-            })
-        ]);
+            }
+        }
         
         if (!prisonResponse.ok) throw new Error(`HTTP ${prisonResponse.status} при загрузке тюрьмы`);
         if (!checkpointsResponse.ok) throw new Error(`HTTP ${checkpointsResponse.status} при загрузке чекпоинтов`);
@@ -957,7 +1117,7 @@ async function startPrisonWalk() {
         return;
     }
     
-    const token = getAccessToken();
+    let token = await getAccessToken();
     if (!token) {
         tg.showAlert('❌ Требуется авторизация!\nОбновите страницу');
         return;
@@ -1001,13 +1161,33 @@ async function startPrisonWalk() {
             `;
             
             // POST запрос для работы в тюрьме
-            const response = await fetch(`${GAME_API_URL}/player/prison/${prisonId}/work?isDay=${isDay}`, {
+            let response = await fetch(`${GAME_API_URL}/player/prison/${prisonId}/work?isDay=${isDay}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 }
             });
+            
+            // Если получили 401, пытаемся обновить токен через сохраненный initData
+            if (response.status === 401 || response.status === 403) {
+                console.warn('Токен протух, пытаемся обновить через сохраненный initData...');
+                const manualInitData = localStorage.getItem('manual_init_data');
+                if (manualInitData && manualInitData.trim()) {
+                    const newToken = await loginWithInitData();
+                    if (newToken) {
+                        token = newToken;
+                        // Повторяем запрос с новым токеном
+                        response = await fetch(`${GAME_API_URL}/player/prison/${prisonId}/work?isDay=${isDay}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            }
+                        });
+                    }
+                }
+            }
             
             if (!response.ok) {
                 const errorText = await response.text();
@@ -1095,20 +1275,40 @@ async function startPrisonWalk() {
 
 // Загрузка статистики
 async function loadStats() {
-    const token = getAccessToken();
+    let token = await getAccessToken();
     if (!token) {
         return;
     }
     
     try {
         // Получаем информацию о боссе для отображения энергии
-        const response = await fetch(`${GAME_API_URL}/boss/bootstrap`, {
+        let response = await fetch(`${GAME_API_URL}/boss/bootstrap`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             }
         });
+        
+        // Если получили 401, пытаемся обновить токен через сохраненный initData
+        if (response.status === 401 || response.status === 403) {
+            console.warn('Токен протух, пытаемся обновить через сохраненный initData...');
+            const manualInitData = localStorage.getItem('manual_init_data');
+            if (manualInitData && manualInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    token = newToken;
+                    // Повторяем запрос с новым токеном
+                    response = await fetch(`${GAME_API_URL}/boss/bootstrap`, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                }
+            }
+        }
         
         if (response.ok) {
             const data = await response.json();
@@ -1124,8 +1324,8 @@ async function loadStats() {
     }
 }
 
-// Получение токена доступа
-function getAccessToken() {
+// Получение токена доступа (с автоматическим обновлением через initData при необходимости)
+async function getAccessToken() {
     // Проверяем localStorage
     const storedToken = localStorage.getItem('game_access_token');
     
@@ -1134,10 +1334,28 @@ function getAccessToken() {
         return storedToken;
     }
     
-    // Если токена нет, пытаемся получить через initData
-    // Для этого нужно авторизоваться через /auth/login
-    console.log('Токен не найден в localStorage');
+    // Если токена нет, проверяем наличие сохраненного initData
+    const manualInitData = localStorage.getItem('manual_init_data');
+    if (manualInitData && manualInitData.trim()) {
+        console.log('Токен не найден, пытаемся получить через сохраненный initData...');
+        try {
+            const newToken = await loginWithInitData();
+            if (newToken) {
+                return newToken;
+            }
+        } catch (e) {
+            console.warn('Не удалось получить токен через сохраненный initData:', e);
+        }
+    }
+    
+    console.log('Токен не найден в localStorage и нет сохраненного initData');
     return null;
+}
+
+// Получение токена синхронно (для случаев, когда async не подходит)
+function getAccessTokenSync() {
+    const storedToken = localStorage.getItem('game_access_token');
+    return storedToken && storedToken.length > 10 ? storedToken : null;
 }
 
 // Авторизация через initData
