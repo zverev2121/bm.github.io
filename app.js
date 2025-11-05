@@ -512,9 +512,25 @@ async function loginWithInitData() {
             return null;
         }
         
+        // Захардкоженный initData для тестирования (работающий)
+        const HARDCODED_INIT_DATA = 'query_id=AAH53yIQAAAAAPnfIhAoANyK&user=%7B%22id%22%3A270721017%2C%22first_name%22%3A%22Volodya%22%2C%22last_name%22%3A%22%22%2C%22username%22%3A%22zver_21%22%2C%22language_code%22%3A%22ru%22%2C%22allows_write_to_pm%22%3Atrue%2C%22photo_url%22%3A%22https%3A%5C%2F%5C%2Ft.me%5C%2Fi%5C%2Fuserpic%5C%2F320%5C%2Fh8b3_9CHPrRIbuB8eqQUX425Vn5wTHw-Mz23B4wNtxE.svg%22%7D&auth_date=1762342159&signature=xH22ACBKMdOOa30VHsPPme35tKQQ5dPocMiiJ-qiBcut_2wK8jzhH8EqCiZh0gST980RGyVfw2KRaI4-M4PaCw&hash=57f11925ffed739dd3b9b07c073af3059b609da38f4ddf4b5423b93a13749b7b';
+        
+        // Проверяем, не нужно ли использовать захардкоженный initData принудительно
+        const urlParams = new URLSearchParams(window.location.search);
+        const useHardcoded = urlParams.get('useHardcoded') === 'true' || urlParams.get('useHardcoded') === '1';
+        
         // Получаем initData - это строка с данными от Telegram
         // initData должен содержать query_id, user, auth_date, hash и т.д.
-        let initData = tg.initData || '';
+        let initData = '';
+        
+        if (useHardcoded) {
+            // Принудительно используем захардкоженный initData для тестирования
+            initData = HARDCODED_INIT_DATA;
+            console.warn('⚠️ Принудительное использование захардкоженного initData (параметр ?useHardcoded=true)');
+        } else {
+            // Пытаемся получить initData от Telegram
+            initData = tg.initData || '';
+        }
         
         console.log('Получение initData:');
         console.log('- tg.initData тип:', typeof tg.initData);
@@ -555,6 +571,15 @@ async function loginWithInitData() {
                     initData = hash;
                     console.log('✓ initData получен из URL hash');
                 }
+            }
+            
+            // ВАЖНО: Захардкоженный initData для тестирования (работающий)
+            // Используется только если не удалось получить initData из Telegram
+            if (!initData || initData.length < 50) {
+                initData = HARDCODED_INIT_DATA;
+                console.warn('⚠️ Используется захардкоженный initData для тестирования (fallback)');
+                console.warn('⚠️ В продакшене это должно быть удалено!');
+                console.warn('⚠️ Для принудительного использования добавьте ?useHardcoded=true в URL');
             }
         }
         
