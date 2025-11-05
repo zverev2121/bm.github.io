@@ -50,6 +50,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('- tg.platform:', tg?.platform);
     console.log('- window.location:', window.location.href);
     
+    // Показываем, откуда берется initData
+    if (tg?.initData) {
+        console.log('');
+        console.log('📋 initData структура:');
+        console.log('initData - это строка, которая автоматически формируется Telegram при открытии Mini App');
+        console.log('Она содержит:');
+        console.log('  - query_id - уникальный ID запроса (генерируется Telegram)');
+        console.log('  - user - информация о пользователе (JSON)');
+        console.log('  - auth_date - время создания (unix timestamp)');
+        console.log('  - hash - подпись для проверки подлинности');
+        console.log('  - signature - дополнительная подпись');
+        console.log('');
+        console.log('Текущий initData:');
+        const params = new URLSearchParams(tg.initData);
+        console.log('  - query_id:', params.get('query_id') || 'не найден');
+        console.log('  - auth_date:', params.get('auth_date') || 'не найден');
+        console.log('  - hash:', params.get('hash') ? params.get('hash').substring(0, 20) + '...' : 'не найден');
+        console.log('  - user:', params.get('user') ? 'найден' : 'не найден');
+    } else {
+        console.warn('⚠️ tg.initData не доступен!');
+        console.warn('Это означает, что Mini App открыт не через Telegram');
+        console.warn('initData доступен ТОЛЬКО когда Mini App открыт через бота в Telegram');
+    }
+    
     // Проверяем наличие токена в localStorage
     let token = getAccessToken();
     
