@@ -725,16 +725,19 @@ async function startBicepsUpgrade() {
             
             if (result.success) {
                 successCount++;
-                results.push(`✅ ${toUserId}: ${result.message || 'Успешно'}`);
+                // Добавляем новую строку в начало массива (unshift вместо push)
+                results.unshift(`✅ ${toUserId}: ${result.message || 'Успешно'}`);
             } else {
                 const message = result.message || result.detail || 'Ошибка';
                 if (message.includes('уже сегодня') || message.includes('already') || 
                     message.includes('уже') || message.includes('сегодня')) {
                     alreadyDoneCount++;
-                    results.push(`⚠️ ${toUserId}: уже выполнено сегодня`);
+                    // Добавляем новую строку в начало массива
+                    results.unshift(`⚠️ ${toUserId}: уже выполнено сегодня`);
                 } else {
                     errorCount++;
-                    results.push(`❌ ${toUserId}: ${message}`);
+                    // Добавляем новую строку в начало массива
+                    results.unshift(`❌ ${toUserId}: ${message}`);
                 }
             }
             
@@ -752,7 +755,8 @@ async function startBicepsUpgrade() {
             
         } catch (error) {
             errorCount++;
-            results.push(`❌ ${toUserId}: ${error.message}`);
+            // Добавляем новую строку в начало массива
+            results.unshift(`❌ ${toUserId}: ${error.message}`);
             console.error(`Ошибка при ${actionName.toLowerCase()} для ${toUserId}:`, error);
         }
     }
@@ -1904,184 +1908,87 @@ window.loadBossList = async function loadBossList() {
         console.log('API_SERVER_URL:', API_SERVER_URL);
         console.log('GAME_API_URL:', GAME_API_URL);
         
-        // Тестовый запрос для проверки доступности API
-        console.log('Выполняю тестовый запрос для проверки доступности API...');
-        try {
-            const testResponse = await fetch(`${apiUrl}/boss/bootstrap`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-            console.log('Тестовый запрос /boss/bootstrap: статус', testResponse.status);
-            if (testResponse.ok) {
-                console.log('✅ API доступен и отвечает');
-            } else {
-                console.warn('⚠️ API отвечает, но статус:', testResponse.status);
-            }
-        } catch (testError) {
-            console.error('❌ Тестовый запрос не прошел:', testError);
-            console.error('Это означает, что API недоступен или есть проблема с сетью/CORS');
-        }
-        
-        // Пробуем разные варианты эндпоинтов и методов
-        const endpoints = [
-            { url: `${apiUrl}/boss/list`, method: 'GET' },
-            { url: `${apiUrl}/boss/list?categoryId=1`, method: 'GET' },
-            { url: `${apiUrl}/boss/list`, method: 'POST', body: {} },
-            { url: `${apiUrl}/bosses`, method: 'GET' },
-            { url: `${apiUrl}/boss/all`, method: 'GET' }
-        ];
+        // categoryId обязателен для boss/list, поэтому сразу делаем два параллельных запроса
+        console.log('Загружаем обе категории боссов параллельно...');
         
         let category1Data = null;
         let category2Data = null;
         let lastError = null;
         
-        // Сначала пробуем получить обе категории одним запросом
-        for (const endpointConfig of endpoints) {
+        // Функция для выполнения запроса с повторной попыткой при 401/403
+        async function fetchCategoryWithRetry(categoryId) {
+            let attemptToken = token;
+            
             try {
-                const { url, method, body } = endpointConfig;
-                console.log(`Пробуем эндпоинт: ${method} ${url}`);
+                const url = `${apiUrl}/boss/list?categoryId=${categoryId}`;
+                console.log(`Запрос категории ${categoryId}: ${url}`);
                 
-                const fetchOptions = {
-                    method: method,
+                let response = await fetch(url, {
+                    method: 'GET',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
+                        'Authorization': `Bearer ${attemptToken}`
                     }
-                };
+                });
                 
-                if (body && method === 'POST') {
-                    fetchOptions.body = JSON.stringify(body);
-                }
+                console.log(`Категория ${categoryId}: статус ответа`, response.status);
                 
-                console.log('Отправка запроса...');
-                const response = await fetch(url, fetchOptions);
-                
-                console.log('✅ Запрос отправлен успешно');
-                console.log('Ответ статус:', response.status);
-                console.log('Ответ URL:', response.url);
-                console.log('Ответ headers:', Object.fromEntries(response.headers.entries()));
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    console.log('Данные получены:', data);
-                    
-                    // Если в ответе есть массив bosses, это может быть одна категория или обе
-                    if (data.success && data.bosses) {
-                        // Проверяем, есть ли в данных обе категории
-                        const categoryIds = [...new Set(data.bosses.map(b => b.boss?.categoryId))];
-                        
-                        if (categoryIds.length === 2) {
-                            // Обе категории в одном ответе
-                            const category1Bosses = data.bosses.filter(b => b.boss?.categoryId === 1);
-                            const category2Bosses = data.bosses.filter(b => b.boss?.categoryId === 2);
-                            
-                            category1Data = { success: true, bosses: category1Bosses };
-                            category2Data = { success: true, bosses: category2Bosses };
-                            break;
-                        } else if (categoryIds.length === 1) {
-                            // Одна категория
-                            if (categoryIds[0] === 1) {
-                                category1Data = data;
-                            } else if (categoryIds[0] === 2) {
-                                category2Data = data;
-                            }
-                        }
-                    }
-                } else if (response.status === 401 || response.status === 403) {
-                    console.log('401/403, пытаемся обновить токен...');
+                // Обработка 401/403 - обновляем токен и повторяем
+                if (response.status === 401 || response.status === 403) {
+                    console.log(`401/403 для категории ${categoryId}, пытаемся обновить токен...`);
                     const manualInitData = localStorage.getItem('manual_init_data');
                     if (manualInitData && manualInitData.trim()) {
                         const newToken = await loginWithInitData();
                         if (newToken) {
-                            token = newToken;
+                            attemptToken = newToken;
                             // Повторяем запрос с новым токеном
-                            const retryFetchOptions = {
-                                method: endpointConfig.method,
+                            response = await fetch(url, {
+                                method: 'GET',
                                 headers: {
                                     'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${token}`
+                                    'Authorization': `Bearer ${attemptToken}`
                                 }
-                            };
-                            
-                            if (endpointConfig.body && endpointConfig.method === 'POST') {
-                                retryFetchOptions.body = JSON.stringify(endpointConfig.body);
-                            }
-                            
-                            const retryResponse = await fetch(endpointConfig.url, retryFetchOptions);
-                            if (retryResponse.ok) {
-                                const retryData = await retryResponse.json();
-                                if (retryData.success && retryData.bosses) {
-                                    const categoryIds = [...new Set(retryData.bosses.map(b => b.boss?.categoryId))];
-                                    if (categoryIds.length === 2) {
-                                        const category1Bosses = retryData.bosses.filter(b => b.boss?.categoryId === 1);
-                                        const category2Bosses = retryData.bosses.filter(b => b.boss?.categoryId === 2);
-                                        category1Data = { success: true, bosses: category1Bosses };
-                                        category2Data = { success: true, bosses: category2Bosses };
-                                        break;
-                                    }
-                                }
-                            }
+                            });
+                            console.log(`Категория ${categoryId} (повтор): статус ответа`, response.status);
                         }
                     }
                 }
-            } catch (err) {
-                console.error('❌ Ошибка при запросе к', endpointConfig.url, ':', err);
-                console.error('Тип ошибки:', err.name);
-                console.error('Сообщение:', err.message);
-                console.error('Стек:', err.stack);
                 
-                if (err.name === 'TypeError' && err.message.includes('fetch')) {
-                    console.error('⚠️ Возможно, проблема с CORS или сетью. Проверьте:');
-                    console.error('1. Правильно ли настроен GAME_API_URL:', GAME_API_URL);
-                    console.error('2. Доступен ли API сервер');
-                    console.error('3. Нет ли блокировки CORS');
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log(`✅ Категория ${categoryId} загружена успешно:`, data);
+                    return data;
+                } else {
+                    const errorText = await response.text();
+                    console.error(`❌ Ошибка загрузки категории ${categoryId}:`, response.status, errorText);
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
                 }
-                
-                lastError = err;
-                continue;
+            } catch (err) {
+                console.error(`❌ Ошибка при запросе категории ${categoryId}:`, err);
+                throw err;
             }
         }
         
-        // Если не получили обе категории, пробуем загрузить отдельно
-        if (!category1Data || !category2Data) {
-            console.log('Загружаем категории отдельно...');
-            
-            const apiUrl = API_SERVER_URL || GAME_API_URL;
-            const [category1Response, category2Response] = await Promise.all([
-                fetch(`${apiUrl}/boss/list?categoryId=1`, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    }
-                }).catch(e => {
+        // Загружаем обе категории параллельно
+        try {
+            const [data1, data2] = await Promise.all([
+                fetchCategoryWithRetry(1).catch(e => {
                     console.error('Ошибка загрузки категории 1:', e);
+                    lastError = e;
                     return null;
                 }),
-                fetch(`${apiUrl}/boss/list?categoryId=2`, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    }
-                }).catch(e => {
+                fetchCategoryWithRetry(2).catch(e => {
                     console.error('Ошибка загрузки категории 2:', e);
+                    lastError = e;
                     return null;
                 })
             ]);
             
-            if (category1Response && category1Response.ok) {
-                category1Data = await category1Response.json();
-                console.log('Категория 1 загружена:', category1Data);
-            }
-            
-            if (category2Response && category2Response.ok) {
-                category2Data = await category2Response.json();
-                console.log('Категория 2 загружена:', category2Data);
-            }
+            category1Data = data1;
+            category2Data = data2;
+        } catch (error) {
+            console.error('Ошибка при параллельной загрузке категорий:', error);
+            lastError = error;
         }
         
         // Если получили данные, отображаем
@@ -2109,10 +2016,9 @@ window.loadBossList = async function loadBossList() {
                     4. Попробуйте обновить список кнопкой ниже
                 </p>
                 <p style="font-size: 11px; color: #999; margin-top: 5px;">
-                    Попробованные эндпоинты:<br>
-                    - ${apiUrlDisplay}/boss/list<br>
-                    - ${apiUrlDisplay}/bosses<br>
-                    - ${apiUrlDisplay}/boss/all<br><br>
+                    Запрашиваемые эндпоинты:<br>
+                    - ${apiUrlDisplay}/boss/list?categoryId=1<br>
+                    - ${apiUrlDisplay}/boss/list?categoryId=2<br><br>
                     API Server URL: ${API_SERVER_URL || 'не установлен'}<br>
                     Game API URL: ${GAME_API_URL}
                 </p>
