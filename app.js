@@ -18,6 +18,27 @@ if (tg) {
     console.error('Не удалось инициализировать Telegram WebApp');
 }
 
+// Функции для кастомного модального окна с темным фоном
+function showCustomModal(message) {
+    const modal = document.getElementById('custom-modal');
+    const modalBody = document.getElementById('custom-modal-body');
+    if (modal && modalBody) {
+        modalBody.textContent = message;
+        modal.style.display = 'flex';
+        // Блокируем прокрутку фона
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeCustomModal() {
+    const modal = document.getElementById('custom-modal');
+    if (modal) {
+        modal.style.display = 'none';
+        // Разблокируем прокрутку фона
+        document.body.style.overflow = '';
+    }
+}
+
 // Базовый URL API игры
 // Загружается из localStorage или используется значение по умолчанию
 function getApiServerUrl() {
@@ -49,7 +70,6 @@ function loadSettings() {
     const apiUrl = localStorage.getItem('api_server_url') || '';
     const manualInitData = localStorage.getItem('manual_init_data') || '';
     const manualToken = localStorage.getItem('manual_access_token') || '';
-    const useHardcoded = localStorage.getItem('use_hardcoded_initdata') === 'true';
     
     if (document.getElementById('api-server-url')) {
         document.getElementById('api-server-url').value = apiUrl;
@@ -60,9 +80,6 @@ function loadSettings() {
     if (document.getElementById('manual-token')) {
         document.getElementById('manual-token').value = manualToken;
     }
-    if (document.getElementById('use-hardcoded-initdata')) {
-        document.getElementById('use-hardcoded-initdata').checked = useHardcoded;
-    }
     
     updateSettingsDisplay();
 }
@@ -71,7 +88,6 @@ async function saveSettings() {
     const apiUrl = document.getElementById('api-server-url').value.trim();
     const manualInitData = document.getElementById('manual-initdata').value.trim();
     const manualToken = document.getElementById('manual-token').value.trim();
-    const useHardcoded = document.getElementById('use-hardcoded-initdata').checked;
     
     if (apiUrl) {
         // Проверяем, что URL заканчивается на /api
@@ -144,13 +160,10 @@ async function saveSettings() {
         localStorage.removeItem('manual_access_token');
     }
     
-    localStorage.setItem('use_hardcoded_initdata', useHardcoded ? 'true' : 'false');
-    
     console.log('Настройки сохранены:');
     console.log('- API Server URL:', API_SERVER_URL || 'не указан (прямое подключение)');
     console.log('- Manual InitData:', manualInitData ? 'установлен' : 'не установлен');
     console.log('- Manual Token:', manualToken ? 'установлен' : 'не установлен');
-    console.log('- Use Hardcoded initData:', useHardcoded);
     console.log('- GAME_API_URL:', GAME_API_URL);
     
     if (!manualInitData) {
@@ -165,7 +178,6 @@ function resetSettings() {
         localStorage.removeItem('api_server_url');
         localStorage.removeItem('manual_init_data');
         localStorage.removeItem('manual_access_token');
-        localStorage.removeItem('use_hardcoded_initdata');
         localStorage.removeItem('game_access_token');
         localStorage.removeItem('game_refresh_token');
         localStorage.removeItem('game_user_id');
@@ -173,7 +185,6 @@ function resetSettings() {
         document.getElementById('api-server-url').value = '';
         document.getElementById('manual-initdata').value = '';
         document.getElementById('manual-token').value = '';
-        document.getElementById('use-hardcoded-initdata').checked = false;
         
         API_SERVER_URL = getApiServerUrl();
         GAME_API_URL = getGameApiUrl();
@@ -830,7 +841,7 @@ async function startBicepsUpgrade() {
         </div>
     `;
     
-    tg.showAlert(`Готово!\n\n${actionName}\n\nУспешно: ${successCount}\nУже выполнено: ${alreadyDoneCount}\nОшибки: ${errorCount}`);
+    showCustomModal(`Готово!\n\n${actionName}\n\nУспешно: ${successCount}\nУже выполнено: ${alreadyDoneCount}\nОшибки: ${errorCount}`);
     
     // Разблокируем кнопку
     startBtn.disabled = false;
@@ -1575,27 +1586,19 @@ async function loginWithInitData() {
         
         // Проверяем, есть ли сохраненный initData от пользователя
         const manualInitData = localStorage.getItem('manual_init_data');
-        const useHardcoded = localStorage.getItem('use_hardcoded_initdata') === 'true';
-        
-        // Захардкоженный initData для тестирования (работающий)
-        const HARDCODED_INIT_DATA = 'query_id=AAH53yIQAAAAAPnfIhAoANyK&user=%7B%22id%22%3A270721017%2C%22first_name%22%3A%22Volodya%22%2C%22last_name%22%3A%22%22%2C%22username%22%3A%22zver_21%22%2C%22language_code%22%3A%22ru%22%2C%22allows_write_to_pm%22%3Atrue%2C%22photo_url%22%3A%22https%3A%5C%2F%5C%2Ft.me%5C%2Fi%5C%2Fuserpic%5C%2F320%5C%2Fh8b3_9CHPrRIbuB8eqQUX425Vn5wTHw-Mz23B4wNtxE.svg%22%7D&auth_date=1762342159&signature=xH22ACBKMdOOa30VHsPPme35tKQQ5dPocMiiJ-qiBcut_2wK8jzhH8EqCiZh0gST980RGyVfw2KRaI4-M4PaCw&hash=57f11925ffed739dd3b9b07c073af3059b609da38f4ddf4b5423b93a13749b7b';
         
         let initData = '';
         
-        // Приоритет: 1) manualInitData, 2) Telegram initData, 3) hardcoded (если включен)
+        // Приоритет: 1) manualInitData, 2) Telegram initData
         if (manualInitData && manualInitData.trim()) {
             initData = manualInitData.trim();
             console.log('✓ Используется initData, введенный пользователем в настройках');
-        } else if (useHardcoded) {
-            // Используем захардкоженный initData
-            initData = HARDCODED_INIT_DATA;
-            console.log('⚠️ Используется захардкоженный initData для тестирования');
         } else {
             // Используем initData от Telegram
             initData = tg?.initData || '';
             if (!initData || initData.length < 50) {
-                console.warn('tg.initData недоступен, пробуем захардкоженный');
-                initData = HARDCODED_INIT_DATA;
+                console.error('❌ initData недоступен! Пожалуйста, введите initData в настройках.');
+                throw new Error('initData не найден. Пожалуйста, введите initData в настройках.');
             } else {
                 console.log('✓ Используется initData от Telegram');
             }
