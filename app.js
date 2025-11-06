@@ -568,7 +568,8 @@ async function startBicepsUpgrade() {
     const actionNames = {
         'UpgradeBiceps': 'Прокачка бицухи',
         'Harknut': 'Харкнуть в баланду',
-        'TossDroj': 'Подкинуть в парашу'
+        'TossDroj': 'Подкинуть в парашу',
+        'SendFriendRequest': 'Добавление в друзья'
     };
     const actionName = actionNames[finalInteractionType] || finalInteractionType;
     
@@ -576,7 +577,8 @@ async function startBicepsUpgrade() {
     const buttonTexts = {
         'UpgradeBiceps': '💪 Начать прокачку',
         'Harknut': '🤮 Начать харкать',
-        'TossDroj': '💩 Начать подкидывать'
+        'TossDroj': '💩 Начать подкидывать',
+        'SendFriendRequest': '👥 Начать добавление'
     };
     
     // Блокируем кнопку
@@ -665,79 +667,134 @@ async function startBicepsUpgrade() {
                                           finalInteractionType || 
                                           interactionType;
             
-            const requestBody = {
-                fromUserId: parseInt(fromUserId),
-                toUserId: toUserId,
-                type: currentInteractionType
-            };
+            let response;
             
-            console.log(`=== ОТПРАВКА ЗАПРОСА ДЛЯ ${toUserId} ===`);
-            console.log(`Селектор при отправке:`, selector);
-            console.log(`selectedIndex:`, selector?.selectedIndex);
-            console.log(`Значение опции по индексу:`, selector?.options[selector?.selectedIndex]?.value);
-            console.log(`Значение .value:`, selector?.value);
-            console.log(`finalInteractionType (из начала функции):`, finalInteractionType);
-            console.log(`currentInteractionType (из селектора в цикле):`, currentInteractionType);
-            console.log(`ИСПОЛЬЗУЕМЫЙ ТИП В requestBody:`, requestBody.type);
-            console.log(`Полный requestBody:`, JSON.stringify(requestBody, null, 2));
-            
-            let response = await fetch(`${GAME_API_URL}/interaction/perform`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(requestBody)
-            });
-            
-            // Если получили 401, пытаемся обновить токен через сохраненный initData
-            if (response.status === 401 || response.status === 403) {
-                console.warn('Токен протух, пытаемся обновить через сохраненный initData...');
-                const manualInitData = localStorage.getItem('manual_init_data');
-                if (manualInitData && manualInitData.trim()) {
-                    const newToken = await loginWithInitData();
-                    if (newToken) {
-                        token = newToken;
-                        // Повторяем запрос с новым токеном (используем тот же requestBody с правильным типом)
-                        // ВАЖНО: Обновляем тип из селектора перед повторной отправкой
-                        const selectorRetry = document.getElementById('interaction-type');
-                        const currentInteractionTypeRetry = selectorRetry?.options[selectorRetry.selectedIndex]?.value || 
-                                                           selectorRetry?.value || 
-                                                           finalInteractionType || 
-                                                           interactionType;
-                        requestBody.type = currentInteractionTypeRetry;
-                        console.log(`=== ПОВТОРНАЯ ОТПРАВКА ЗАПРОСА ДЛЯ ${toUserId} ===`);
-                        console.log(`Тип взаимодействия при повторе: ${currentInteractionTypeRetry}`);
-                        console.log(`Обновленный requestBody:`, JSON.stringify(requestBody, null, 2));
-                        response = await fetch(`${GAME_API_URL}/interaction/perform`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`
-                            },
-                            body: JSON.stringify(requestBody)
-                        });
+            // Для добавления в друзья используем другой endpoint
+            if (currentInteractionType === 'SendFriendRequest') {
+                console.log(`=== ОТПРАВКА ЗАПРОСА НА ДРУЖБУ ДЛЯ ${toUserId} ===`);
+                
+                response = await fetch(`${GAME_API_URL}/friendship/send-request?toUserId=${toUserId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                // Если получили 401, пытаемся обновить токен через сохраненный initData
+                if (response.status === 401 || response.status === 403) {
+                    console.warn('Токен протух, пытаемся обновить через сохраненный initData...');
+                    const manualInitData = localStorage.getItem('manual_init_data');
+                    if (manualInitData && manualInitData.trim()) {
+                        const newToken = await loginWithInitData();
+                        if (newToken) {
+                            token = newToken;
+                            console.log(`=== ПОВТОРНАЯ ОТПРАВКА ЗАПРОСА НА ДРУЖБУ ДЛЯ ${toUserId} ===`);
+                            response = await fetch(`${GAME_API_URL}/friendship/send-request?toUserId=${toUserId}`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                }
+                            });
+                        }
                     }
                 }
-            }
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                successCount++;
-                // Добавляем новую строку в начало массива (unshift вместо push)
-                results.unshift(`✅ ${toUserId}: ${result.message || 'Успешно'}`);
-            } else {
-                const message = result.message || result.detail || 'Ошибка';
-                if (message.includes('уже сегодня') || message.includes('already') || 
-                    message.includes('уже') || message.includes('сегодня')) {
-                    alreadyDoneCount++;
-                    // Добавляем новую строку в начало массива
-                    results.unshift(`⚠️ ${toUserId}: уже выполнено сегодня`);
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    successCount++;
+                    results.unshift(`✅ ${toUserId}: Заявка отправлена`);
                 } else {
-                    errorCount++;
-                    // Добавляем новую строку в начало массива
-                    results.unshift(`❌ ${toUserId}: ${message}`);
+                    const message = result.message || 'Ошибка';
+                    if (message.includes('уже отправлена') || message.includes('повторно нельзя')) {
+                        alreadyDoneCount++;
+                        results.unshift(`⚠️ ${toUserId}: Заявка уже отправлена`);
+                    } else if (message.includes('уже друзья') || message.includes('друзья')) {
+                        alreadyDoneCount++;
+                        results.unshift(`⚠️ ${toUserId}: Вы уже друзья`);
+                    } else {
+                        errorCount++;
+                        results.unshift(`❌ ${toUserId}: ${message}`);
+                    }
+                }
+            } else {
+                // Для остальных типов взаимодействий используем стандартный endpoint
+                const requestBody = {
+                    fromUserId: parseInt(fromUserId),
+                    toUserId: toUserId,
+                    type: currentInteractionType
+                };
+                
+                console.log(`=== ОТПРАВКА ЗАПРОСА ДЛЯ ${toUserId} ===`);
+                console.log(`Селектор при отправке:`, selector);
+                console.log(`selectedIndex:`, selector?.selectedIndex);
+                console.log(`Значение опции по индексу:`, selector?.options[selector?.selectedIndex]?.value);
+                console.log(`Значение .value:`, selector?.value);
+                console.log(`finalInteractionType (из начала функции):`, finalInteractionType);
+                console.log(`currentInteractionType (из селектора в цикле):`, currentInteractionType);
+                console.log(`ИСПОЛЬЗУЕМЫЙ ТИП В requestBody:`, requestBody.type);
+                console.log(`Полный requestBody:`, JSON.stringify(requestBody, null, 2));
+                
+                response = await fetch(`${GAME_API_URL}/interaction/perform`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                // Если получили 401, пытаемся обновить токен через сохраненный initData
+                if (response.status === 401 || response.status === 403) {
+                    console.warn('Токен протух, пытаемся обновить через сохраненный initData...');
+                    const manualInitData = localStorage.getItem('manual_init_data');
+                    if (manualInitData && manualInitData.trim()) {
+                        const newToken = await loginWithInitData();
+                        if (newToken) {
+                            token = newToken;
+                            // Повторяем запрос с новым токеном (используем тот же requestBody с правильным типом)
+                            // ВАЖНО: Обновляем тип из селектора перед повторной отправкой
+                            const selectorRetry = document.getElementById('interaction-type');
+                            const currentInteractionTypeRetry = selectorRetry?.options[selectorRetry.selectedIndex]?.value || 
+                                                               selectorRetry?.value || 
+                                                               finalInteractionType || 
+                                                               interactionType;
+                            requestBody.type = currentInteractionTypeRetry;
+                            console.log(`=== ПОВТОРНАЯ ОТПРАВКА ЗАПРОСА ДЛЯ ${toUserId} ===`);
+                            console.log(`Тип взаимодействия при повторе: ${currentInteractionTypeRetry}`);
+                            console.log(`Обновленный requestBody:`, JSON.stringify(requestBody, null, 2));
+                            response = await fetch(`${GAME_API_URL}/interaction/perform`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                },
+                                body: JSON.stringify(requestBody)
+                            });
+                        }
+                    }
+                }
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    successCount++;
+                    // Добавляем новую строку в начало массива (unshift вместо push)
+                    results.unshift(`✅ ${toUserId}: ${result.message || 'Успешно'}`);
+                } else {
+                    const message = result.message || result.detail || 'Ошибка';
+                    if (message.includes('уже сегодня') || message.includes('already') || 
+                        message.includes('уже') || message.includes('сегодня')) {
+                        alreadyDoneCount++;
+                        // Добавляем новую строку в начало массива
+                        results.unshift(`⚠️ ${toUserId}: уже выполнено сегодня`);
+                    } else {
+                        errorCount++;
+                        // Добавляем новую строку в начало массива
+                        results.unshift(`❌ ${toUserId}: ${message}`);
+                    }
                 }
             }
             
@@ -789,7 +846,8 @@ function initInteractionTypeSelector() {
         const buttonTexts = {
             'UpgradeBiceps': '💪 Начать прокачку',
             'Harknut': '🤮 Начать харкать',
-            'TossDroj': '💩 Начать подкидывать'
+            'TossDroj': '💩 Начать подкидывать',
+            'SendFriendRequest': '👥 Начать добавление'
         };
         
         interactionTypeSelect.addEventListener('change', function() {
