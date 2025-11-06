@@ -673,6 +673,13 @@ async function startBicepsUpgrade() {
     
     for (const toUserId of userIds) {
         try {
+            // ВАЖНО: Получаем актуальный токен в начале каждой итерации
+            // Это гарантирует, что после обновления токена все последующие запросы используют новый токен
+            let token = await getAccessToken();
+            if (!token) {
+                throw new Error('Токен не найден');
+            }
+            
             // ВАЖНО: Получаем актуальное значение селектора каждый раз ПРЯМО ИЗ DOM
             const selector = document.getElementById('interaction-type');
             const currentInteractionType = selector?.options[selector.selectedIndex]?.value || 
@@ -701,7 +708,10 @@ async function startBicepsUpgrade() {
                     if (manualInitData && manualInitData.trim()) {
                         const newToken = await loginWithInitData();
                         if (newToken) {
+                            // ВАЖНО: Сохраняем новый токен в localStorage и обновляем переменную
+                            localStorage.setItem('game_access_token', newToken);
                             token = newToken;
+                            console.log(`✓ Токен обновлен, повторяю запрос для ${toUserId}`);
                             console.log(`=== ПОВТОРНАЯ ОТПРАВКА ЗАПРОСА НА ДРУЖБУ ДЛЯ ${toUserId} ===`);
                             response = await fetch(`${GAME_API_URL}/friendship/send-request?toUserId=${toUserId}`, {
                                 method: 'POST',
@@ -766,6 +776,8 @@ async function startBicepsUpgrade() {
                     if (manualInitData && manualInitData.trim()) {
                         const newToken = await loginWithInitData();
                         if (newToken) {
+                            // ВАЖНО: Сохраняем новый токен в localStorage и обновляем переменную
+                            localStorage.setItem('game_access_token', newToken);
                             token = newToken;
                             // Повторяем запрос с новым токеном (используем тот же requestBody с правильным типом)
                             // ВАЖНО: Обновляем тип из селектора перед повторной отправкой
@@ -775,6 +787,7 @@ async function startBicepsUpgrade() {
                                                                finalInteractionType || 
                                                                interactionType;
                             requestBody.type = currentInteractionTypeRetry;
+                            console.log(`✓ Токен обновлен, повторяю запрос для ${toUserId}`);
                             console.log(`=== ПОВТОРНАЯ ОТПРАВКА ЗАПРОСА ДЛЯ ${toUserId} ===`);
                             console.log(`Тип взаимодействия при повторе: ${currentInteractionTypeRetry}`);
                             console.log(`Обновленный requestBody:`, JSON.stringify(requestBody, null, 2));
