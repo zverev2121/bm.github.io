@@ -844,13 +844,15 @@ async function startBicepsUpgrade() {
     
     // Итоговые результаты
     resultsContent.innerHTML = `
-        <h4>📊 Итоги: ${actionName}</h4>
-        <p>✅ Успешно: ${successCount}</p>
-        <p>⚠️ Уже выполнено сегодня: ${alreadyDoneCount}</p>
-        <p>❌ Ошибки: ${errorCount}</p>
-        <p><strong>Всего: ${userIds.length}</strong></p>
-        <div style="max-height: 200px; overflow-y: auto; margin-top: 10px; padding: 10px; background: var(--tg-theme-secondary-bg-color, #1e1e1e); border-radius: 5px; color: var(--tg-theme-text-color, #ffffff);">
-            ${results.map(r => `<div style="margin: 5px 0; font-size: 12px;">${r}</div>`).join('')}
+        <div style="background: var(--tg-theme-secondary-bg-color, #1e1e1e); border-radius: 8px; padding: 15px; color: var(--tg-theme-text-color, #ffffff);">
+            <h4 style="color: var(--tg-theme-text-color, #ffffff); margin: 0 0 10px 0;">📊 Итоги: ${actionName}</h4>
+            <p style="color: var(--tg-theme-text-color, #ffffff); margin: 5px 0;">✅ Успешно: ${successCount}</p>
+            <p style="color: var(--tg-theme-text-color, #ffffff); margin: 5px 0;">⚠️ Уже выполнено сегодня: ${alreadyDoneCount}</p>
+            <p style="color: var(--tg-theme-text-color, #ffffff); margin: 5px 0;">❌ Ошибки: ${errorCount}</p>
+            <p style="color: var(--tg-theme-text-color, #ffffff); margin: 5px 0;"><strong>Всего: ${userIds.length}</strong></p>
+            <div style="max-height: 200px; overflow-y: auto; margin-top: 10px; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 5px; color: var(--tg-theme-text-color, #ffffff);">
+                ${results.map(r => `<div style="margin: 5px 0; font-size: 12px; color: var(--tg-theme-text-color, #ffffff);">${r}</div>`).join('')}
+            </div>
         </div>
     `;
     
