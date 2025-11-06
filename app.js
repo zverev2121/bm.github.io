@@ -580,7 +580,8 @@ async function startBicepsUpgrade() {
         'UpgradeBiceps': 'Прокачка бицухи',
         'Harknut': 'Харкнуть в баланду',
         'TossDroj': 'Подкинуть в парашу',
-        'SendFriendRequest': 'Добавление в друзья'
+        'SendFriendRequest': 'Добавление в друзья',
+        'Fight': 'Нападение на корешей'
     };
     const actionName = actionNames[finalInteractionType] || finalInteractionType;
     
@@ -589,7 +590,8 @@ async function startBicepsUpgrade() {
         'UpgradeBiceps': '💪 Начать прокачку',
         'Harknut': '🤮 Начать харкать',
         'TossDroj': '💩 Начать подкидывать',
-        'SendFriendRequest': '👥 Начать добавление'
+        'SendFriendRequest': '👥 Начать добавление',
+        'Fight': '👊 Начать нападение'
     };
     
     // Блокируем кнопку
@@ -792,8 +794,19 @@ async function startBicepsUpgrade() {
                 
                 if (result.success) {
                     successCount++;
-                    // Добавляем новую строку в начало массива (unshift вместо push)
-                    results.unshift(`✅ ${toUserId}: ${result.message || 'Успешно'}`);
+                    // Для типа Fight показываем результат битвы (win/lose)
+                    if (currentInteractionType === 'Fight' && result.result) {
+                        if (result.result === 'win') {
+                            results.unshift(`💪 ${toUserId}: Победил! ${result.message || ''}`);
+                        } else if (result.result === 'lose') {
+                            results.unshift(`💥 ${toUserId}: Проиграл! ${result.message || ''}`);
+                        } else {
+                            results.unshift(`✅ ${toUserId}: ${result.message || 'Успешно'}`);
+                        }
+                    } else {
+                        // Для остальных типов взаимодействий
+                        results.unshift(`✅ ${toUserId}: ${result.message || 'Успешно'}`);
+                    }
                 } else {
                     const message = result.message || result.detail || 'Ошибка';
                     if (message.includes('уже сегодня') || message.includes('already') || 
@@ -813,7 +826,7 @@ async function startBicepsUpgrade() {
             resultsContent.innerHTML = `
                 <p><strong>${actionName}</strong></p>
                 <p><strong>Обработано:</strong> ${results.length} / ${userIds.length}</p>
-                <div style="max-height: 200px; overflow-y: auto; margin-top: 10px;">
+                <div style="max-height: 200px; overflow-y: auto; margin-top: 10px; padding: 10px; background: var(--tg-theme-secondary-bg-color, #1e1e1e); border-radius: 5px; color: var(--tg-theme-text-color, #ffffff);">
                     ${results.map(r => `<div style="margin: 5px 0; font-size: 12px;">${r}</div>`).join('')}
                 </div>
             `;
@@ -836,7 +849,7 @@ async function startBicepsUpgrade() {
         <p>⚠️ Уже выполнено сегодня: ${alreadyDoneCount}</p>
         <p>❌ Ошибки: ${errorCount}</p>
         <p><strong>Всего: ${userIds.length}</strong></p>
-        <div style="max-height: 200px; overflow-y: auto; margin-top: 10px; padding: 10px; background: #f5f5f5; border-radius: 5px;">
+        <div style="max-height: 200px; overflow-y: auto; margin-top: 10px; padding: 10px; background: var(--tg-theme-secondary-bg-color, #1e1e1e); border-radius: 5px; color: var(--tg-theme-text-color, #ffffff);">
             ${results.map(r => `<div style="margin: 5px 0; font-size: 12px;">${r}</div>`).join('')}
         </div>
     `;
@@ -858,7 +871,8 @@ function initInteractionTypeSelector() {
             'UpgradeBiceps': '💪 Начать прокачку',
             'Harknut': '🤮 Начать харкать',
             'TossDroj': '💩 Начать подкидывать',
-            'SendFriendRequest': '👥 Начать добавление'
+            'SendFriendRequest': '👥 Начать добавление',
+            'Fight': '👊 Начать нападение'
         };
         
         interactionTypeSelect.addEventListener('change', function() {
