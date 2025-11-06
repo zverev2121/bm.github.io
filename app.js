@@ -850,8 +850,8 @@ async function startBicepsUpgrade() {
             <p style="color: var(--tg-theme-text-color, #ffffff); margin: 5px 0;">⚠️ Уже выполнено сегодня: ${alreadyDoneCount}</p>
             <p style="color: var(--tg-theme-text-color, #ffffff); margin: 5px 0;">❌ Ошибки: ${errorCount}</p>
             <p style="color: var(--tg-theme-text-color, #ffffff); margin: 5px 0;"><strong>Всего: ${userIds.length}</strong></p>
-            <div style="max-height: 200px; overflow-y: auto; margin-top: 10px; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 5px; color: var(--tg-theme-text-color, #ffffff);">
-                ${results.map(r => `<div style="margin: 5px 0; font-size: 12px; color: var(--tg-theme-text-color, #ffffff);">${r}</div>`).join('')}
+            <div style="max-height: 200px; overflow-y: auto; margin-top: 10px; padding: 10px; background: #0a0a0a !important; border-radius: 5px; color: #ffffff !important; border: 1px solid rgba(255, 255, 255, 0.1);">
+                ${results.map(r => `<div style="margin: 5px 0; font-size: 12px; color: #ffffff !important;">${r}</div>`).join('')}
             </div>
         </div>
     `;
