@@ -316,6 +316,26 @@ async function toggleSettings() {
 document.addEventListener('DOMContentLoaded', async () => {
     updateStatus(false);
     
+    // Показываем username в самом верху
+    const telegramUserInfo = getTelegramUserInfo();
+    const usernameDisplay = document.getElementById('username-display');
+    if (usernameDisplay) {
+        if (telegramUserInfo && telegramUserInfo.username) {
+            usernameDisplay.textContent = `Username: @${telegramUserInfo.username} (ID: ${telegramUserInfo.id || 'неизвестен'})`;
+            usernameDisplay.style.color = '#4CAF50';
+            console.log('✓ Username отображается:', telegramUserInfo.username);
+        } else {
+            const savedUsername = localStorage.getItem('game_username');
+            if (savedUsername) {
+                usernameDisplay.textContent = `Username: @${savedUsername} (из localStorage)`;
+                usernameDisplay.style.color = '#FF9800';
+            } else {
+                usernameDisplay.textContent = 'Username: не найден';
+                usernameDisplay.style.color = '#f44336';
+            }
+        }
+    }
+    
     // Загружаем настройки (async, т.к. может получать initData с сервера)
     await loadSettings();
     updateSettingsDisplay();
@@ -326,7 +346,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ВАЖНО: Показываем интерфейс ТОЛЬКО если есть токен (пользователь ввел initData и авторизовался)
     // Если нет токена - показываем только форму ввода initData
     const hasToken = localStorage.getItem('game_access_token');
-    const telegramUserInfo = getTelegramUserInfo();
     const hasSettings = localStorage.getItem('api_server_url');
     
     // Показываем форму ввода initData только если:
@@ -1615,9 +1634,18 @@ async function loadStats() {
 
 // Получение данных пользователя из Telegram (даже если initData недоступен)
 function getTelegramUserInfo() {
+    console.log('=== getTelegramUserInfo() вызвана ===');
+    console.log('tg доступен:', !!tg);
+    console.log('tg.initDataUnsafe:', !!tg?.initDataUnsafe);
+    console.log('tg.initDataUnsafe.user:', !!tg?.initDataUnsafe?.user);
+    
     // ПРИОРИТЕТ 1: tg.initDataUnsafe.user (доступен даже после релоуда)
     if (tg?.initDataUnsafe?.user) {
         const user = tg.initDataUnsafe.user;
+        console.log('✓ Найден username из tg.initDataUnsafe.user:', user.username);
+        console.log('  - id:', user.id);
+        console.log('  - username:', user.username);
+        console.log('  - first_name:', user.first_name);
         return {
             id: user.id,
             username: user.username,
@@ -1628,23 +1656,33 @@ function getTelegramUserInfo() {
     
     // ПРИОРИТЕТ 2: Из tg.initData (если доступен)
     if (tg?.initData) {
+        console.log('Пытаемся извлечь username из tg.initData...');
         try {
             const params = new URLSearchParams(tg.initData);
             const userParam = params.get('user');
             if (userParam) {
                 const userData = JSON.parse(decodeURIComponent(userParam));
+                console.log('✓ Найден username из tg.initData:', userData.username);
+                console.log('  - id:', userData.id);
+                console.log('  - username:', userData.username);
+                console.log('  - first_name:', userData.first_name);
                 return {
                     id: userData.id,
                     username: userData.username,
                     first_name: userData.first_name,
                     last_name: userData.last_name
                 };
+            } else {
+                console.warn('⚠️ user параметр не найден в tg.initData');
             }
         } catch (e) {
             console.warn('Не удалось извлечь данные пользователя из tg.initData:', e);
         }
+    } else {
+        console.warn('⚠️ tg.initData недоступен');
     }
     
+    console.log('❌ Username не найден');
     return null;
 }
 
