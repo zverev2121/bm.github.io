@@ -46,8 +46,8 @@ function getApiServerUrl() {
     if (saved && saved.trim()) {
         return saved.trim();
     }
-    // Значение по умолчанию (можно изменить)
-    return 'https://carelessly-pioneering-wombat.cloudpub.ru/api';
+    // Нет значения по умолчанию - пользователь должен указать URL
+    return null;
 }
 
 function getGameApiUrl() {
@@ -71,7 +71,7 @@ async function loadSettings() {
     // ВАЖНО: initData НЕ сохраняется в localStorage, только получается из БД по токену
     let manualInitData = '';
     
-    // Получаем initData из БД, если есть токен
+    // Получаем initData из БД, если есть токен или username из Telegram
     const savedToken = localStorage.getItem('game_access_token');
     if (savedToken) {
         console.log('Получаем initData из БД по токену...');
@@ -83,6 +83,21 @@ async function loadSettings() {
             }
         } catch (e) {
             console.warn('Не удалось получить initData из БД при загрузке настроек:', e);
+        }
+    } else {
+        // Если нет токена, пытаемся получить initData по username из Telegram
+        const telegramUserInfo = getTelegramUserInfo();
+        if (telegramUserInfo && telegramUserInfo.username) {
+            console.log(`Пытаемся получить initData из БД по username: ${telegramUserInfo.username}`);
+            try {
+                const savedInitData = await getSavedInitDataFromServer();
+                if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
+                    manualInitData = savedInitData;
+                    console.log('✓ Получен initData из БД по username при загрузке настроек');
+                }
+            } catch (e) {
+                console.warn('Не удалось получить initData из БД по username:', e);
+            }
         }
     }
     
@@ -321,12 +336,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('settings-section').style.display = 'block';
         const welcome = document.getElementById('settings-welcome');
         if (welcome) {
-            welcome.style.display = 'block';
-            document.getElementById('settings-form').style.display = 'none';
-            document.getElementById('settings-info').style.display = 'none';
-        } else {
-            showSettingsForm();
+            welcome.style.display = 'none'; // Скрываем приветствие, показываем форму
         }
+        showSettingsForm(); // Показываем форму настроек
         
         // Скрываем все секции интерфейса до ввода initData
         document.getElementById('boss-section').style.display = 'none';
