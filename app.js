@@ -69,16 +69,12 @@ console.log('Используется прокси:', !!API_SERVER_URL);
 function loadSettings() {
     const apiUrl = localStorage.getItem('api_server_url') || '';
     const manualInitData = localStorage.getItem('manual_init_data') || '';
-    const manualToken = localStorage.getItem('manual_access_token') || '';
     
     if (document.getElementById('api-server-url')) {
         document.getElementById('api-server-url').value = apiUrl;
     }
     if (document.getElementById('manual-initdata')) {
         document.getElementById('manual-initdata').value = manualInitData;
-    }
-    if (document.getElementById('manual-token')) {
-        document.getElementById('manual-token').value = manualToken;
     }
     
     updateSettingsDisplay();
@@ -87,7 +83,6 @@ function loadSettings() {
 async function saveSettings() {
     const apiUrl = document.getElementById('api-server-url').value.trim();
     const manualInitData = document.getElementById('manual-initdata').value.trim();
-    const manualToken = document.getElementById('manual-token').value.trim();
     
     if (apiUrl) {
         // Проверяем, что URL заканчивается на /api
@@ -104,7 +99,6 @@ async function saveSettings() {
     // Если введен initData, выполняем login для получения токена
     if (manualInitData) {
         localStorage.setItem('manual_init_data', manualInitData);
-        localStorage.removeItem('manual_access_token'); // Удаляем старый токен
         
         try {
             console.log('Выполнение login с введенным initData...');
@@ -151,19 +145,9 @@ async function saveSettings() {
         localStorage.removeItem('manual_init_data');
     }
     
-    // Если введен токен вручную (устаревший способ)
-    if (manualToken) {
-        localStorage.setItem('manual_access_token', manualToken);
-        localStorage.setItem('game_access_token', manualToken);
-        console.warn('Используется устаревший способ - токен вручную');
-    } else {
-        localStorage.removeItem('manual_access_token');
-    }
-    
     console.log('Настройки сохранены:');
     console.log('- API Server URL:', API_SERVER_URL || 'не указан (прямое подключение)');
     console.log('- Manual InitData:', manualInitData ? 'установлен' : 'не установлен');
-    console.log('- Manual Token:', manualToken ? 'установлен' : 'не установлен');
     console.log('- GAME_API_URL:', GAME_API_URL);
     
     if (!manualInitData) {
@@ -177,14 +161,12 @@ function resetSettings() {
     if (confirm('Вы уверены, что хотите сбросить все настройки?')) {
         localStorage.removeItem('api_server_url');
         localStorage.removeItem('manual_init_data');
-        localStorage.removeItem('manual_access_token');
         localStorage.removeItem('game_access_token');
         localStorage.removeItem('game_refresh_token');
         localStorage.removeItem('game_user_id');
         
         document.getElementById('api-server-url').value = '';
         document.getElementById('manual-initdata').value = '';
-        document.getElementById('manual-token').value = '';
         
         API_SERVER_URL = getApiServerUrl();
         GAME_API_URL = getGameApiUrl();
@@ -198,7 +180,6 @@ function updateSettingsDisplay() {
     const apiUrl = localStorage.getItem('api_server_url') || '';
     const token = localStorage.getItem('game_access_token') || '';
     const manualInitData = localStorage.getItem('manual_init_data') || '';
-    const manualToken = localStorage.getItem('manual_access_token') || '';
     
     const currentApiUrl = document.getElementById('current-api-url');
     const currentTokenStatus = document.getElementById('current-token-status');
@@ -208,10 +189,10 @@ function updateSettingsDisplay() {
     }
     
     if (currentTokenStatus) {
-        if (manualInitData) {
+        if (tg?.initData) {
+            currentTokenStatus.textContent = 'Из Telegram (автообновление)';
+        } else if (manualInitData) {
             currentTokenStatus.textContent = 'Из initData (автообновление)';
-        } else if (manualToken) {
-            currentTokenStatus.textContent = 'Введен вручную (устаревший)';
         } else if (token) {
             currentTokenStatus.textContent = 'Получен автоматически';
         } else {
@@ -248,7 +229,7 @@ function toggleSettings() {
         settingsSection.style.display = 'block';
         loadSettings();
         // Показываем форму, если настройки не сохранены
-        const hasSettings = localStorage.getItem('api_server_url') || localStorage.getItem('manual_init_data') || localStorage.getItem('manual_access_token');
+        const hasSettings = localStorage.getItem('api_server_url') || localStorage.getItem('manual_init_data');
         if (!hasSettings) {
             // Показываем приветствие при первом запуске
             const welcome = document.getElementById('settings-welcome');
@@ -279,7 +260,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initInteractionTypeSelector();
     
     // Проверяем, нужно ли показать настройки при первом запуске
-    const hasSettings = localStorage.getItem('api_server_url') || localStorage.getItem('manual_init_data') || localStorage.getItem('manual_access_token');
+    const hasSettings = localStorage.getItem('api_server_url') || localStorage.getItem('manual_init_data');
     if (!hasSettings) {
         // Показываем настройки при первом запуске
         document.getElementById('settings-section').style.display = 'block';
@@ -340,13 +321,35 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.warn('initData доступен ТОЛЬКО когда Mini App открыт через бота в Telegram');
     }
     
-    // Проверяем, есть ли initData или токен вручную введенный или сохраненный
+    // Проверяем приоритет: сначала tg.initData (от текущего пользователя Telegram),
+    // потом manual_init_data (введенный вручную), потом сохраненный токен
     const manualInitData = localStorage.getItem('manual_init_data');
-    const manualToken = localStorage.getItem('manual_access_token');
     const savedToken = localStorage.getItem('game_access_token');
     let token = null;
     
-    if (manualInitData) {
+    // ПРИОРИТЕТ 1: Если есть tg.initData от Telegram - используем его (это данные текущего пользователя)
+    if (tg?.initData) {
+        console.log('✅ Используется initData от Telegram (приоритет)');
+        console.log('Это гарантирует, что используются данные текущего пользователя');
+        // Очищаем manual_init_data, чтобы не было конфликта
+        if (manualInitData) {
+            console.log('⚠️ Очищаем manual_init_data, т.к. используется tg.initData');
+            localStorage.removeItem('manual_init_data');
+        }
+        // Пытаемся авторизоваться с tg.initData
+        try {
+            token = await loginWithInitData();
+            if (!token) {
+                console.warn('Не удалось получить токен из tg.initData, пробуем сохраненный токен');
+                token = savedToken;
+            }
+        } catch (e) {
+            console.warn('Ошибка при получении токена из tg.initData:', e);
+            token = savedToken;
+        }
+    } 
+    // ПРИОРИТЕТ 2: Если нет tg.initData, но есть manual_init_data - используем его
+    else if (manualInitData) {
         console.log('Используется initData, введенный вручную');
         // Пытаемся получить токен из initData
         try {
@@ -387,11 +390,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.warn('Ошибка при получении токена из initData:', e);
             token = savedToken;
         }
-    } else if (manualToken) {
-        console.log('Используется токен, введенный вручную (устаревший способ)');
-        token = manualToken;
-        localStorage.setItem('game_access_token', token);
-    } else if (savedToken) {
+    } 
+    // ПРИОРИТЕТ 3: Если есть сохраненный токен - используем его, но пытаемся обновить
+    else if (savedToken) {
         console.log('Используется сохраненный токен');
         token = savedToken;
         // Пытаемся авторизоваться для обновления токена (опционально)
@@ -404,7 +405,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         } catch (e) {
             console.warn('Не удалось обновить токен через login, используем сохраненный:', e);
         }
-    } else {
+    } 
+    // ПРИОРИТЕТ 4: Если ничего нет - пытаемся авторизоваться
+    else {
         // ВСЕГДА пытаемся авторизоваться (даже если есть токен в localStorage)
         // Это гарантирует, что токен свежий и валидный
         console.log('Начало авторизации...');
@@ -416,10 +419,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Токен длина:', token.length);
         console.log('Токен первые 20 символов:', token.substring(0, 20) + '...');
         
-        // Сохраняем токен в localStorage (если не был введен вручную)
-        if (!manualToken) {
-            localStorage.setItem('game_access_token', token);
-        }
+        // Сохраняем токен в localStorage
+        localStorage.setItem('game_access_token', token);
         
         updateStatus(true);
         
@@ -997,8 +998,8 @@ function decodeComboMode(comboMode) {
     return comboModeMap[comboMode.toLowerCase()] || comboMode;
 }
 
-// Функция для форматирования даты из UTC в МСК (UTC+3)
-function formatDateToMoscow(isoDateString) {
+// Функция для форматирования времени из UTC в МСК (только часы:минуты:секунды)
+function formatTimeToMoscow(isoDateString) {
     if (!isoDateString) return 'N/A';
     try {
         const date = new Date(isoDateString);
@@ -1009,9 +1010,6 @@ function formatDateToMoscow(isoDateString) {
             // Пытаемся использовать Intl API для правильной конвертации с учетом летнего времени
             const formatter = new Intl.DateTimeFormat('ru-RU', {
                 timeZone: 'Europe/Moscow',
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
@@ -1019,28 +1017,22 @@ function formatDateToMoscow(isoDateString) {
             });
             
             const parts = formatter.formatToParts(date);
-            const day = parts.find(p => p.type === 'day').value;
-            const month = parts.find(p => p.type === 'month').value;
-            const year = parts.find(p => p.type === 'year').value;
             const hours = parts.find(p => p.type === 'hour').value;
             const minutes = parts.find(p => p.type === 'minute').value;
             const seconds = parts.find(p => p.type === 'second').value;
             
-            return `${day}.${month}.${year} ${hours}:${minutes}:${seconds} МСК`;
+            return `${hours}:${minutes}:${seconds}`;
         } catch (e) {
             // Fallback: МСК = UTC+3 (фиксированное смещение)
             const moscowTime = new Date(date.getTime() + (3 * 60 * 60 * 1000));
-            const day = String(moscowTime.getUTCDate()).padStart(2, '0');
-            const month = String(moscowTime.getUTCMonth() + 1).padStart(2, '0');
-            const year = moscowTime.getUTCFullYear();
             const hours = String(moscowTime.getUTCHours()).padStart(2, '0');
             const minutes = String(moscowTime.getUTCMinutes()).padStart(2, '0');
             const seconds = String(moscowTime.getUTCSeconds()).padStart(2, '0');
             
-            return `${day}.${month}.${year} ${hours}:${minutes}:${seconds} МСК`;
+            return `${hours}:${minutes}:${seconds}`;
         }
     } catch (e) {
-        console.error('Ошибка форматирования даты:', e);
+        console.error('Ошибка форматирования времени:', e);
         return isoDateString;
     }
 }
@@ -1094,24 +1086,27 @@ async function loadBossInfo() {
                         const hpPercent = ((session.currentHp / session.maxHp) * 100).toFixed(1);
                         const modeDecoded = decodeMode(session.mode);
                         const comboModeDecoded = decodeComboMode(session.comboMode);
-                        let modeText = `Режим: ${modeDecoded}`;
+                        
+                        let comboText = '';
                         if (comboModeDecoded) {
-                            modeText += ` (комбо: ${comboModeDecoded})`;
+                            comboText = `<br>Режим комбо: ${comboModeDecoded}`;
                         }
                         
                         let timeInfo = '';
                         if (session.startedAt) {
-                            timeInfo += `<br>Начало боя: ${formatDateToMoscow(session.startedAt)}`;
+                            const startTime = formatTimeToMoscow(session.startedAt);
+                            timeInfo += `<br>Начало боя: <strong>${startTime}</strong>`;
                         }
                         if (session.endsAt) {
-                            timeInfo += `<br>Окончание боя: ${formatDateToMoscow(session.endsAt)}`;
+                            const endTime = formatTimeToMoscow(session.endsAt);
+                            timeInfo += `<br>Окончание боя: <strong>${endTime}</strong>`;
                         }
                         
                         bossInfo.innerHTML = `
                             <div>
                                 <strong>${session.title || 'Босс'}</strong><br>
                                 HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
-                                ${modeText}${timeInfo}
+                                Режим: ${modeDecoded}${comboText}${timeInfo}
                             </div>
                         `;
                         updateStatus(true);
@@ -1132,24 +1127,27 @@ async function loadBossInfo() {
             const hpPercent = ((session.currentHp / session.maxHp) * 100).toFixed(1);
             const modeDecoded = decodeMode(session.mode);
             const comboModeDecoded = decodeComboMode(session.comboMode);
-            let modeText = `Режим: ${modeDecoded}`;
+            
+            let comboText = '';
             if (comboModeDecoded) {
-                modeText += ` (комбо: ${comboModeDecoded})`;
+                comboText = `<br>Режим комбо: ${comboModeDecoded}`;
             }
             
             let timeInfo = '';
             if (session.startedAt) {
-                timeInfo += `<br>Начало боя: ${formatDateToMoscow(session.startedAt)}`;
+                const startTime = formatTimeToMoscow(session.startedAt);
+                timeInfo += `<br>Начало боя: <strong>${startTime}</strong>`;
             }
             if (session.endsAt) {
-                timeInfo += `<br>Окончание боя: ${formatDateToMoscow(session.endsAt)}`;
+                const endTime = formatTimeToMoscow(session.endsAt);
+                timeInfo += `<br>Окончание боя: <strong>${endTime}</strong>`;
             }
             
             bossInfo.innerHTML = `
                 <div>
                     <strong>${session.title || 'Босс'}</strong><br>
                     HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
-                    ${modeText}${timeInfo}
+                    Режим: ${modeDecoded}${comboText}${timeInfo}
                 </div>
             `;
             updateStatus(true);
@@ -1717,19 +1715,18 @@ async function loginWithInitData() {
         
         let initData = '';
         
-        // Приоритет: 1) manualInitData, 2) Telegram initData
-        if (manualInitData && manualInitData.trim()) {
+        // ПРИОРИТЕТ: 1) tg.initData (от текущего пользователя Telegram), 2) manualInitData (введенный вручную)
+        // Это гарантирует, что при открытии через Telegram используются данные текущего пользователя
+        if (tg?.initData && tg.initData.trim() && tg.initData.length >= 50) {
+            initData = tg.initData.trim();
+            console.log('✓ Используется initData от Telegram (приоритет)');
+            console.log('Это гарантирует, что используются данные текущего пользователя');
+        } else if (manualInitData && manualInitData.trim()) {
             initData = manualInitData.trim();
             console.log('✓ Используется initData, введенный пользователем в настройках');
         } else {
-            // Используем initData от Telegram
-            initData = tg?.initData || '';
-            if (!initData || initData.length < 50) {
-                console.error('❌ initData недоступен! Пожалуйста, введите initData в настройках.');
-                throw new Error('initData не найден. Пожалуйста, введите initData в настройках.');
-            } else {
-                console.log('✓ Используется initData от Telegram');
-            }
+            console.error('❌ initData недоступен! Пожалуйста, введите initData в настройках.');
+            throw new Error('initData не найден. Пожалуйста, введите initData в настройках.');
         }
         
         console.log('initData длина:', initData.length);
@@ -1773,9 +1770,14 @@ async function loginWithInitData() {
             : `${GAME_API_URL}/auth/login`;
         
         // Проверяем, что initData содержит необходимые поля
-        if (!initData.includes('query_id=') || !initData.includes('user=') || !initData.includes('hash=')) {
+        // Новый формат может начинаться с user=, старый - с query_id=
+        const hasQueryId = initData.includes('query_id=');
+        const hasUser = initData.includes('user=');
+        const hasHash = initData.includes('hash=');
+        
+        if (!hasHash || (!hasQueryId && !hasUser)) {
             console.error('initData не содержит необходимые поля!');
-            console.error('Ожидаемый формат: query_id=...&user=...&hash=...');
+            console.error('Ожидаемый формат: query_id=...&user=...&hash=... или user=...&hash=...');
             console.error('Получен:', initData.substring(0, 200));
             throw new Error('Некорректный формат initData. Убедитесь, что Mini App открыт через Telegram');
         }
