@@ -698,10 +698,7 @@ async function startBicepsUpgrade() {
                 
                 response = await fetch(`${GAME_API_URL}/friendship/send-request?toUserId=${toUserId}`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    }
+                    headers: await getApiHeaders()
                 });
                 
                 // Если получили 401, пытаемся обновить токен через сохраненный initData
@@ -739,10 +736,7 @@ async function startBicepsUpgrade() {
                             console.log(`Используемый токен в заголовке (первые 20 символов): ${token.substring(0, 20)}...`);
                             response = await fetch(`${GAME_API_URL}/friendship/send-request?toUserId=${toUserId}`, {
                                 method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${token}`
-                                }
+                                headers: await getApiHeaders()
                             });
                             console.log(`Ответ после обновления токена: ${response.status}`);
                         } else {
@@ -791,10 +785,7 @@ async function startBicepsUpgrade() {
                 
                 response = await fetch(`${GAME_API_URL}/interaction/perform`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
+                    headers: await getApiHeaders(),
                     body: JSON.stringify(requestBody)
                 });
                 
@@ -847,10 +838,7 @@ async function startBicepsUpgrade() {
                             console.log(`Обновленный requestBody:`, JSON.stringify(requestBody, null, 2));
                             response = await fetch(`${GAME_API_URL}/interaction/perform`, {
                                 method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${token}`
-                                },
+                                headers: await getApiHeaders(),
                                 body: JSON.stringify(requestBody)
                             });
                             console.log(`Ответ после обновления токена: ${response.status}`);
@@ -1660,6 +1648,30 @@ async function loadStats() {
     }
 }
 
+// Получение актуального initData (из tg.initData или localStorage)
+function getCurrentInitData() {
+    // ПРИОРИТЕТ 1: tg.initData (от текущего пользователя Telegram)
+    if (tg?.initData && tg.initData.trim() && tg.initData.length >= 50) {
+        // Сохраняем в localStorage для использования после обновления страницы
+        localStorage.setItem('current_init_data', tg.initData.trim());
+        return tg.initData.trim();
+    }
+    
+    // ПРИОРИТЕТ 2: Сохраненный initData из localStorage
+    const savedInitData = localStorage.getItem('current_init_data');
+    if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
+        return savedInitData.trim();
+    }
+    
+    // ПРИОРИТЕТ 3: manual_init_data (введенный вручную)
+    const manualInitData = localStorage.getItem('manual_init_data');
+    if (manualInitData && manualInitData.trim() && manualInitData.length >= 50) {
+        return manualInitData.trim();
+    }
+    
+    return null;
+}
+
 // Получение токена доступа (с автоматическим обновлением через initData при необходимости)
 async function getAccessToken() {
     // ВАЖНО: Всегда читаем из localStorage напрямую, без кэширования
@@ -1673,8 +1685,8 @@ async function getAccessToken() {
     }
     
     // Если токена нет, проверяем наличие сохраненного initData
-    const manualInitData = localStorage.getItem('manual_init_data');
-    if (manualInitData && manualInitData.trim()) {
+    const currentInitData = getCurrentInitData();
+    if (currentInitData) {
         console.log('Токен не найден, пытаемся получить через сохраненный initData...');
         try {
             const newToken = await loginWithInitData();
@@ -1694,6 +1706,29 @@ async function getAccessToken() {
 function getAccessTokenSync() {
     const storedToken = localStorage.getItem('game_access_token');
     return storedToken && storedToken.length > 10 ? storedToken : null;
+}
+
+// Создание заголовков для API запросов с токеном и initData
+async function getApiHeaders(additionalHeaders = {}) {
+    const token = await getAccessToken();
+    const initData = getCurrentInitData();
+    
+    const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...additionalHeaders
+    };
+    
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    // ВАЖНО: Передаем initData в заголовке для проверки соответствия токена и пользователя на сервере
+    if (initData) {
+        headers['X-Init-Data'] = initData;
+    }
+    
+    return headers;
 }
 
 // Авторизация через initData
@@ -1965,6 +2000,12 @@ async function loginWithInitData() {
             // Это гарантирует, что следующий запрос получит актуальный токен
             localStorage.setItem('game_access_token', data.accessToken);
             localStorage.setItem('game_refresh_token', data.refreshToken || '');
+            
+            // ВАЖНО: Сохраняем initData в localStorage, чтобы он не терялся после обновления страницы
+            if (initData) {
+                localStorage.setItem('current_init_data', initData);
+                console.log('✓ initData сохранен в localStorage для использования в запросах');
+            }
             
             // ВАЖНО: Проверяем, что токен действительно сохранен
             const savedToken = localStorage.getItem('game_access_token');
