@@ -285,6 +285,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Инициализируем селектор типа взаимодействия
     initInteractionTypeSelector();
     
+    // Проверяем username из URL параметров и сохраняем его
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlUsername = urlParams.get('username');
+    if (urlUsername) {
+        localStorage.setItem('game_username', urlUsername);
+        console.log('✓ Username получен из URL параметров:', urlUsername);
+    }
+    
     // Проверяем, нужно ли показать настройки при первом запуске
     // НЕ показываем настройки, если пользователь идентифицирован через Telegram
     const telegramUserInfo = getTelegramUserInfo();
@@ -1892,7 +1900,7 @@ function updateUserNameDisplay() {
         return;
     }
     
-    // Пытаемся получить имя из Telegram WebApp API
+    // ПРИОРИТЕТ 1: Пытаемся получить имя из Telegram WebApp API
     const telegramUserInfo = getTelegramUserInfo();
     let userName = null;
     
@@ -1901,13 +1909,26 @@ function updateUserNameDisplay() {
         userName = telegramUserInfo.first_name || telegramUserInfo.username || null;
     }
     
-    // Если не получили из Telegram API, пытаемся из localStorage
+    // ПРИОРИТЕТ 2: Если не получили из Telegram API, проверяем URL параметры
+    if (!userName) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlUsername = urlParams.get('username');
+        if (urlUsername) {
+            userName = urlUsername;
+            // Сохраняем username из URL в localStorage
+            localStorage.setItem('game_username', urlUsername);
+        }
+    }
+    
+    // ПРИОРИТЕТ 3: Если не получили из URL, пытаемся из localStorage
     if (!userName) {
         userName = localStorage.getItem('game_first_name') || localStorage.getItem('game_username') || null;
     }
     
     if (userName) {
-        userNameTextElement.textContent = `👤 ${userName}`;
+        // Если это username (начинается с @ или не содержит пробелов), добавляем @
+        const displayName = userName.startsWith('@') ? userName : (userName.includes(' ') ? userName : `@${userName}`);
+        userNameTextElement.textContent = `👤 ${displayName}`;
         userNameElement.style.display = 'block';
     } else {
         userNameElement.style.display = 'none';
