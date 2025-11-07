@@ -974,6 +974,77 @@ function updateStatus(connected) {
     }
 }
 
+// Функция для расшифровки режима на русский (пацанский/блатной/авторитетный)
+function decodeMode(mode) {
+    if (!mode) return 'N/A';
+    const modeMap = {
+        'blotnoy': 'Блатной',
+        'pacansky': 'Пацанский',
+        'avtoritetny': 'Авторитетный',
+        'odin': 'Один'
+    };
+    return modeMap[mode.toLowerCase()] || mode;
+}
+
+// Функция для расшифровки режима комбо
+function decodeComboMode(comboMode) {
+    if (!comboMode) return null;
+    const comboModeMap = {
+        'blotnoy': 'Блатной',
+        'pacansky': 'Пацанский',
+        'avtoritetny': 'Авторитетный'
+    };
+    return comboModeMap[comboMode.toLowerCase()] || comboMode;
+}
+
+// Функция для форматирования даты из UTC в МСК (UTC+3)
+function formatDateToMoscow(isoDateString) {
+    if (!isoDateString) return 'N/A';
+    try {
+        const date = new Date(isoDateString);
+        
+        // Используем toLocaleString с timeZone для правильной конвертации в МСК
+        // Если браузер поддерживает, используем его, иначе вычисляем вручную
+        try {
+            // Пытаемся использовать Intl API для правильной конвертации с учетом летнего времени
+            const formatter = new Intl.DateTimeFormat('ru-RU', {
+                timeZone: 'Europe/Moscow',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+            
+            const parts = formatter.formatToParts(date);
+            const day = parts.find(p => p.type === 'day').value;
+            const month = parts.find(p => p.type === 'month').value;
+            const year = parts.find(p => p.type === 'year').value;
+            const hours = parts.find(p => p.type === 'hour').value;
+            const minutes = parts.find(p => p.type === 'minute').value;
+            const seconds = parts.find(p => p.type === 'second').value;
+            
+            return `${day}.${month}.${year} ${hours}:${minutes}:${seconds} МСК`;
+        } catch (e) {
+            // Fallback: МСК = UTC+3 (фиксированное смещение)
+            const moscowTime = new Date(date.getTime() + (3 * 60 * 60 * 1000));
+            const day = String(moscowTime.getUTCDate()).padStart(2, '0');
+            const month = String(moscowTime.getUTCMonth() + 1).padStart(2, '0');
+            const year = moscowTime.getUTCFullYear();
+            const hours = String(moscowTime.getUTCHours()).padStart(2, '0');
+            const minutes = String(moscowTime.getUTCMinutes()).padStart(2, '0');
+            const seconds = String(moscowTime.getUTCSeconds()).padStart(2, '0');
+            
+            return `${day}.${month}.${year} ${hours}:${minutes}:${seconds} МСК`;
+        }
+    } catch (e) {
+        console.error('Ошибка форматирования даты:', e);
+        return isoDateString;
+    }
+}
+
 // Загрузка информации о боссе
 async function loadBossInfo() {
     const bossInfo = document.getElementById('boss-info');
@@ -1021,12 +1092,26 @@ async function loadBossInfo() {
                     if (data.success && data.session) {
                         const session = data.session;
                         const hpPercent = ((session.currentHp / session.maxHp) * 100).toFixed(1);
+                        const modeDecoded = decodeMode(session.mode);
+                        const comboModeDecoded = decodeComboMode(session.comboMode);
+                        let modeText = `Режим: ${modeDecoded}`;
+                        if (comboModeDecoded) {
+                            modeText += ` (комбо: ${comboModeDecoded})`;
+                        }
+                        
+                        let timeInfo = '';
+                        if (session.startedAt) {
+                            timeInfo += `<br>Начало боя: ${formatDateToMoscow(session.startedAt)}`;
+                        }
+                        if (session.endsAt) {
+                            timeInfo += `<br>Окончание боя: ${formatDateToMoscow(session.endsAt)}`;
+                        }
+                        
                         bossInfo.innerHTML = `
                             <div>
                                 <strong>${session.title || 'Босс'}</strong><br>
                                 HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
-                                Фаза: ${session.phase}<br>
-                                Режим: ${session.mode || 'N/A'}
+                                ${modeText}${timeInfo}
                             </div>
                         `;
                         updateStatus(true);
@@ -1045,13 +1130,26 @@ async function loadBossInfo() {
         if (data.success && data.session) {
             const session = data.session;
             const hpPercent = ((session.currentHp / session.maxHp) * 100).toFixed(1);
+            const modeDecoded = decodeMode(session.mode);
+            const comboModeDecoded = decodeComboMode(session.comboMode);
+            let modeText = `Режим: ${modeDecoded}`;
+            if (comboModeDecoded) {
+                modeText += ` (комбо: ${comboModeDecoded})`;
+            }
+            
+            let timeInfo = '';
+            if (session.startedAt) {
+                timeInfo += `<br>Начало боя: ${formatDateToMoscow(session.startedAt)}`;
+            }
+            if (session.endsAt) {
+                timeInfo += `<br>Окончание боя: ${formatDateToMoscow(session.endsAt)}`;
+            }
             
             bossInfo.innerHTML = `
                 <div>
                     <strong>${session.title || 'Босс'}</strong><br>
                     HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
-                    Фаза: ${session.phase}<br>
-                    Режим: ${session.mode || 'N/A'}
+                    ${modeText}${timeInfo}
                 </div>
             `;
             updateStatus(true);
