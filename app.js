@@ -1648,25 +1648,178 @@ async function loadStats() {
     }
 }
 
+// Получение данных пользователя из Telegram (даже если initData недоступен)
+function getTelegramUserInfo() {
+    // ПРИОРИТЕТ 1: tg.initDataUnsafe.user (доступен даже после релоуда)
+    if (tg?.initDataUnsafe?.user) {
+        const user = tg.initDataUnsafe.user;
+        return {
+            id: user.id,
+            username: user.username,
+            first_name: user.first_name,
+            last_name: user.last_name
+        };
+    }
+    
+    // ПРИОРИТЕТ 2: Из tg.initData (если доступен)
+    if (tg?.initData) {
+        try {
+            const params = new URLSearchParams(tg.initData);
+            const userParam = params.get('user');
+            if (userParam) {
+                const userData = JSON.parse(decodeURIComponent(userParam));
+                return {
+                    id: userData.id,
+                    username: userData.username,
+                    first_name: userData.first_name,
+                    last_name: userData.last_name
+                };
+            }
+        } catch (e) {
+            console.warn('Не удалось извлечь данные пользователя из tg.initData:', e);
+        }
+    }
+    
+    return null;
+}
+
 // Получение актуального initData (из tg.initData или localStorage)
 function getCurrentInitData() {
     // ПРИОРИТЕТ 1: tg.initData (от текущего пользователя Telegram)
     if (tg?.initData && tg.initData.trim() && tg.initData.length >= 50) {
         // Сохраняем в localStorage для использования после обновления страницы
         localStorage.setItem('current_init_data', tg.initData.trim());
+        
+        // Также извлекаем и сохраняем user_id и username для идентификации
+        const userInfo = getTelegramUserInfo();
+        if (userInfo) {
+            if (userInfo.id) {
+                localStorage.setItem('game_user_id', userInfo.id.toString());
+            }
+            if (userInfo.username) {
+                localStorage.setItem('game_username', userInfo.username);
+            }
+            if (userInfo.first_name) {
+                localStorage.setItem('game_first_name', userInfo.first_name);
+            }
+        }
+        
         return tg.initData.trim();
     }
     
     // ПРИОРИТЕТ 2: Сохраненный initData из localStorage
+    // Проверяем, что сохраненный initData соответствует текущему пользователю
     const savedInitData = localStorage.getItem('current_init_data');
+    const savedUserId = localStorage.getItem('game_user_id');
+    const savedUsername = localStorage.getItem('game_username');
+    
     if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
-        return savedInitData.trim();
+        // Проверяем соответствие user_id в сохраненном initData
+        try {
+            const params = new URLSearchParams(savedInitData);
+            const userParam = params.get('user');
+            if (userParam) {
+                const userData = JSON.parse(decodeURIComponent(userParam));
+                const initDataUserId = userData.id?.toString();
+                
+                // Если user_id совпадает или не сохранен - используем initData
+                if (!savedUserId || initDataUserId === savedUserId) {
+                    console.log('✓ Используется сохраненный initData из localStorage');
+                    return savedInitData.trim();
+                } else {
+                    console.warn('⚠️ Сохраненный initData не соответствует текущему пользователю');
+                    console.warn(`Сохраненный user_id: ${savedUserId}, user_id в initData: ${initDataUserId}`);
+                    // Очищаем несоответствующий initData
+                    localStorage.removeItem('current_init_data');
+                }
+            } else {
+                // Если не удалось извлечь user_id, но есть сохраненный - используем
+                console.log('✓ Используется сохраненный initData (не удалось проверить user_id)');
+                return savedInitData.trim();
+            }
+        } catch (e) {
+            console.warn('Не удалось проверить соответствие сохраненного initData:', e);
+            // В случае ошибки используем сохраненный initData
+            return savedInitData.trim();
+        }
     }
     
     // ПРИОРИТЕТ 3: manual_init_data (введенный вручную)
     const manualInitData = localStorage.getItem('manual_init_data');
     if (manualInitData && manualInitData.trim() && manualInitData.length >= 50) {
         return manualInitData.trim();
+    }
+    
+    // ПРИОРИТЕТ 4: Пытаемся получить данные пользователя из Telegram (даже если initData недоступен)
+    const telegramUserInfo = getTelegramUserInfo();
+    if (telegramUserInfo) {
+        console.log('✓ Получены данные пользователя из Telegram (initDataUnsafe):');
+        console.log(`  - user_id: ${telegramUserInfo.id}`);
+        console.log(`  - username: ${telegramUserInfo.username || 'не указан'}`);
+        console.log(`  - first_name: ${telegramUserInfo.first_name || 'не указан'}`);
+        
+        // Сохраняем данные пользователя
+        if (telegramUserInfo.id) {
+            localStorage.setItem('game_user_id', telegramUserInfo.id.toString());
+        }
+        if (telegramUserInfo.username) {
+            localStorage.setItem('game_username', telegramUserInfo.username);
+        }
+        if (telegramUserInfo.first_name) {
+            localStorage.setItem('game_first_name', telegramUserInfo.first_name);
+        }
+        
+        // Проверяем соответствие сохраненного user_id
+        if (savedUserId && savedUserId !== telegramUserInfo.id.toString()) {
+            console.warn('⚠️ Сохраненный user_id не соответствует текущему пользователю Telegram');
+            console.warn(`Сохраненный: ${savedUserId}, Текущий: ${telegramUserInfo.id}`);
+            // Очищаем несоответствующие данные
+            localStorage.removeItem('current_init_data');
+        }
+    } else if (savedUserId || savedUsername) {
+        console.warn('⚠️ initData недоступен, но есть сохраненные данные пользователя:');
+        console.warn(`  - user_id: ${savedUserId || 'не сохранен'}`);
+        console.warn(`  - username: ${savedUsername || 'не сохранен'}`);
+        console.warn('Попробуйте обновить страницу или войти заново');
+    }
+    
+    return null;
+}
+
+// Получение сохраненного initData с сервера по токену
+async function getSavedInitDataFromServer() {
+    try {
+        const token = await getAccessToken();
+        if (!token) {
+            console.warn('Токен не найден, невозможно получить сохраненный initData');
+            return null;
+        }
+        
+        const url = API_SERVER_URL 
+            ? `${API_SERVER_URL}/auth/get-saved-init-data`
+            : `${GAME_API_URL}/auth/get-saved-init-data`;
+        
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.initData) {
+                console.log('✓ Получен сохраненный initData с сервера');
+                // Сохраняем в localStorage
+                localStorage.setItem('current_init_data', data.initData);
+                return data.initData;
+            }
+        } else {
+            console.warn(`Не удалось получить сохраненный initData: ${response.status}`);
+        }
+    } catch (e) {
+        console.warn('Ошибка при получении сохраненного initData с сервера:', e);
     }
     
     return null;
@@ -1750,18 +1903,24 @@ async function loginWithInitData() {
         
         let initData = '';
         
-        // ПРИОРИТЕТ: 1) tg.initData (от текущего пользователя Telegram), 2) manualInitData (введенный вручную)
-        // Это гарантирует, что при открытии через Telegram используются данные текущего пользователя
+        // ПРИОРИТЕТ: 1) tg.initData (от текущего пользователя Telegram), 2) сохраненный с сервера, 3) manualInitData
         if (tg?.initData && tg.initData.trim() && tg.initData.length >= 50) {
             initData = tg.initData.trim();
             console.log('✓ Используется initData от Telegram (приоритет)');
             console.log('Это гарантирует, что используются данные текущего пользователя');
-        } else if (manualInitData && manualInitData.trim()) {
-            initData = manualInitData.trim();
-            console.log('✓ Используется initData, введенный пользователем в настройках');
         } else {
-            console.error('❌ initData недоступен! Пожалуйста, введите initData в настройках.');
-            throw new Error('initData не найден. Пожалуйста, введите initData в настройках.');
+            // Пытаемся получить сохраненный initData с сервера
+            const savedInitData = await getSavedInitDataFromServer();
+            if (savedInitData) {
+                initData = savedInitData;
+                console.log('✓ Используется сохраненный initData с сервера');
+            } else if (manualInitData && manualInitData.trim()) {
+                initData = manualInitData.trim();
+                console.log('✓ Используется initData, введенный пользователем в настройках');
+            } else {
+                console.error('❌ initData недоступен! Пожалуйста, введите initData в настройках.');
+                throw new Error('initData не найден. Пожалуйста, введите initData в настройках.');
+            }
         }
         
         console.log('initData длина:', initData.length);
@@ -2017,10 +2176,18 @@ async function loginWithInitData() {
                 console.log(`✓ Токен успешно сохранен в localStorage (первые 20 символов): ${data.accessToken.substring(0, 20)}...`);
             }
             
-            // Сохраняем userId из login
+            // Сохраняем userId, username и first_name из login для восстановления initData
             if (data.userId) {
                 localStorage.setItem('game_user_id', data.userId.toString());
                 console.log('User ID сохранен из login:', data.userId);
+            }
+            if (data.username) {
+                localStorage.setItem('game_username', data.username);
+                console.log('Username сохранен из login:', data.username);
+            }
+            if (data.first_name) {
+                localStorage.setItem('game_first_name', data.first_name);
+                console.log('First name сохранен из login:', data.first_name);
             }
             
             // Дополнительно получаем User ID из /player/init для точности
