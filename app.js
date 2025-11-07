@@ -14,6 +14,9 @@ if (window.Telegram && window.Telegram.WebApp) {
         console.log('tg.initDataUnsafe.user:', JSON.stringify(tg.initDataUnsafe.user, null, 2));
     }
     console.log('tg.initData:', !!tg.initData);
+    console.log('tg.startParam:', tg.startParam); // Параметр, переданный при открытии Mini App
+    console.log('window.location.href:', window.location.href);
+    console.log('window.location.search:', window.location.search);
 } else {
     console.error('❌ Telegram WebApp не доступен! Убедитесь, что Mini App открыт через Telegram');
     console.error('window.Telegram:', window.Telegram);
@@ -1749,7 +1752,10 @@ function getTelegramUserInfo() {
     console.log('tg.initDataUnsafe:', !!tg.initDataUnsafe);
     console.log('tg.initDataUnsafe:', tg.initDataUnsafe);
     console.log('tg.initDataUnsafe?.user:', !!tg.initDataUnsafe?.user);
+    console.log('tg.startParam:', tg.startParam); // Параметр, переданный при открытии Mini App
+    console.log('window.location.search:', window.location.search); // URL параметры
     
+    // ПРИОРИТЕТ 1: tg.initDataUnsafe.user (доступен даже после релоуда)
     if (tg.initDataUnsafe?.user) {
         const user = tg.initDataUnsafe.user;
         console.log('✓ Найден user объект из tg.initDataUnsafe.user');
@@ -1800,6 +1806,51 @@ function getTelegramUserInfo() {
         }
     } else {
         console.warn('⚠️ tg.initData недоступен');
+    }
+    
+    // ПРИОРИТЕТ 3: Из URL параметров (если переданы при открытии Mini App)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlUsername = urlParams.get('username');
+    const urlUserId = urlParams.get('user_id') || urlParams.get('userId');
+    if (urlUsername || urlUserId) {
+        console.log('✓ Найден username/user_id из URL параметров');
+        console.log('  - username:', urlUsername);
+        console.log('  - user_id:', urlUserId);
+        return {
+            id: urlUserId ? parseInt(urlUserId) : null,
+            username: urlUsername || null,
+            first_name: null,
+            last_name: null
+        };
+    }
+    
+    // ПРИОРИТЕТ 4: Из tg.startParam (если передан при открытии Mini App)
+    if (tg.startParam) {
+        console.log('tg.startParam:', tg.startParam);
+        try {
+            // startParam может быть JSON строкой или просто username
+            const startParamData = JSON.parse(tg.startParam);
+            if (startParamData.username || startParamData.user_id) {
+                console.log('✓ Найден username/user_id из tg.startParam');
+                return {
+                    id: startParamData.user_id || startParamData.userId || null,
+                    username: startParamData.username || null,
+                    first_name: startParamData.first_name || null,
+                    last_name: null
+                };
+            }
+        } catch (e) {
+            // Если startParam не JSON, возможно это просто username
+            if (tg.startParam && tg.startParam.length > 0) {
+                console.log('✓ tg.startParam (не JSON, возможно username):', tg.startParam);
+                return {
+                    id: null,
+                    username: tg.startParam,
+                    first_name: null,
+                    last_name: null
+                };
+            }
+        }
     }
     
     console.log('❌ User ID и username не найдены');
