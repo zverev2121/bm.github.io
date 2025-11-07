@@ -85,18 +85,22 @@ async function loadSettings() {
             console.warn('Не удалось получить initData из БД при загрузке настроек:', e);
         }
     } else {
-        // Если нет токена, пытаемся получить initData по username из Telegram
+        // Если нет токена, пытаемся получить initData по user_id или username из Telegram
         const telegramUserInfo = getTelegramUserInfo();
-        if (telegramUserInfo && telegramUserInfo.username) {
-            console.log(`Пытаемся получить initData из БД по username: ${telegramUserInfo.username}`);
+        if (telegramUserInfo) {
+            if (telegramUserInfo.id) {
+                console.log(`Пытаемся получить initData из БД по user_id: ${telegramUserInfo.id}`);
+            } else if (telegramUserInfo.username) {
+                console.log(`Пытаемся получить initData из БД по username: ${telegramUserInfo.username}`);
+            }
             try {
                 const savedInitData = await getSavedInitDataFromServer();
                 if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
                     manualInitData = savedInitData;
-                    console.log('✓ Получен initData из БД по username при загрузке настроек');
+                    console.log('✓ Получен initData из БД при загрузке настроек');
                 }
             } catch (e) {
-                console.warn('Не удалось получить initData из БД по username:', e);
+                console.warn('Не удалось получить initData из БД:', e);
             }
         }
     }
@@ -312,29 +316,73 @@ async function toggleSettings() {
     }
 }
 
+// Функция для обновления отображения username
+function updateUsernameDisplay() {
+    const usernameDisplay = document.getElementById('username-display');
+    if (!usernameDisplay) return;
+    
+    // Обновляем tg на случай, если он еще не был инициализирован
+    if (!tg && window.Telegram && window.Telegram.WebApp) {
+        tg = window.Telegram.WebApp;
+        console.log('✓ tg обновлен из window.Telegram.WebApp');
+    }
+    
+    const telegramUserInfo = getTelegramUserInfo();
+    if (telegramUserInfo) {
+        // ВАЖНО: username может быть null, но user_id всегда есть
+        if (telegramUserInfo.id) {
+            if (telegramUserInfo.username) {
+                usernameDisplay.textContent = `Username: @${telegramUserInfo.username} (ID: ${telegramUserInfo.id})`;
+                usernameDisplay.style.color = '#4CAF50';
+                console.log('✓ Username отображается:', telegramUserInfo.username);
+            } else {
+                // У пользователя нет username, но есть ID
+                usernameDisplay.textContent = `User ID: ${telegramUserInfo.id} (username не установлен в Telegram)`;
+                usernameDisplay.style.color = '#FF9800';
+                console.log('✓ User ID найден, но username не установлен:', telegramUserInfo.id);
+            }
+            return true;
+        }
+    }
+    
+    // Пытаемся получить из localStorage
+    const savedUsername = localStorage.getItem('game_username');
+    const savedUserId = localStorage.getItem('game_user_id');
+    if (savedUsername) {
+        usernameDisplay.textContent = `Username: @${savedUsername} (из localStorage)`;
+        usernameDisplay.style.color = '#FF9800';
+        return true;
+    } else if (savedUserId) {
+        usernameDisplay.textContent = `User ID: ${savedUserId} (username не найден)`;
+        usernameDisplay.style.color = '#FF9800';
+        return true;
+    } else {
+        usernameDisplay.textContent = 'User ID: не найден (проверка...)';
+        usernameDisplay.style.color = '#f44336';
+        return false;
+    }
+}
+
 // Инициализация
 document.addEventListener('DOMContentLoaded', async () => {
     updateStatus(false);
     
-    // Показываем username в самом верху
-    const telegramUserInfo = getTelegramUserInfo();
-    const usernameDisplay = document.getElementById('username-display');
-    if (usernameDisplay) {
-        if (telegramUserInfo && telegramUserInfo.username) {
-            usernameDisplay.textContent = `Username: @${telegramUserInfo.username} (ID: ${telegramUserInfo.id || 'неизвестен'})`;
-            usernameDisplay.style.color = '#4CAF50';
-            console.log('✓ Username отображается:', telegramUserInfo.username);
-        } else {
-            const savedUsername = localStorage.getItem('game_username');
-            if (savedUsername) {
-                usernameDisplay.textContent = `Username: @${savedUsername} (из localStorage)`;
-                usernameDisplay.style.color = '#FF9800';
-            } else {
-                usernameDisplay.textContent = 'Username: не найден';
-                usernameDisplay.style.color = '#f44336';
+    // Показываем username в самом верху (сразу)
+    updateUsernameDisplay();
+    
+    // Пытаемся обновить username несколько раз (на случай, если Telegram WebApp еще не загрузился)
+    let attempts = 0;
+    const maxAttempts = 10;
+    const checkInterval = setInterval(() => {
+        attempts++;
+        const found = updateUsernameDisplay();
+        if (found || attempts >= maxAttempts) {
+            clearInterval(checkInterval);
+            if (!found) {
+                console.warn('⚠️ Username не найден после', maxAttempts, 'попыток');
             }
         }
-    }
+    }, 200); // Проверяем каждые 200мс
     
     // Загружаем настройки (async, т.к. может получать initData с сервера)
     await loadSettings();
@@ -1635,22 +1683,45 @@ async function loadStats() {
 // Получение данных пользователя из Telegram (даже если initData недоступен)
 function getTelegramUserInfo() {
     console.log('=== getTelegramUserInfo() вызвана ===');
+    console.log('window.Telegram доступен:', !!window.Telegram);
+    console.log('window.Telegram.WebApp доступен:', !!window.Telegram?.WebApp);
     console.log('tg доступен:', !!tg);
-    console.log('tg.initDataUnsafe:', !!tg?.initDataUnsafe);
-    console.log('tg.initDataUnsafe.user:', !!tg?.initDataUnsafe?.user);
+    
+    // Обновляем tg на случай, если он еще не был инициализирован
+    if (!tg && window.Telegram && window.Telegram.WebApp) {
+        tg = window.Telegram.WebApp;
+        console.log('✓ tg обновлен из window.Telegram.WebApp');
+    }
+    
+    if (tg) {
+        console.log('tg.initDataUnsafe:', !!tg.initDataUnsafe);
+        console.log('tg.initDataUnsafe.user:', !!tg.initDataUnsafe?.user);
+        if (tg.initDataUnsafe?.user) {
+            console.log('tg.initDataUnsafe.user:', JSON.stringify(tg.initDataUnsafe.user, null, 2));
+        }
+        console.log('tg.initData:', !!tg.initData);
+        if (tg.initData) {
+            console.log('tg.initData (первые 200 символов):', tg.initData.substring(0, 200));
+        }
+    }
     
     // ПРИОРИТЕТ 1: tg.initDataUnsafe.user (доступен даже после релоуда)
     if (tg?.initDataUnsafe?.user) {
         const user = tg.initDataUnsafe.user;
-        console.log('✓ Найден username из tg.initDataUnsafe.user:', user.username);
+        console.log('✓ Найден user объект из tg.initDataUnsafe.user');
         console.log('  - id:', user.id);
-        console.log('  - username:', user.username);
+        console.log('  - username:', user.username, '(тип:', typeof user.username, ')');
         console.log('  - first_name:', user.first_name);
+        console.log('  - last_name:', user.last_name);
+        console.log('  - Полный объект user:', JSON.stringify(user, null, 2));
+        
+        // ВАЖНО: username может быть null или undefined, но user_id всегда есть
+        // Используем user_id как основной идентификатор, username - опционально
         return {
             id: user.id,
-            username: user.username,
-            first_name: user.first_name,
-            last_name: user.last_name
+            username: user.username || null, // Может быть null, если у пользователя нет username
+            first_name: user.first_name || null,
+            last_name: user.last_name || null
         };
     }
     
@@ -1710,13 +1781,71 @@ async function getCurrentInitData() {
 }
 
 // Получение сохраненного initData с сервера из БД
-// ПРИОРИТЕТ 1: По username из Telegram (если есть)
-// ПРИОРИТЕТ 2: По токену
+// ПРИОРИТЕТ 1: По user_id из Telegram (основной способ, user_id всегда есть)
+// ПРИОРИТЕТ 2: По username из Telegram (если есть)
+// ПРИОРИТЕТ 3: По токену
 // ВАЖНО: initData не сохраняется в localStorage, только получается из БД
 async function getSavedInitDataFromServer() {
     try {
-        // ПРИОРИТЕТ 1: Пытаемся получить initData по username из Telegram
         const telegramUserInfo = getTelegramUserInfo();
+        
+        // ПРИОРИТЕТ 1: Пытаемся получить initData по user_id из Telegram (user_id всегда есть)
+        if (telegramUserInfo && telegramUserInfo.id) {
+            console.log(`✓ Пытаемся получить initData из БД по user_id: ${telegramUserInfo.id}`);
+            const url = API_SERVER_URL 
+                ? `${API_SERVER_URL}/auth/get-init-data-by-user-id`
+                : `${GAME_API_URL}/auth/get-init-data-by-user-id`;
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ userId: telegramUserInfo.id })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.initData) {
+                        console.log(`✓ Получен initData из БД по user_id: ${telegramUserInfo.id}`);
+                        
+                        // Сохраняем userId, username, first_name и токен, если они есть
+                        if (data.userId) {
+                            localStorage.setItem('game_user_id', data.userId.toString());
+                        }
+                        if (data.username) {
+                            localStorage.setItem('game_username', data.username);
+                        }
+                        if (data.first_name) {
+                            localStorage.setItem('game_first_name', data.first_name);
+                        }
+                        if (data.accessToken) {
+                            localStorage.setItem('game_access_token', data.accessToken);
+                        }
+                        if (data.refreshToken) {
+                            localStorage.setItem('game_refresh_token', data.refreshToken);
+                        }
+                        
+                        // Заполняем поле ввода последним рабочим initData из БД
+                        const manualInitDataInput = document.getElementById('manual-initdata');
+                        if (manualInitDataInput) {
+                            manualInitDataInput.value = data.initData;
+                            console.log('✓ Поле manual-initdata заполнено initData из БД');
+                        }
+                        
+                        return data.initData;
+                    }
+                } else {
+                    console.warn(`Не удалось получить initData по user_id: ${response.status}`);
+                }
+            } catch (e) {
+                console.warn('Ошибка при получении initData по user_id:', e);
+            }
+        }
+        
+        // ПРИОРИТЕТ 2: Пытаемся получить initData по username из Telegram (если есть)
         if (telegramUserInfo && telegramUserInfo.username) {
             console.log(`✓ Пытаемся получить initData из БД по username: ${telegramUserInfo.username}`);
             const url = API_SERVER_URL 
