@@ -1069,32 +1069,30 @@ async function loadBossInfo() {
     }
 }
 
-// Атака босса
+// Обновление информации о боссе
 async function attackBoss() {
     const btn = event.target;
     btn.disabled = true;
-    btn.textContent = '⚔️ Атака...';
+    btn.textContent = '🔄 Обновление...';
     
     try {
         let token = await getAccessToken();
         if (!token) {
             tg.showAlert('❌ Требуется авторизация!\nОбновите страницу');
             btn.disabled = false;
-            btn.textContent = '⚔️ Атаковать';
+            btn.textContent = '🔄 Обновить';
             return;
         }
         
-        const attackBody = { type: 'punchChest' };
-        console.log('Отправка атаки:', attackBody);
+        console.log('Обновление информации о боссе...');
         
         const apiUrl = API_SERVER_URL || GAME_API_URL;
-        let response = await fetch(`${apiUrl}/boss/start-attack`, {
-            method: 'POST',
+        let response = await fetch(`${apiUrl}/boss/bootstrap`, {
+            method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify(attackBody)
+            }
         });
         
         // Если получили 401, пытаемся обновить токен через сохраненный initData
@@ -1106,13 +1104,12 @@ async function attackBoss() {
                 if (newToken) {
                     token = newToken;
                     // Повторяем запрос с новым токеном
-                    response = await fetch(`${apiUrl}/boss/start-attack`, {
-                        method: 'POST',
+                    response = await fetch(`${apiUrl}/boss/bootstrap`, {
+                        method: 'GET',
                         headers: {
                             'Content-Type': 'application/json',
                             'Authorization': `Bearer ${token}`
-                        },
-                        body: JSON.stringify(attackBody)
+                        }
                     });
                 }
             }
@@ -1124,27 +1121,25 @@ async function attackBoss() {
         
         const data = await response.json();
         
-        if (data.success) {
-            // Увеличиваем счетчик атак
-            const currentAttacks = parseInt(localStorage.getItem('total_attacks') || '0');
-            localStorage.setItem('total_attacks', (currentAttacks + 1).toString());
+        if (data && !data.error) {
+            // Обновляем информацию о боссе
+            loadBossInfo();
+            loadStats();
             
             tg.showPopup({
                 title: 'Успех!',
-                message: `Атака выполнена!`,
+                message: `Информация о боссе обновлена!`,
                 buttons: [{ text: 'OK', type: 'ok' }]
             });
-            loadBossInfo();
-            loadStats();
         } else {
-            tg.showAlert(data.error || 'Ошибка атаки');
+            tg.showAlert(data.error || 'Ошибка обновления');
         }
     } catch (error) {
-        console.error('Ошибка атаки:', error);
+        console.error('Ошибка обновления:', error);
         tg.showAlert(`❌ Ошибка: ${error.message}`);
     } finally {
         btn.disabled = false;
-        btn.textContent = '⚔️ Атаковать';
+        btn.textContent = '🔄 Обновить';
     }
 }
 
