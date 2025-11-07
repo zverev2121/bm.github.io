@@ -66,9 +66,37 @@ console.log('API URL:', GAME_API_URL);
 console.log('Используется прокси:', !!API_SERVER_URL);
 
 // Функции для работы с настройками
-function loadSettings() {
+async function loadSettings() {
     const apiUrl = localStorage.getItem('api_server_url') || '';
-    const manualInitData = localStorage.getItem('manual_init_data') || '';
+    // ВАЖНО: При загрузке настроек используем последний рабочий initData
+    // Приоритет: 1) manual_init_data (последний рабочий), 2) current_init_data (сохраненный), 3) с сервера из БД
+    let manualInitData = localStorage.getItem('manual_init_data') || '';
+    if (!manualInitData) {
+        manualInitData = localStorage.getItem('current_init_data') || '';
+        // Если нашли в current_init_data, сохраняем в manual_init_data для отображения
+        if (manualInitData) {
+            localStorage.setItem('manual_init_data', manualInitData);
+        }
+    }
+    
+    // ВАЖНО: Если initData не найден в localStorage, но есть токен - пытаемся получить с сервера из БД
+    if (!manualInitData || manualInitData.length < 50) {
+        const savedToken = localStorage.getItem('game_access_token');
+        if (savedToken) {
+            console.log('initData не найден в localStorage, пытаемся получить с сервера из БД...');
+            try {
+                const savedInitData = await getSavedInitDataFromServer();
+                if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
+                    manualInitData = savedInitData;
+                    localStorage.setItem('manual_init_data', savedInitData);
+                    localStorage.setItem('current_init_data', savedInitData);
+                    console.log('✓ Получен initData с сервера из БД при загрузке настроек');
+                }
+            } catch (e) {
+                console.warn('Не удалось получить initData с сервера при загрузке настроек:', e);
+            }
+        }
+    }
     
     if (document.getElementById('api-server-url')) {
         document.getElementById('api-server-url').value = apiUrl;
@@ -76,6 +104,9 @@ function loadSettings() {
     if (document.getElementById('manual-initdata')) {
         document.getElementById('manual-initdata').value = manualInitData;
     }
+    
+    API_SERVER_URL = getApiServerUrl();
+    GAME_API_URL = getGameApiUrl();
     
     updateSettingsDisplay();
 }
@@ -201,7 +232,7 @@ function updateSettingsDisplay() {
     }
 }
 
-function showSettingsForm() {
+async function showSettingsForm() {
     const welcome = document.getElementById('settings-welcome');
     const form = document.getElementById('settings-form');
     const info = document.getElementById('settings-info');
@@ -209,7 +240,7 @@ function showSettingsForm() {
     if (welcome) welcome.style.display = 'none';
     if (form) form.style.display = 'flex';
     if (info) info.style.display = 'none';
-    loadSettings();
+    await loadSettings();
 }
 
 function hideSettingsForm() {
@@ -223,11 +254,11 @@ function hideSettingsForm() {
     updateSettingsDisplay();
 }
 
-function toggleSettings() {
+async function toggleSettings() {
     const settingsSection = document.getElementById('settings-section');
     if (settingsSection.style.display === 'none' || !settingsSection.style.display) {
         settingsSection.style.display = 'block';
-        loadSettings();
+        await loadSettings();
         // Показываем форму, если настройки не сохранены
         const hasSettings = localStorage.getItem('api_server_url') || localStorage.getItem('manual_init_data');
         if (!hasSettings) {
@@ -238,7 +269,7 @@ function toggleSettings() {
                 document.getElementById('settings-form').style.display = 'none';
                 document.getElementById('settings-info').style.display = 'none';
             } else {
-                showSettingsForm();
+                await showSettingsForm();
             }
         } else {
             hideSettingsForm();
@@ -252,8 +283,8 @@ function toggleSettings() {
 document.addEventListener('DOMContentLoaded', async () => {
     updateStatus(false);
     
-    // Загружаем настройки
-    loadSettings();
+    // Загружаем настройки (async, т.к. может получать initData с сервера)
+    await loadSettings();
     updateSettingsDisplay();
     
     // Инициализируем селектор типа взаимодействия
@@ -355,11 +386,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (tg?.initData && tg.initData.trim() && tg.initData.length >= 50) {
         console.log('✅ Используется initData от Telegram (приоритет)');
         console.log('Это гарантирует, что используются данные текущего пользователя');
-        // Очищаем manual_init_data, чтобы не было конфликта
-        if (manualInitData) {
-            console.log('⚠️ Очищаем manual_init_data, т.к. используется tg.initData');
-            localStorage.removeItem('manual_init_data');
+        // ВАЖНО: Сохраняем tg.initData в manual_init_data как последний рабочий initData
+        // Это позволит использовать его при следующей загрузке, если tg.initData будет недоступен
+        localStorage.setItem('manual_init_data', tg.initData.trim());
+        localStorage.setItem('current_init_data', tg.initData.trim());
+        console.log('✓ tg.initData сохранен как последний рабочий initData');
+        
+        // Обновляем поле ввода, если оно существует
+        const manualInitDataInput = document.getElementById('manual-initdata');
+        if (manualInitDataInput) {
+            manualInitDataInput.value = tg.initData.trim();
+            console.log('✓ Поле manual-initdata обновлено tg.initData');
         }
+        
         // Пытаемся авторизоваться с tg.initData
         try {
             token = await loginWithInitData();
@@ -374,21 +413,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     } 
     // ПРИОРИТЕТ 2: Если нет tg.initData, но есть сохраненный токен - пытаемся получить initData с сервера
     else if (savedToken) {
-        console.log('tg.initData недоступен, но есть сохраненный токен');
-        console.log('Пытаемся получить сохраненный initData с сервера...');
+        console.log('⚠️ tg.initData недоступен, но есть сохраненный токен');
+        console.log('Пытаемся получить последний актуальный initData с сервера из БД...');
         
-        // Пытаемся получить сохраненный initData с сервера
+        // Пытаемся получить сохраненный initData с сервера (из БД)
         try {
             const savedInitData = await getSavedInitDataFromServer();
-            if (savedInitData) {
-                console.log('✓ Получен сохраненный initData с сервера, используем сохраненный токен');
+            if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
+                console.log('✓✓✓ Получен последний актуальный initData с сервера из БД ✓✓✓');
+                console.log(`Длина initData: ${savedInitData.length} символов`);
+                
+                // ВАЖНО: Сохраняем полученный initData в manual_init_data и current_init_data
+                localStorage.setItem('manual_init_data', savedInitData);
+                localStorage.setItem('current_init_data', savedInitData);
+                
+                // ВАЖНО: Заполняем поле ввода последним рабочим initData из БД
+                const manualInitDataInput = document.getElementById('manual-initdata');
+                if (manualInitDataInput) {
+                    manualInitDataInput.value = savedInitData;
+                    console.log('✓✓✓ Поле manual-initdata заполнено последним актуальным initData из БД ✓✓✓');
+                }
+                
                 token = savedToken;
             } else {
-                console.warn('Не удалось получить сохраненный initData с сервера, используем сохраненный токен');
+                console.warn('⚠️ Не удалось получить initData с сервера из БД');
+                console.warn('Возможные причины:');
+                console.warn('  1. Пользователь не найден в БД');
+                console.warn('  2. Токен недействителен');
+                console.warn('  3. initData не сохранен в БД для этого пользователя');
+                console.warn('Используем сохраненный токен без initData');
                 token = savedToken;
             }
         } catch (e) {
-            console.warn('Ошибка при получении сохраненного initData:', e);
+            console.error('❌ Ошибка при получении initData с сервера из БД:', e);
+            console.warn('Используем сохраненный токен без initData');
             token = savedToken;
         }
     }
@@ -402,6 +460,42 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log(`  - username: ${telegramUserInfo.username || 'не указан'}`);
             console.log('Попробуйте обновить страницу или войти заново');
             // Не показываем настройки, т.к. пользователь известен
+            
+            // Пытаемся получить initData из localStorage (если был сохранен ранее)
+            const savedInitData = localStorage.getItem('manual_init_data') || localStorage.getItem('current_init_data');
+            if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
+                // Заполняем поле ввода
+                const manualInitDataInput = document.getElementById('manual-initdata');
+                if (manualInitDataInput) {
+                    manualInitDataInput.value = savedInitData;
+                    console.log('✓ Поле manual-initdata заполнено сохраненным initData');
+                }
+            }
+        }
+    }
+    
+    // ВАЖНО: После всех проверок, если initData все еще не найден, но есть токен - 
+    // пытаемся получить его с сервера еще раз (на случай, если токен появился позже)
+    if (!token && savedToken) {
+        console.log('Повторная попытка получить initData с сервера из БД...');
+        try {
+            const savedInitData = await getSavedInitDataFromServer();
+            if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
+                console.log('✓ Получен initData с сервера из БД при повторной попытке');
+                localStorage.setItem('manual_init_data', savedInitData);
+                localStorage.setItem('current_init_data', savedInitData);
+                
+                // Заполняем поле ввода
+                const manualInitDataInput = document.getElementById('manual-initdata');
+                if (manualInitDataInput) {
+                    manualInitDataInput.value = savedInitData;
+                    console.log('✓ Поле manual-initdata заполнено initData с сервера из БД');
+                }
+                
+                token = savedToken;
+            }
+        } catch (e) {
+            console.warn('Ошибка при повторной попытке получить initData:', e);
         }
     }
     
@@ -1784,12 +1878,13 @@ function getTelegramUserInfo() {
     return null;
 }
 
-// Получение актуального initData (из tg.initData или localStorage)
+// Получение актуального initData (из tg.initData, localStorage или БД)
 function getCurrentInitData() {
     // ПРИОРИТЕТ 1: tg.initData (от текущего пользователя Telegram)
     if (tg?.initData && tg.initData.trim() && tg.initData.length >= 50) {
         // Сохраняем в localStorage для использования после обновления страницы
         localStorage.setItem('current_init_data', tg.initData.trim());
+        localStorage.setItem('manual_init_data', tg.initData.trim());
         
         // Также извлекаем и сохраняем user_id и username для идентификации
         const userInfo = getTelegramUserInfo();
@@ -1805,12 +1900,18 @@ function getCurrentInitData() {
             }
         }
         
+        // Обновляем поле ввода
+        const manualInitDataInput = document.getElementById('manual-initdata');
+        if (manualInitDataInput) {
+            manualInitDataInput.value = tg.initData.trim();
+        }
+        
         return tg.initData.trim();
     }
     
     // ПРИОРИТЕТ 2: Сохраненный initData из localStorage
     // Проверяем, что сохраненный initData соответствует текущему пользователю
-    const savedInitData = localStorage.getItem('current_init_data');
+    const savedInitData = localStorage.getItem('current_init_data') || localStorage.getItem('manual_init_data');
     const savedUserId = localStorage.getItem('game_user_id');
     const savedUsername = localStorage.getItem('game_username');
     
@@ -1826,32 +1927,42 @@ function getCurrentInitData() {
                 // Если user_id совпадает или не сохранен - используем initData
                 if (!savedUserId || initDataUserId === savedUserId) {
                     console.log('✓ Используется сохраненный initData из localStorage');
+                    // Обновляем поле ввода
+                    const manualInitDataInput = document.getElementById('manual-initdata');
+                    if (manualInitDataInput) {
+                        manualInitDataInput.value = savedInitData.trim();
+                    }
                     return savedInitData.trim();
                 } else {
                     console.warn('⚠️ Сохраненный initData не соответствует текущему пользователю');
                     console.warn(`Сохраненный user_id: ${savedUserId}, user_id в initData: ${initDataUserId}`);
                     // Очищаем несоответствующий initData
                     localStorage.removeItem('current_init_data');
+                    localStorage.removeItem('manual_init_data');
                 }
             } else {
                 // Если не удалось извлечь user_id, но есть сохраненный - используем
                 console.log('✓ Используется сохраненный initData (не удалось проверить user_id)');
+                // Обновляем поле ввода
+                const manualInitDataInput = document.getElementById('manual-initdata');
+                if (manualInitDataInput) {
+                    manualInitDataInput.value = savedInitData.trim();
+                }
                 return savedInitData.trim();
             }
         } catch (e) {
             console.warn('Не удалось проверить соответствие сохраненного initData:', e);
             // В случае ошибки используем сохраненный initData
+            // Обновляем поле ввода
+            const manualInitDataInput = document.getElementById('manual-initdata');
+            if (manualInitDataInput) {
+                manualInitDataInput.value = savedInitData.trim();
+            }
             return savedInitData.trim();
         }
     }
     
-    // ПРИОРИТЕТ 3: manual_init_data (введенный вручную)
-    const manualInitData = localStorage.getItem('manual_init_data');
-    if (manualInitData && manualInitData.trim() && manualInitData.length >= 50) {
-        return manualInitData.trim();
-    }
-    
-    // ПРИОРИТЕТ 4: Пытаемся получить данные пользователя из Telegram (даже если initData недоступен)
+    // ПРИОРИТЕТ 3: Пытаемся получить данные пользователя из Telegram (даже если initData недоступен)
     const telegramUserInfo = getTelegramUserInfo();
     if (telegramUserInfo) {
         console.log('✓ Получены данные пользователя из Telegram (initDataUnsafe):');
@@ -1876,6 +1987,15 @@ function getCurrentInitData() {
             console.warn(`Сохраненный: ${savedUserId}, Текущий: ${telegramUserInfo.id}`);
             // Очищаем несоответствующие данные
             localStorage.removeItem('current_init_data');
+            localStorage.removeItem('manual_init_data');
+        }
+        
+        // ПРИОРИТЕТ 3.1: Если есть токен, пытаемся получить initData с сервера
+        const savedToken = localStorage.getItem('game_access_token');
+        if (savedToken) {
+            console.log('⚠️ tg.initData недоступен, но есть токен - пытаемся получить initData с сервера...');
+            // Асинхронно получаем initData с сервера (но функция синхронная, поэтому вернем null)
+            // initData будет получен асинхронно в функции инициализации
         }
     } else if (savedUserId || savedUsername) {
         console.warn('⚠️ initData недоступен, но есть сохраненные данные пользователя:');
@@ -1912,8 +2032,17 @@ async function getSavedInitDataFromServer() {
             const data = await response.json();
             if (data.success && data.initData) {
                 console.log('✓ Получен сохраненный initData с сервера');
-                // Сохраняем в localStorage
+                // ВАЖНО: Сохраняем в localStorage как последний рабочий initData
                 localStorage.setItem('current_init_data', data.initData);
+                localStorage.setItem('manual_init_data', data.initData);
+                
+                // Заполняем поле ввода последним рабочим initData
+                const manualInitDataInput = document.getElementById('manual-initdata');
+                if (manualInitDataInput) {
+                    manualInitDataInput.value = data.initData;
+                    console.log('✓ Поле manual-initdata заполнено последним рабочим initData с сервера');
+                }
+                
                 return data.initData;
             }
         } else {
@@ -2264,7 +2393,18 @@ async function loginWithInitData() {
             // ВАЖНО: Сохраняем initData в localStorage, чтобы он не терялся после обновления страницы
             if (initData) {
                 localStorage.setItem('current_init_data', initData);
+                // ВАЖНО: Сохраняем рабочий initData в manual_init_data, чтобы он отображался в поле
+                // Это последний рабочий initData для пользователя
+                localStorage.setItem('manual_init_data', initData);
                 console.log('✓ initData сохранен в localStorage для использования в запросах');
+                console.log('✓ Рабочий initData сохранен в manual_init_data для отображения в поле');
+                
+                // Обновляем поле ввода, если оно существует
+                const manualInitDataInput = document.getElementById('manual-initdata');
+                if (manualInitDataInput) {
+                    manualInitDataInput.value = initData;
+                    console.log('✓ Поле manual-initdata обновлено рабочим initData');
+                }
             }
             
             // ВАЖНО: Проверяем, что токен действительно сохранен
