@@ -68,28 +68,27 @@ console.log('Используется прокси:', !!API_SERVER_URL);
 // Функции для работы с настройками
 async function loadSettings() {
     const apiUrl = localStorage.getItem('api_server_url') || '';
-    // ВАЖНО: initData всегда берется из БД, не из localStorage
-    // manual_init_data используется только для ручного ввода пользователем
-    let manualInitData = '';
+    // ВАЖНО: Приоритет: ручной ввод > БД
+    // Сначала проверяем ручной ввод (если пользователь ввел новый initData)
+    let manualInitData = localStorage.getItem('manual_init_data') || '';
     
-    // ВАЖНО: Если есть токен, получаем последний актуальный initData из БД
-    const savedToken = localStorage.getItem('game_access_token');
-    if (savedToken) {
-        console.log('Получаем последний актуальный initData из БД...');
-        try {
-            const savedInitData = await getSavedInitDataFromServer();
-            if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
-                manualInitData = savedInitData;
-                console.log('✓ Получен initData из БД при загрузке настроек');
+    // Если нет ручного ввода, получаем из БД
+    if (!manualInitData || manualInitData.length < 50) {
+        const savedToken = localStorage.getItem('game_access_token');
+        if (savedToken) {
+            console.log('Ручной ввод не найден, получаем initData из БД...');
+            try {
+                const savedInitData = await getSavedInitDataFromServer();
+                if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
+                    manualInitData = savedInitData;
+                    console.log('✓ Получен initData из БД при загрузке настроек');
+                }
+            } catch (e) {
+                console.warn('Не удалось получить initData из БД при загрузке настроек:', e);
             }
-        } catch (e) {
-            console.warn('Не удалось получить initData из БД при загрузке настроек:', e);
         }
-    }
-    
-    // Если не получили из БД, проверяем ручной ввод (только для отображения)
-    if (!manualInitData) {
-        manualInitData = localStorage.getItem('manual_init_data') || '';
+    } else {
+        console.log('✓ Используется initData из ручного ввода (приоритет над БД)');
     }
     
     if (document.getElementById('api-server-url')) {
@@ -1869,8 +1868,8 @@ function getTelegramUserInfo() {
     return null;
 }
 
-// Получение актуального initData (из tg.initData или БД)
-// ВАЖНО: initData всегда берется из БД, не из localStorage
+// Получение актуального initData (из tg.initData, ручного ввода или БД)
+// ВАЖНО: Приоритет: tg.initData > ручной ввод > БД
 async function getCurrentInitData() {
     // ПРИОРИТЕТ 1: tg.initData (от текущего пользователя Telegram)
     if (tg?.initData && tg.initData.trim() && tg.initData.length >= 50) {
@@ -1897,7 +1896,14 @@ async function getCurrentInitData() {
         return tg.initData.trim();
     }
     
-    // ПРИОРИТЕТ 2: Получаем initData из БД
+    // ПРИОРИТЕТ 2: manual_init_data (ручной ввод пользователя) - имеет приоритет над БД
+    const manualInitData = localStorage.getItem('manual_init_data');
+    if (manualInitData && manualInitData.trim() && manualInitData.length >= 50) {
+        console.log('✓ Используется initData, введенный пользователем вручную (приоритет над БД)');
+        return manualInitData.trim();
+    }
+    
+    // ПРИОРИТЕТ 3: Получаем initData из БД (только если нет ручного ввода)
     const savedToken = localStorage.getItem('game_access_token');
     if (savedToken) {
         try {
@@ -1914,13 +1920,6 @@ async function getCurrentInitData() {
         } catch (e) {
             console.warn('Не удалось получить initData из БД:', e);
         }
-    }
-    
-    // ПРИОРИТЕТ 3: manual_init_data (только для ручного ввода пользователем)
-    const manualInitData = localStorage.getItem('manual_init_data');
-    if (manualInitData && manualInitData.trim() && manualInitData.length >= 50) {
-        console.log('✓ Используется initData, введенный пользователем вручную');
-        return manualInitData.trim();
     }
     
     // ПРИОРИТЕТ 4: Пытаемся получить данные пользователя из Telegram (даже если initData недоступен)
@@ -2072,20 +2071,21 @@ async function loginWithInitData() {
         
         let initData = '';
         
-        // ПРИОРИТЕТ: 1) tg.initData (от текущего пользователя Telegram), 2) из БД, 3) manualInitData (ручной ввод)
+        // ПРИОРИТЕТ: 1) tg.initData, 2) manualInitData (ручной ввод - приоритет над БД), 3) из БД
         if (tg?.initData && tg.initData.trim() && tg.initData.length >= 50) {
             initData = tg.initData.trim();
             console.log('✓ Используется initData от Telegram (приоритет)');
             console.log('Это гарантирует, что используются данные текущего пользователя');
+        } else if (manualInitData && manualInitData.trim() && manualInitData.length >= 50) {
+            // ВАЖНО: Ручной ввод имеет приоритет над БД
+            initData = manualInitData.trim();
+            console.log('✓ Используется initData, введенный пользователем вручную (приоритет над БД)');
         } else {
-            // Пытаемся получить initData из БД
+            // Пытаемся получить initData из БД (только если нет ручного ввода)
             const savedInitData = await getSavedInitDataFromServer();
             if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
                 initData = savedInitData;
                 console.log('✓ Используется initData из БД');
-            } else if (manualInitData && manualInitData.trim() && manualInitData.length >= 50) {
-                initData = manualInitData.trim();
-                console.log('✓ Используется initData, введенный пользователем вручную в настройках');
             } else {
                 console.error('❌ initData недоступен! Пожалуйста, введите initData в настройках или войдите заново.');
                 throw new Error('initData не найден. Пожалуйста, введите initData в настройках или войдите заново.');
