@@ -1900,34 +1900,40 @@ function updateUserNameDisplay() {
         return;
     }
     
-    // ПРИОРИТЕТ 1: Пытаемся получить имя из Telegram WebApp API
-    const telegramUserInfo = getTelegramUserInfo();
+    // ПРИОРИТЕТ 1: Проверяем URL параметры (username переданный через кнопку бота)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlUsername = urlParams.get('username');
     let userName = null;
     
-    if (telegramUserInfo) {
-        // Используем first_name, если есть, иначе username
-        userName = telegramUserInfo.first_name || telegramUserInfo.username || null;
+    if (urlUsername) {
+        userName = urlUsername;
+        // Сохраняем username из URL в localStorage
+        localStorage.setItem('game_username', urlUsername);
     }
     
-    // ПРИОРИТЕТ 2: Если не получили из Telegram API, проверяем URL параметры
+    // ПРИОРИТЕТ 2: Пытаемся получить username из Telegram WebApp API
     if (!userName) {
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlUsername = urlParams.get('username');
-        if (urlUsername) {
-            userName = urlUsername;
-            // Сохраняем username из URL в localStorage
-            localStorage.setItem('game_username', urlUsername);
+        const telegramUserInfo = getTelegramUserInfo();
+        if (telegramUserInfo) {
+            // Используем username, если есть, иначе first_name
+            userName = telegramUserInfo.username || telegramUserInfo.first_name || null;
+            // Сохраняем username в localStorage, если получили из Telegram
+            if (telegramUserInfo.username) {
+                localStorage.setItem('game_username', telegramUserInfo.username);
+            }
         }
     }
     
-    // ПРИОРИТЕТ 3: Если не получили из URL, пытаемся из localStorage
+    // ПРИОРИТЕТ 3: Если не получили из URL или Telegram API, пытаемся из localStorage
     if (!userName) {
-        userName = localStorage.getItem('game_first_name') || localStorage.getItem('game_username') || null;
+        // Сначала пытаемся получить username, потом first_name
+        userName = localStorage.getItem('game_username') || localStorage.getItem('game_first_name') || null;
     }
     
     if (userName) {
-        // Если это username (начинается с @ или не содержит пробелов), добавляем @
-        const displayName = userName.startsWith('@') ? userName : (userName.includes(' ') ? userName : `@${userName}`);
+        // Если это username (не содержит пробелов и не начинается с @), добавляем @
+        // Если это first_name (содержит пробелы), оставляем как есть
+        const displayName = userName.includes(' ') ? userName : (userName.startsWith('@') ? userName : `@${userName}`);
         userNameTextElement.textContent = `👤 ${displayName}`;
         userNameElement.style.display = 'block';
     } else {
