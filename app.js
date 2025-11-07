@@ -68,27 +68,22 @@ console.log('Используется прокси:', !!API_SERVER_URL);
 // Функции для работы с настройками
 async function loadSettings() {
     const apiUrl = localStorage.getItem('api_server_url') || '';
-    // ВАЖНО: Приоритет: ручной ввод > БД
-    // Сначала проверяем ручной ввод (если пользователь ввел новый initData)
-    let manualInitData = localStorage.getItem('manual_init_data') || '';
+    // ВАЖНО: initData НЕ сохраняется в localStorage, только получается из БД по токену
+    let manualInitData = '';
     
-    // Если нет ручного ввода, получаем из БД
-    if (!manualInitData || manualInitData.length < 50) {
-        const savedToken = localStorage.getItem('game_access_token');
-        if (savedToken) {
-            console.log('Ручной ввод не найден, получаем initData из БД...');
-            try {
-                const savedInitData = await getSavedInitDataFromServer();
-                if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
-                    manualInitData = savedInitData;
-                    console.log('✓ Получен initData из БД при загрузке настроек');
-                }
-            } catch (e) {
-                console.warn('Не удалось получить initData из БД при загрузке настроек:', e);
+    // Получаем initData из БД, если есть токен
+    const savedToken = localStorage.getItem('game_access_token');
+    if (savedToken) {
+        console.log('Получаем initData из БД по токену...');
+        try {
+            const savedInitData = await getSavedInitDataFromServer();
+            if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
+                manualInitData = savedInitData;
+                console.log('✓ Получен initData из БД при загрузке настроек');
             }
+        } catch (e) {
+            console.warn('Не удалось получить initData из БД при загрузке настроек:', e);
         }
-    } else {
-        console.log('✓ Используется initData из ручного ввода (приоритет над БД)');
     }
     
     if (document.getElementById('api-server-url')) {
@@ -121,11 +116,8 @@ async function saveSettings() {
     GAME_API_URL = getGameApiUrl();
     
     // Если введен initData, выполняем login для получения токена
-    // ВАЖНО: manual_init_data сохраняется только для ручного ввода пользователем, не автоматически
+    // ВАЖНО: initData НЕ сохраняется в localStorage, только отправляется на сервер для сохранения в БД
     if (manualInitData) {
-        // Сохраняем только если пользователь ввел вручную (для возможности редактирования)
-        localStorage.setItem('manual_init_data', manualInitData);
-        
         try {
             console.log('Выполнение login с введенным initData...');
             const loginUrl = API_SERVER_URL 
@@ -152,7 +144,9 @@ async function saveSettings() {
                         localStorage.setItem('game_user_id', data.userId.toString());
                     }
                     console.log('✅ Токен получен из initData');
-                    tg.showAlert('✅ Настройки сохранены!\n\nТокен получен из initData.\n\nПерезагрузите страницу для применения изменений.');
+                    // После успешной авторизации показываем интерфейс
+                    showMainInterface();
+                    tg.showAlert('✅ Авторизация успешна!\n\nИнтерфейс готов к использованию.');
                 } else {
                     const errorMsg = data.message || data.error || 'Неизвестная ошибка';
                     console.error('Ошибка login:', errorMsg);
@@ -167,8 +161,6 @@ async function saveSettings() {
             console.error('Ошибка при сохранении initData:', error);
             tg.showAlert(`⚠️ Настройки сохранены, но ошибка при получении токена:\n${error.message}`);
         }
-    } else {
-        localStorage.removeItem('manual_init_data');
     }
     
     console.log('Настройки сохранены:');
@@ -186,10 +178,11 @@ async function saveSettings() {
 function resetSettings() {
     if (confirm('Вы уверены, что хотите сбросить все настройки?')) {
         localStorage.removeItem('api_server_url');
-        localStorage.removeItem('manual_init_data');
         localStorage.removeItem('game_access_token');
         localStorage.removeItem('game_refresh_token');
         localStorage.removeItem('game_user_id');
+        localStorage.removeItem('game_username');
+        localStorage.removeItem('game_first_name');
         
         document.getElementById('api-server-url').value = '';
         document.getElementById('manual-initdata').value = '';
@@ -205,7 +198,7 @@ function resetSettings() {
 function updateSettingsDisplay() {
     const apiUrl = localStorage.getItem('api_server_url') || '';
     const token = localStorage.getItem('game_access_token') || '';
-    const manualInitData = localStorage.getItem('manual_init_data') || '';
+    // ВАЖНО: initData не хранится в localStorage, только в БД
     
     const currentApiUrl = document.getElementById('current-api-url');
     const currentTokenStatus = document.getElementById('current-token-status');
@@ -215,12 +208,8 @@ function updateSettingsDisplay() {
     }
     
     if (currentTokenStatus) {
-        if (tg?.initData) {
-            currentTokenStatus.textContent = 'Из Telegram (автообновление)';
-        } else if (manualInitData) {
-            currentTokenStatus.textContent = 'Из initData (автообновление)';
-        } else if (token) {
-            currentTokenStatus.textContent = 'Получен автоматически';
+        if (token) {
+            currentTokenStatus.textContent = 'Получен (хранится в БД)';
         } else {
             currentTokenStatus.textContent = 'Не сохранен';
         }
@@ -249,13 +238,47 @@ function hideSettingsForm() {
     updateSettingsDisplay();
 }
 
+// Показать основной интерфейс (после успешной авторизации)
+async function showMainInterface() {
+    // Скрываем форму настроек
+    document.getElementById('settings-section').style.display = 'none';
+    
+    // Показываем все секции интерфейса
+    document.getElementById('boss-section').style.display = 'block';
+    document.getElementById('boss-select-section').style.display = 'block';
+    document.getElementById('prison-section').style.display = 'block';
+    document.getElementById('stats-section').style.display = 'block';
+    document.getElementById('biceps-section').style.display = 'block';
+    
+    updateStatus(true);
+    
+    // Загружаем данные только после успешной авторизации
+    console.log('Загрузка данных после авторизации...');
+    await Promise.allSettled([
+        loadBossInfo(),
+        loadBossList(),
+        loadPrisons(),  // Загружает тюрьмы и информацию об игроке параллельно
+        loadStats()
+    ]).then(results => {
+        results.forEach((result, index) => {
+            const funcNames = ['loadBossInfo', 'loadBossList', 'loadPrisons', 'loadStats'];
+            if (result.status === 'rejected') {
+                console.error(`Ошибка в ${funcNames[index]}:`, result.reason);
+            }
+        });
+    });
+    
+    // Обновляем статистику каждые 30 секунд
+    setInterval(loadStats, 30000);
+}
+
 async function toggleSettings() {
     const settingsSection = document.getElementById('settings-section');
     if (settingsSection.style.display === 'none' || !settingsSection.style.display) {
         settingsSection.style.display = 'block';
         await loadSettings();
         // Показываем форму, если настройки не сохранены
-        const hasSettings = localStorage.getItem('api_server_url') || localStorage.getItem('manual_init_data');
+        const hasSettings = localStorage.getItem('api_server_url');
         if (!hasSettings) {
             // Показываем приветствие при первом запуске
             const welcome = document.getElementById('settings-welcome');
@@ -285,17 +308,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Инициализируем селектор типа взаимодействия
     initInteractionTypeSelector();
     
-    // Проверяем, нужно ли показать настройки при первом запуске
-    // НЕ показываем настройки, если пользователь идентифицирован через Telegram
-    const telegramUserInfo = getTelegramUserInfo();
-    const hasSettings = localStorage.getItem('api_server_url') || localStorage.getItem('manual_init_data');
+    // ВАЖНО: Показываем интерфейс ТОЛЬКО если есть токен (пользователь ввел initData и авторизовался)
+    // Если нет токена - показываем только форму ввода initData
     const hasToken = localStorage.getItem('game_access_token');
+    const telegramUserInfo = getTelegramUserInfo();
+    const hasSettings = localStorage.getItem('api_server_url');
     
-    // Показываем настройки только если:
-    // 1. Нет настроек И
-    // 2. Нет данных пользователя из Telegram И
-    // 3. Нет сохраненного токена
-    if (!hasSettings && !telegramUserInfo && !hasToken) {
+    // Показываем форму ввода initData только если:
+    // 1. Нет токена (пользователь не авторизован)
+    if (!hasToken) {
         // Показываем настройки при первом запуске
         document.getElementById('settings-section').style.display = 'block';
         const welcome = document.getElementById('settings-welcome');
@@ -307,15 +328,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             showSettingsForm();
         }
         
-        // Скрываем другие секции до настройки
+        // Скрываем все секции интерфейса до ввода initData
         document.getElementById('boss-section').style.display = 'none';
         document.getElementById('boss-select-section').style.display = 'none';
         document.getElementById('prison-section').style.display = 'none';
         document.getElementById('stats-section').style.display = 'none';
         document.getElementById('biceps-section').style.display = 'none';
         
-        // НЕ прерываем загрузку - продолжаем авторизацию
-        // Пользователь может настроить позже через кнопку "Настройки"
+        // НЕ продолжаем авторизацию - пользователь должен ввести initData
+        return; // Прерываем выполнение, показываем только форму ввода initData
     } else if (telegramUserInfo) {
         // Если есть данные пользователя из Telegram, сохраняем их
         console.log('✓ Пользователь идентифицирован через Telegram:');
@@ -371,9 +392,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.warn('initData доступен ТОЛЬКО когда Mini App открыт через бота в Telegram');
     }
     
-    // Проверяем приоритет: сначала tg.initData (от текущего пользователя Telegram),
-    // потом manual_init_data (введенный вручную), потом сохраненный токен
-    const manualInitData = localStorage.getItem('manual_init_data');
+    // ВАЖНО: initData получаем ТОЛЬКО из БД по токену, не из localStorage
     const savedToken = localStorage.getItem('game_access_token');
     let token = null;
     
@@ -491,10 +510,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
     
-    // ПРИОРИТЕТ 4: Если нет tg.initData, но есть manual_init_data - используем его
-    if (!token && manualInitData) {
-        console.log('Используется initData, введенный вручную');
-        // Пытаемся получить токен из initData
+    // ПРИОРИТЕТ 4: Если нет токена, но есть tg.initData - пытаемся авторизоваться
+    if (!token && tg?.initData && tg.initData.trim() && tg.initData.length >= 50) {
+        console.log('Используется tg.initData для авторизации');
+        // Пытаемся получить токен из tg.initData
         try {
             const loginUrl = API_SERVER_URL 
                 ? `${API_SERVER_URL}/auth/login`
@@ -506,7 +525,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify({ initData: manualInitData })
+                body: JSON.stringify({ initData: tg.initData.trim() })
             });
             
             if (response.ok) {
@@ -563,103 +582,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Токен первые 20 символов:', token.substring(0, 20) + '...');
         
         // Сохраняем токен в localStorage
-        localStorage.setItem('game_access_token', token);
+            localStorage.setItem('game_access_token', token);
         
-        updateStatus(true);
-        
-        // Показываем все секции
-        document.getElementById('boss-section').style.display = 'block';
-        document.getElementById('boss-select-section').style.display = 'block';
-        document.getElementById('prison-section').style.display = 'block';
-        document.getElementById('stats-section').style.display = 'block';
-        document.getElementById('biceps-section').style.display = 'block';
-        
-        // Загружаем данные только после успешной авторизации
-        console.log('Загрузка данных после авторизации...');
-        await Promise.allSettled([
-            loadBossInfo(),
-            loadBossList(),
-            loadPrisons(),  // Загружает тюрьмы и информацию об игроке параллельно
-            loadStats()
-        ]).then(results => {
-            results.forEach((result, index) => {
-                const funcNames = ['loadBossInfo', 'loadBossList', 'loadPrisons', 'loadStats'];
-                if (result.status === 'rejected') {
-                    console.error(`Ошибка в ${funcNames[index]}:`, result.reason);
-                }
-            });
-        });
-        
-        // Обновляем статистику каждые 30 секунд
-        setInterval(loadStats, 30000);
-        
-        // Показываем секцию бицухи
-        document.getElementById('biceps-section').style.display = 'block';
+        // Показываем интерфейс после успешной авторизации
+        showMainInterface();
     } else {
-        // Даже если авторизация не удалась, проверяем наличие сохраненного токена
-        // или данных пользователя из Telegram
+        // Если авторизация не удалась, проверяем наличие сохраненного токена
         const savedToken = localStorage.getItem('game_access_token');
-        const telegramUserInfo = getTelegramUserInfo();
         
-        if (savedToken || telegramUserInfo) {
-            if (savedToken) {
-                console.log('Используется сохраненный токен для загрузки данных');
-            } else if (telegramUserInfo) {
-                console.log('Пользователь идентифицирован через Telegram, но токен не найден');
-                console.log('Попробуйте обновить страницу для получения initData');
-            }
-            updateStatus(true);
-            
-            // Показываем все секции
-            document.getElementById('boss-section').style.display = 'block';
-            document.getElementById('boss-select-section').style.display = 'block';
-            document.getElementById('prison-section').style.display = 'block';
-            document.getElementById('stats-section').style.display = 'block';
-            document.getElementById('biceps-section').style.display = 'block';
-            
-            // Загружаем данные с сохраненным токеном
-            console.log('Загрузка данных с сохраненным токеном...');
-            await Promise.allSettled([
-                loadBossInfo(),
-                loadBossList(),
-                loadPrisons(),  // Загружает тюрьмы и информацию об игроке параллельно
-                loadStats()
-            ]).then(results => {
-                results.forEach((result, index) => {
-                    const funcNames = ['loadBossInfo', 'loadBossList', 'loadPrisons', 'loadStats'];
-                    if (result.status === 'rejected') {
-                        console.error(`Ошибка в ${funcNames[index]}:`, result.reason);
-                    }
-                });
-            });
-            
-            // Обновляем статистику каждые 30 секунд
-            setInterval(loadStats, 30000);
+        if (savedToken) {
+            console.log('Используется сохраненный токен для загрузки данных');
+            // Показываем интерфейс, если есть токен
+            showMainInterface();
         } else {
             console.error('❌ Авторизация не удалась и токен не найден');
+            console.error('Показываем только форму ввода initData');
+            // НЕ показываем интерфейс - пользователь должен ввести initData
             updateStatus(false);
-            
-            // Показываем секции, но с ошибкой
-            document.getElementById('boss-section').style.display = 'block';
-            document.getElementById('boss-select-section').style.display = 'block';
-            document.getElementById('prison-section').style.display = 'block';
-            document.getElementById('stats-section').style.display = 'block';
-            document.getElementById('biceps-section').style.display = 'block';
-        
-        const errorMsg = `
-            <p class="error">
-                ❌ Ошибка авторизации<br><br>
-                Возможные причины:<br>
-                1. initData не валиден<br>
-                2. CORS блокирует запросы<br>
-                3. API недоступен<br><br>
-                <small>Проверьте настройки или введите токен вручную</small>
-            </p>
-        `;
-        document.getElementById('boss-info').innerHTML = errorMsg;
-        
-        // Показываем кнопку для ручной авторизации
-        showManualAuthButton();
         }
     }
 });
@@ -823,11 +762,10 @@ async function startBicepsUpgrade() {
     
     for (const toUserId of userIds) {
         try {
-            // ВАЖНО: Получаем актуальный токен в начале каждой итерации
-            // Это гарантирует, что после обновления токена все последующие запросы используют новый токен
-            // ВАЖНО: Используем await getAccessToken() для получения актуального токена из localStorage
-            // Это гарантирует, что если токен был обновлен в предыдущей итерации, мы получим новый токен
-            let token = await getAccessToken();
+            // ВАЖНО: Получаем актуальный токен в начале КАЖДОЙ итерации из localStorage
+            // Это гарантирует, что после обновления токена в предыдущей итерации, мы используем новый токен
+            // НЕ используем переменную token из внешней области видимости, всегда получаем заново
+            const token = await getAccessToken();
             if (!token) {
                 throw new Error('Токен не найден');
             }
@@ -841,7 +779,10 @@ async function startBicepsUpgrade() {
                 console.warn(`Токен из getAccessToken(): ${token.substring(0, 20)}...`);
                 console.warn(`Токен из localStorage: ${tokenFromStorage.substring(0, 20)}...`);
                 console.warn(`Используем токен из localStorage`);
-                token = tokenFromStorage;
+                // Обновляем токен в localStorage, если есть расхождение
+                if (tokenFromStorage.length > token.length || tokenFromStorage !== token) {
+                    console.log(`✓ Используем токен из localStorage: ${tokenFromStorage.substring(0, 20)}...`);
+                }
             }
             
             // ВАЖНО: Получаем актуальное значение селектора каждый раз ПРЯМО ИЗ DOM
@@ -973,7 +914,7 @@ async function startBicepsUpgrade() {
                         console.log('✓ Найден initData для обновления токена');
                         const newToken = await loginWithInitData();
                         if (newToken) {
-                            // ВАЖНО: Сохраняем новый токен в localStorage ПЕРЕД обновлением переменной
+                            // ВАЖНО: Сохраняем новый токен в localStorage
                             localStorage.setItem('game_access_token', newToken);
                             
                             // ВАЖНО: Проверяем, что токен действительно сохранен
@@ -987,24 +928,28 @@ async function startBicepsUpgrade() {
                                 const verifyToken2 = localStorage.getItem('game_access_token');
                                 if (verifyToken2 !== newToken) {
                                     console.error(`❌ Повторная попытка сохранения также не удалась!`);
+                                } else {
+                                    console.log(`✓ Токен сохранен после повторной попытки`);
                                 }
+                            } else {
+                                console.log(`✓ Токен успешно сохранен в localStorage`);
                             }
                             
-                            // ВАЖНО: Принудительно обновляем переменную token
-                            token = newToken;
-                            console.log(`✓ Токен обновлен в localStorage и переменной`);
-                            console.log(`Новый токен (первые 20 символов): ${token.substring(0, 20)}...`);
+                            console.log(`✓ Токен обновлен в localStorage`);
+                            console.log(`Новый токен (первые 20 символов): ${newToken.substring(0, 20)}...`);
                             console.log(`Токен из localStorage (первые 20 символов): ${localStorage.getItem('game_access_token')?.substring(0, 20)}...`);
                             
                             // ВАЖНО: Небольшая задержка для гарантии, что localStorage обновился
-                            await new Promise(resolve => setTimeout(resolve, 50));
+                            await new Promise(resolve => setTimeout(resolve, 100));
                             
                             // ВАЖНО: Получаем токен заново из localStorage перед повторным запросом
                             // Это гарантирует, что мы используем актуальный токен
                             const refreshedToken = await getAccessToken();
-                            if (refreshedToken && refreshedToken !== token) {
-                                console.log(`⚠️ Обнаружено расхождение токенов, используем токен из getAccessToken()`);
-                                token = refreshedToken;
+                            console.log(`Токен после обновления из getAccessToken() (первые 20 символов): ${refreshedToken?.substring(0, 20)}...`);
+                            if (!refreshedToken || refreshedToken !== newToken) {
+                                console.error(`❌ ОШИБКА: getAccessToken() вернул другой токен после обновления!`);
+                                console.error(`Ожидался: ${newToken.substring(0, 20)}...`);
+                                console.error(`Получен: ${refreshedToken ? refreshedToken.substring(0, 20) : 'null'}...`);
                             }
                             
                             // Повторяем запрос с новым токеном (используем тот же requestBody с правильным типом)
@@ -1018,8 +963,11 @@ async function startBicepsUpgrade() {
                             console.log(`✓ Токен обновлен, повторяю запрос для ${toUserId}`);
                             console.log(`=== ПОВТОРНАЯ ОТПРАВКА ЗАПРОСА ДЛЯ ${toUserId} ===`);
                             console.log(`Тип взаимодействия при повторе: ${currentInteractionTypeRetry}`);
-                            console.log(`Используемый токен в заголовке (первые 20 символов): ${token.substring(0, 20)}...`);
+                            // ВАЖНО: Используем refreshedToken или получаем токен заново через getApiHeaders()
+                            const finalToken = refreshedToken || newToken;
+                            console.log(`Используемый токен в заголовке (первые 20 символов): ${finalToken?.substring(0, 20)}...`);
                             console.log(`Обновленный requestBody:`, JSON.stringify(requestBody, null, 2));
+                            // ВАЖНО: getApiHeaders() всегда получает токен заново из localStorage
                             response = await fetch(`${GAME_API_URL}/interaction/perform`, {
                                 method: 'POST',
                                 headers: await getApiHeaders(),
@@ -1046,7 +994,7 @@ async function startBicepsUpgrade() {
                         } else if (result.result === 'lose') {
                             results.unshift(`💥 ${toUserId}: Проиграл! ${result.message || ''}`);
                         } else {
-                            results.unshift(`✅ ${toUserId}: ${result.message || 'Успешно'}`);
+                    results.unshift(`✅ ${toUserId}: ${result.message || 'Успешно'}`);
                         }
                     } else {
                         // Для остальных типов взаимодействий
@@ -1868,10 +1816,12 @@ function getTelegramUserInfo() {
     return null;
 }
 
-// Получение актуального initData (из tg.initData, ручного ввода или БД)
-// ВАЖНО: Приоритет: tg.initData > ручной ввод > БД
+// Получение актуального initData ТОЛЬКО из БД по токену пользователя
+// ВАЖНО: initData НЕ хранится в localStorage, только в БД на сервере
+// Это гарантирует, что каждый пользователь получает только свой initData
 async function getCurrentInitData() {
-    // ПРИОРИТЕТ 1: tg.initData (от текущего пользователя Telegram)
+    // ПРИОРИТЕТ 1: tg.initData (от текущего пользователя Telegram) - используется только для авторизации
+    // После авторизации initData сохраняется в БД и больше не используется из tg.initData
     if (tg?.initData && tg.initData.trim() && tg.initData.length >= 50) {
         // Также извлекаем и сохраняем user_id и username для идентификации
         const userInfo = getTelegramUserInfo();
@@ -1887,7 +1837,7 @@ async function getCurrentInitData() {
             }
         }
         
-        // Обновляем поле ввода (не сохраняем в localStorage)
+        // Обновляем поле ввода для отображения (не сохраняем в localStorage)
         const manualInitDataInput = document.getElementById('manual-initdata');
         if (manualInitDataInput) {
             manualInitDataInput.value = tg.initData.trim();
@@ -1896,21 +1846,15 @@ async function getCurrentInitData() {
         return tg.initData.trim();
     }
     
-    // ПРИОРИТЕТ 2: manual_init_data (ручной ввод пользователя) - имеет приоритет над БД
-    const manualInitData = localStorage.getItem('manual_init_data');
-    if (manualInitData && manualInitData.trim() && manualInitData.length >= 50) {
-        console.log('✓ Используется initData, введенный пользователем вручную (приоритет над БД)');
-        return manualInitData.trim();
-    }
-    
-    // ПРИОРИТЕТ 3: Получаем initData из БД (только если нет ручного ввода)
+    // ПРИОРИТЕТ 2: Получаем initData из БД по токену пользователя
+    // Это единственный безопасный способ - каждый пользователь получает только свой initData
     const savedToken = localStorage.getItem('game_access_token');
     if (savedToken) {
         try {
             const savedInitData = await getSavedInitDataFromServer();
             if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
-                console.log('✓ Используется initData из БД');
-                // Обновляем поле ввода (не сохраняем в localStorage)
+                console.log('✓ Используется initData из БД (безопасно, привязан к токену пользователя)');
+                // Обновляем поле ввода для отображения (не сохраняем в localStorage)
                 const manualInitDataInput = document.getElementById('manual-initdata');
                 if (manualInitDataInput) {
                     manualInitDataInput.value = savedInitData.trim();
@@ -1922,7 +1866,7 @@ async function getCurrentInitData() {
         }
     }
     
-    // ПРИОРИТЕТ 4: Пытаемся получить данные пользователя из Telegram (даже если initData недоступен)
+    // ПРИОРИТЕТ 3: Пытаемся получить данные пользователя из Telegram (даже если initData недоступен)
     const telegramUserInfo = getTelegramUserInfo();
     if (telegramUserInfo) {
         console.log('✓ Получены данные пользователя из Telegram (initDataUnsafe):');
@@ -2029,7 +1973,10 @@ function getAccessTokenSync() {
 }
 
 // Создание заголовков для API запросов с токеном и initData
+// ВАЖНО: Всегда получает актуальный токен из localStorage, не использует кэш
 async function getApiHeaders(additionalHeaders = {}) {
+    // ВАЖНО: Всегда получаем токен заново из localStorage, чтобы использовать актуальный токен
+    // Это гарантирует, что после обновления токена все запросы используют новый токен
     const token = await getAccessToken();
     // ВАЖНО: initData всегда получаем из БД или tg.initData, не из localStorage
     const initData = await getCurrentInitData();
@@ -2066,29 +2013,24 @@ async function loginWithInitData() {
             return null;
         }
         
-        // Проверяем, есть ли сохраненный initData от пользователя
-        const manualInitData = localStorage.getItem('manual_init_data');
-        
+        // ВАЖНО: initData получаем ТОЛЬКО из БД по токену пользователя
+        // Это гарантирует безопасность - каждый пользователь получает только свой initData
         let initData = '';
         
-        // ПРИОРИТЕТ: 1) tg.initData, 2) manualInitData (ручной ввод - приоритет над БД), 3) из БД
+        // ПРИОРИТЕТ 1: tg.initData (только для первой авторизации)
         if (tg?.initData && tg.initData.trim() && tg.initData.length >= 50) {
             initData = tg.initData.trim();
-            console.log('✓ Используется initData от Telegram (приоритет)');
-            console.log('Это гарантирует, что используются данные текущего пользователя');
-        } else if (manualInitData && manualInitData.trim() && manualInitData.length >= 50) {
-            // ВАЖНО: Ручной ввод имеет приоритет над БД
-            initData = manualInitData.trim();
-            console.log('✓ Используется initData, введенный пользователем вручную (приоритет над БД)');
+            console.log('✓ Используется initData от Telegram (для авторизации)');
+            console.log('После авторизации initData будет сохранен в БД');
         } else {
-            // Пытаемся получить initData из БД (только если нет ручного ввода)
+            // ПРИОРИТЕТ 2: Получаем initData из БД по токену пользователя
             const savedInitData = await getSavedInitDataFromServer();
             if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
                 initData = savedInitData;
-                console.log('✓ Используется initData из БД');
+                console.log('✓ Используется initData из БД (безопасно, привязан к токену)');
             } else {
-                console.error('❌ initData недоступен! Пожалуйста, введите initData в настройках или войдите заново.');
-                throw new Error('initData не найден. Пожалуйста, введите initData в настройках или войдите заново.');
+                console.error('❌ initData недоступен! Пожалуйста, введите initData в настройках.');
+                throw new Error('initData не найден. Пожалуйста, введите initData в настройках.');
             }
         }
         
@@ -2364,6 +2306,9 @@ async function loginWithInitData() {
                 localStorage.setItem('game_first_name', data.first_name);
                 console.log('First name сохранен из login:', data.first_name);
             }
+            
+            // После успешной авторизации показываем интерфейс
+            showMainInterface();
             
             // Дополнительно получаем User ID из /player/init для точности
             try {
@@ -2910,10 +2855,10 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
             })
         });
         
-        // Обработка 401
+        // Обработка 401/403 - обновляем токен через initData из БД
         if (response.status === 401 || response.status === 403) {
-            const manualInitData = localStorage.getItem('manual_init_data');
-            if (manualInitData && manualInitData.trim()) {
+            const currentInitData = await getCurrentInitData();
+            if (currentInitData && currentInitData.trim()) {
                 const newToken = await loginWithInitData();
                 if (newToken) {
                     token = newToken;
