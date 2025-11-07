@@ -993,7 +993,8 @@ async function loadBossInfo() {
             'Authorization': `Bearer ${token}`
         };
         
-        const response = await fetch(`${GAME_API_URL}/boss/bootstrap`, {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        const response = await fetch(`${apiUrl}/boss/bootstrap`, {
             method: 'GET',
             headers: headers
         });
@@ -1008,7 +1009,7 @@ async function loadBossInfo() {
                     token = newToken;
                     headers['Authorization'] = `Bearer ${token}`;
                     // Повторяем запрос с новым токеном
-                    const retryResponse = await fetch(`${GAME_API_URL}/boss/bootstrap`, {
+                    const retryResponse = await fetch(`${apiUrl}/boss/bootstrap`, {
                         method: 'GET',
                         headers: headers
                     });
@@ -1070,70 +1071,15 @@ async function loadBossInfo() {
 }
 
 // Обновление информации о боссе
-async function attackBoss() {
+async function refreshBossInfo() {
     const btn = event.target;
     btn.disabled = true;
     btn.textContent = '🔄 Обновление...';
     
     try {
-        let token = await getAccessToken();
-        if (!token) {
-            tg.showAlert('❌ Требуется авторизация!\nОбновите страницу');
-            btn.disabled = false;
-            btn.textContent = '🔄 Обновить';
-            return;
-        }
-        
-        console.log('Обновление информации о боссе...');
-        
-        const apiUrl = API_SERVER_URL || GAME_API_URL;
-        let response = await fetch(`${apiUrl}/boss/bootstrap`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
-        });
-        
-        // Если получили 401, пытаемся обновить токен через сохраненный initData
-        if (response.status === 401 || response.status === 403) {
-            console.warn('Токен протух, пытаемся обновить через сохраненный initData...');
-            const manualInitData = localStorage.getItem('manual_init_data');
-            if (manualInitData && manualInitData.trim()) {
-                const newToken = await loginWithInitData();
-                if (newToken) {
-                    token = newToken;
-                    // Повторяем запрос с новым токеном
-                    response = await fetch(`${apiUrl}/boss/bootstrap`, {
-                        method: 'GET',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
-                        }
-                    });
-                }
-            }
-        }
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data && !data.error) {
-            // Обновляем информацию о боссе
-            loadBossInfo();
-            loadStats();
-            
-            tg.showPopup({
-                title: 'Успех!',
-                message: `Информация о боссе обновлена!`,
-                buttons: [{ text: 'OK', type: 'ok' }]
-            });
-        } else {
-            tg.showAlert(data.error || 'Ошибка обновления');
-        }
+        // Просто вызываем loadBossInfo(), которая уже делает запрос на /boss/bootstrap
+        await loadBossInfo();
+        await loadStats();
     } catch (error) {
         console.error('Ошибка обновления:', error);
         tg.showAlert(`❌ Ошибка: ${error.message}`);
