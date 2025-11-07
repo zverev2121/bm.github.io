@@ -679,6 +679,8 @@ async function startBicepsUpgrade() {
             if (!token) {
                 throw new Error('Токен не найден');
             }
+            console.log(`[${toUserId}] Токен получен в начале итерации (первые 20 символов): ${token.substring(0, 20)}...`);
+            console.log(`[${toUserId}] Токен из localStorage (первые 20 символов): ${localStorage.getItem('game_access_token')?.substring(0, 20)}...`);
             
             // ВАЖНО: Получаем актуальное значение селектора каждый раз ПРЯМО ИЗ DOM
             const selector = document.getElementById('interaction-type');
@@ -703,16 +705,37 @@ async function startBicepsUpgrade() {
                 
                 // Если получили 401, пытаемся обновить токен через сохраненный initData
                 if (response.status === 401 || response.status === 403) {
-                    console.warn('Токен протух, пытаемся обновить через сохраненный initData...');
+                    console.warn(`⚠️ Токен протух для ${toUserId} (дружба), пытаемся обновить через сохраненный initData...`);
+                    console.warn(`Старый токен (первые 20 символов): ${token ? token.substring(0, 20) : 'null'}...`);
                     const manualInitData = localStorage.getItem('manual_init_data');
                     if (manualInitData && manualInitData.trim()) {
                         const newToken = await loginWithInitData();
                         if (newToken) {
-                            // ВАЖНО: Сохраняем новый токен в localStorage и обновляем переменную
+                            // ВАЖНО: Сохраняем новый токен в localStorage ПЕРЕД обновлением переменной
                             localStorage.setItem('game_access_token', newToken);
+                            
+                            // ВАЖНО: Проверяем, что токен действительно сохранен
+                            const verifyToken = localStorage.getItem('game_access_token');
+                            if (verifyToken !== newToken) {
+                                console.error(`❌ КРИТИЧЕСКАЯ ОШИБКА: Токен не сохранился в localStorage!`);
+                                console.error(`Ожидался: ${newToken.substring(0, 20)}...`);
+                                console.error(`Сохранен: ${verifyToken ? verifyToken.substring(0, 20) : 'null'}...`);
+                                // Пытаемся сохранить еще раз
+                                localStorage.setItem('game_access_token', newToken);
+                            }
+                            
+                            // ВАЖНО: Принудительно обновляем переменную token
                             token = newToken;
+                            console.log(`✓ Токен обновлен в localStorage и переменной`);
+                            console.log(`Новый токен (первые 20 символов): ${token.substring(0, 20)}...`);
+                            console.log(`Токен из localStorage (первые 20 символов): ${localStorage.getItem('game_access_token')?.substring(0, 20)}...`);
+                            
+                            // ВАЖНО: Небольшая задержка для гарантии, что localStorage обновился
+                            await new Promise(resolve => setTimeout(resolve, 10));
+                            
                             console.log(`✓ Токен обновлен, повторяю запрос для ${toUserId}`);
                             console.log(`=== ПОВТОРНАЯ ОТПРАВКА ЗАПРОСА НА ДРУЖБУ ДЛЯ ${toUserId} ===`);
+                            console.log(`Используемый токен в заголовке (первые 20 символов): ${token.substring(0, 20)}...`);
                             response = await fetch(`${GAME_API_URL}/friendship/send-request?toUserId=${toUserId}`, {
                                 method: 'POST',
                                 headers: {
@@ -720,7 +743,12 @@ async function startBicepsUpgrade() {
                                     'Authorization': `Bearer ${token}`
                                 }
                             });
+                            console.log(`Ответ после обновления токена: ${response.status}`);
+                        } else {
+                            console.error(`❌ Не удалось обновить токен для ${toUserId}`);
                         }
+                    } else {
+                        console.error(`❌ initData не найден в localStorage для обновления токена`);
                     }
                 }
                 
@@ -771,14 +799,38 @@ async function startBicepsUpgrade() {
                 
                 // Если получили 401, пытаемся обновить токен через сохраненный initData
                 if (response.status === 401 || response.status === 403) {
-                    console.warn('Токен протух, пытаемся обновить через сохраненный initData...');
+                    console.warn(`⚠️ Токен протух для ${toUserId}, пытаемся обновить через сохраненный initData...`);
+                    console.warn(`Старый токен (первые 20 символов): ${token ? token.substring(0, 20) : 'null'}...`);
                     const manualInitData = localStorage.getItem('manual_init_data');
                     if (manualInitData && manualInitData.trim()) {
                         const newToken = await loginWithInitData();
                         if (newToken) {
-                            // ВАЖНО: Сохраняем новый токен в localStorage и обновляем переменную
+                            // ВАЖНО: Сохраняем новый токен в localStorage ПЕРЕД обновлением переменной
                             localStorage.setItem('game_access_token', newToken);
+                            
+                            // ВАЖНО: Проверяем, что токен действительно сохранен
+                            const verifyToken = localStorage.getItem('game_access_token');
+                            if (verifyToken !== newToken) {
+                                console.error(`❌ КРИТИЧЕСКАЯ ОШИБКА: Токен не сохранился в localStorage!`);
+                                console.error(`Ожидался: ${newToken.substring(0, 20)}...`);
+                                console.error(`Сохранен: ${verifyToken ? verifyToken.substring(0, 20) : 'null'}...`);
+                                // Пытаемся сохранить еще раз
+                                localStorage.setItem('game_access_token', newToken);
+                                const verifyToken2 = localStorage.getItem('game_access_token');
+                                if (verifyToken2 !== newToken) {
+                                    console.error(`❌ Повторная попытка сохранения также не удалась!`);
+                                }
+                            }
+                            
+                            // ВАЖНО: Принудительно обновляем переменную token
                             token = newToken;
+                            console.log(`✓ Токен обновлен в localStorage и переменной`);
+                            console.log(`Новый токен (первые 20 символов): ${token.substring(0, 20)}...`);
+                            console.log(`Токен из localStorage (первые 20 символов): ${localStorage.getItem('game_access_token')?.substring(0, 20)}...`);
+                            
+                            // ВАЖНО: Небольшая задержка для гарантии, что localStorage обновился
+                            await new Promise(resolve => setTimeout(resolve, 10));
+                            
                             // Повторяем запрос с новым токеном (используем тот же requestBody с правильным типом)
                             // ВАЖНО: Обновляем тип из селектора перед повторной отправкой
                             const selectorRetry = document.getElementById('interaction-type');
@@ -790,6 +842,7 @@ async function startBicepsUpgrade() {
                             console.log(`✓ Токен обновлен, повторяю запрос для ${toUserId}`);
                             console.log(`=== ПОВТОРНАЯ ОТПРАВКА ЗАПРОСА ДЛЯ ${toUserId} ===`);
                             console.log(`Тип взаимодействия при повторе: ${currentInteractionTypeRetry}`);
+                            console.log(`Используемый токен в заголовке (первые 20 символов): ${token.substring(0, 20)}...`);
                             console.log(`Обновленный requestBody:`, JSON.stringify(requestBody, null, 2));
                             response = await fetch(`${GAME_API_URL}/interaction/perform`, {
                                 method: 'POST',
@@ -799,7 +852,12 @@ async function startBicepsUpgrade() {
                                 },
                                 body: JSON.stringify(requestBody)
                             });
+                            console.log(`Ответ после обновления токена: ${response.status}`);
+                        } else {
+                            console.error(`❌ Не удалось обновить токен для ${toUserId}`);
                         }
+                    } else {
+                        console.error(`❌ initData не найден в localStorage для обновления токена`);
                     }
                 }
                 
@@ -1567,11 +1625,13 @@ async function loadStats() {
 
 // Получение токена доступа (с автоматическим обновлением через initData при необходимости)
 async function getAccessToken() {
-    // Проверяем localStorage
+    // ВАЖНО: Всегда читаем из localStorage напрямую, без кэширования
+    // Это гарантирует, что мы всегда получаем актуальный токен
     const storedToken = localStorage.getItem('game_access_token');
     
     if (storedToken && storedToken.length > 10) {
-        console.log('Токен найден в localStorage');
+        // Логируем для отладки (можно убрать в продакшене)
+        // console.log(`getAccessToken: Токен найден в localStorage (первые 20 символов): ${storedToken.substring(0, 20)}...`);
         return storedToken;
     }
     
@@ -1860,9 +1920,20 @@ async function loginWithInitData() {
         
         if (data.success && data.accessToken) {
             console.log('Авторизация успешна!');
-            // Сохраняем токен (в реальном приложении нужно использовать безопасное хранилище)
+            // ВАЖНО: Сохраняем токен СРАЗУ в localStorage
+            // Это гарантирует, что следующий запрос получит актуальный токен
             localStorage.setItem('game_access_token', data.accessToken);
             localStorage.setItem('game_refresh_token', data.refreshToken || '');
+            
+            // ВАЖНО: Проверяем, что токен действительно сохранен
+            const savedToken = localStorage.getItem('game_access_token');
+            if (savedToken !== data.accessToken) {
+                console.error('⚠️ ОШИБКА: Токен не сохранился в localStorage!');
+                console.error(`Ожидался: ${data.accessToken.substring(0, 20)}...`);
+                console.error(`Сохранен: ${savedToken ? savedToken.substring(0, 20) : 'null'}...`);
+            } else {
+                console.log(`✓ Токен успешно сохранен в localStorage (первые 20 символов): ${data.accessToken.substring(0, 20)}...`);
+            }
             
             // Сохраняем userId из login
             if (data.userId) {
@@ -1892,6 +1963,8 @@ async function loginWithInitData() {
                 console.warn('Не удалось получить User ID из /player/init:', error);
             }
             
+            // ВАЖНО: Возвращаем токен напрямую, не из localStorage
+            // Это гарантирует, что мы возвращаем именно тот токен, который получили от сервера
             return data.accessToken;
         } else {
             console.error('Ошибка авторизации: нет токена в ответе', data);
