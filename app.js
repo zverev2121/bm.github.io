@@ -1,10 +1,23 @@
 // Telegram Web App API
 // Проверяем, что мы в Telegram
 let tg = null;
+console.log('=== Инициализация Telegram WebApp ===');
+console.log('window.Telegram:', !!window.Telegram);
+console.log('window.Telegram?.WebApp:', !!window.Telegram?.WebApp);
+
 if (window.Telegram && window.Telegram.WebApp) {
     tg = window.Telegram.WebApp;
+    console.log('✓ Telegram WebApp инициализирован');
+    console.log('tg.initDataUnsafe:', !!tg.initDataUnsafe);
+    console.log('tg.initDataUnsafe?.user:', !!tg.initDataUnsafe?.user);
+    if (tg.initDataUnsafe?.user) {
+        console.log('tg.initDataUnsafe.user:', JSON.stringify(tg.initDataUnsafe.user, null, 2));
+    }
+    console.log('tg.initData:', !!tg.initData);
 } else {
-    console.error('Telegram WebApp не доступен! Убедитесь, что Mini App открыт через Telegram');
+    console.error('❌ Telegram WebApp не доступен! Убедитесь, что Mini App открыт через Telegram');
+    console.error('window.Telegram:', window.Telegram);
+    console.error('window.Telegram?.WebApp:', window.Telegram?.WebApp);
 }
 
 // Версия Mini App (для проверки обновлений)
@@ -385,8 +398,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 200); // Проверяем каждые 200мс
     
     // Загружаем настройки (async, т.к. может получать initData с сервера)
+    console.log('=== Загрузка настроек ===');
     await loadSettings();
     updateSettingsDisplay();
+    
+    // Обновляем глобальные переменные после загрузки настроек
+    API_SERVER_URL = getApiServerUrl();
+    GAME_API_URL = getGameApiUrl();
+    console.log('API_SERVER_URL после loadSettings:', API_SERVER_URL);
+    console.log('GAME_API_URL после loadSettings:', GAME_API_URL);
     
     // Инициализируем селектор типа взаимодействия
     initInteractionTypeSelector();
@@ -395,6 +415,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Если нет токена - показываем только форму ввода initData
     const hasToken = localStorage.getItem('game_access_token');
     const hasSettings = localStorage.getItem('api_server_url');
+    console.log('hasToken:', !!hasToken);
+    console.log('hasSettings:', !!hasSettings);
     
     // Показываем форму ввода initData только если:
     // 1. Нет токена (пользователь не авторизован)
@@ -415,8 +437,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('biceps-section').style.display = 'none';
         
         // НЕ продолжаем авторизацию - пользователь должен ввести initData
+        console.log('⚠️ Токен не найден, показываем только форму ввода initData');
         return; // Прерываем выполнение, показываем только форму ввода initData
-    } else if (telegramUserInfo) {
+    }
+    
+    // Если есть токен, проверяем данные пользователя из Telegram
+    const telegramUserInfo = getTelegramUserInfo();
+    if (telegramUserInfo) {
         // Если есть данные пользователя из Telegram, сохраняем их
         console.log('✓ Пользователь идентифицирован через Telegram:');
         console.log(`  - user_id: ${telegramUserInfo.id}`);
@@ -954,12 +981,31 @@ function updateStatus(connected) {
     const statusDot = document.querySelector('.status-dot');
     const statusText = document.querySelector('#status span:last-child');
     
-    if (connected) {
-        statusDot.classList.add('connected');
-        statusText.textContent = 'Подключено';
-    } else {
-        statusDot.classList.remove('connected');
-        statusText.textContent = 'Отключено';
+    console.log('updateStatus вызвана, connected:', connected);
+    console.log('API_SERVER_URL:', API_SERVER_URL);
+    console.log('GAME_API_URL:', GAME_API_URL);
+    
+    if (statusDot) {
+        if (connected) {
+            statusDot.classList.add('connected');
+            statusDot.style.backgroundColor = '#4CAF50';
+        } else {
+            statusDot.classList.remove('connected');
+            statusDot.style.backgroundColor = '#f44336';
+        }
+    }
+    
+    if (statusText) {
+        if (connected) {
+            statusText.textContent = 'Подключено';
+        } else {
+            // Показываем более детальную информацию о статусе
+            const apiUrl = API_SERVER_URL || 'не указан';
+            const shortUrl = typeof apiUrl === 'string' && apiUrl.length > 30 
+                ? apiUrl.substring(0, 30) + '...' 
+                : apiUrl;
+            statusText.textContent = `Подключение... (API: ${shortUrl})`;
+        }
     }
 }
 
@@ -1693,20 +1739,18 @@ function getTelegramUserInfo() {
         console.log('✓ tg обновлен из window.Telegram.WebApp');
     }
     
-    if (tg) {
-        console.log('tg.initDataUnsafe:', !!tg.initDataUnsafe);
-        console.log('tg.initDataUnsafe.user:', !!tg.initDataUnsafe?.user);
-        if (tg.initDataUnsafe?.user) {
-            console.log('tg.initDataUnsafe.user:', JSON.stringify(tg.initDataUnsafe.user, null, 2));
-        }
-        console.log('tg.initData:', !!tg.initData);
-        if (tg.initData) {
-            console.log('tg.initData (первые 200 символов):', tg.initData.substring(0, 200));
-        }
+    if (!tg) {
+        console.error('❌ tg не доступен! Telegram WebApp не инициализирован');
+        console.error('Проверьте, что Mini App открыт через Telegram бота');
+        return null;
     }
     
-    // ПРИОРИТЕТ 1: tg.initDataUnsafe.user (доступен даже после релоуда)
-    if (tg?.initDataUnsafe?.user) {
+    console.log('tg объект:', tg);
+    console.log('tg.initDataUnsafe:', !!tg.initDataUnsafe);
+    console.log('tg.initDataUnsafe:', tg.initDataUnsafe);
+    console.log('tg.initDataUnsafe?.user:', !!tg.initDataUnsafe?.user);
+    
+    if (tg.initDataUnsafe?.user) {
         const user = tg.initDataUnsafe.user;
         console.log('✓ Найден user объект из tg.initDataUnsafe.user');
         console.log('  - id:', user.id);
@@ -1723,25 +1767,30 @@ function getTelegramUserInfo() {
             first_name: user.first_name || null,
             last_name: user.last_name || null
         };
+    } else {
+        console.warn('⚠️ tg.initDataUnsafe.user недоступен');
+        console.warn('tg.initDataUnsafe:', tg.initDataUnsafe);
     }
     
     // ПРИОРИТЕТ 2: Из tg.initData (если доступен)
+    console.log('tg.initData:', !!tg.initData);
     if (tg?.initData) {
+        console.log('tg.initData (первые 200 символов):', tg.initData.substring(0, 200));
         console.log('Пытаемся извлечь username из tg.initData...');
         try {
             const params = new URLSearchParams(tg.initData);
             const userParam = params.get('user');
             if (userParam) {
                 const userData = JSON.parse(decodeURIComponent(userParam));
-                console.log('✓ Найден username из tg.initData:', userData.username);
+                console.log('✓ Найден user из tg.initData');
                 console.log('  - id:', userData.id);
                 console.log('  - username:', userData.username);
                 console.log('  - first_name:', userData.first_name);
                 return {
                     id: userData.id,
-                    username: userData.username,
-                    first_name: userData.first_name,
-                    last_name: userData.last_name
+                    username: userData.username || null,
+                    first_name: userData.first_name || null,
+                    last_name: userData.last_name || null
                 };
             } else {
                 console.warn('⚠️ user параметр не найден в tg.initData');
@@ -1753,7 +1802,7 @@ function getTelegramUserInfo() {
         console.warn('⚠️ tg.initData недоступен');
     }
     
-    console.log('❌ Username не найден');
+    console.log('❌ User ID и username не найдены');
     return null;
 }
 
