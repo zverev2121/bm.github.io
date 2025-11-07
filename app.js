@@ -411,6 +411,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('API_SERVER_URL после loadSettings:', API_SERVER_URL);
     console.log('GAME_API_URL после loadSettings:', GAME_API_URL);
     
+    // Проверяем подключение к серверу, если URL установлен
+    if (API_SERVER_URL) {
+        console.log('Проверка подключения к серверу...');
+        checkServerConnection(API_SERVER_URL);
+    } else {
+        console.warn('⚠️ API_SERVER_URL не установлен! Укажите URL сервера в настройках.');
+        updateStatus(false);
+    }
+    
     // Инициализируем селектор типа взаимодействия
     initInteractionTypeSelector();
     
@@ -976,6 +985,37 @@ function initInteractionTypeSelector() {
         if (interactionTypeSelect.value) {
             btnText.textContent = buttonTexts[interactionTypeSelect.value] || '💪 Начать';
         }
+    }
+}
+
+// Проверка подключения к серверу
+async function checkServerConnection(serverUrl) {
+    try {
+        const healthUrl = `${serverUrl}/api/health`;
+        console.log('Проверка подключения к:', healthUrl);
+        
+        const response = await fetch(healthUrl, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            signal: AbortSignal.timeout(5000) // Таймаут 5 секунд
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log('✓ Сервер доступен:', data);
+            updateStatus(true);
+            return true;
+        } else {
+            console.warn('⚠️ Сервер вернул ошибку:', response.status, response.statusText);
+            updateStatus(false);
+            return false;
+        }
+    } catch (error) {
+        console.error('❌ Ошибка подключения к серверу:', error);
+        updateStatus(false);
+        return false;
     }
 }
 
@@ -1824,14 +1864,21 @@ function getTelegramUserInfo() {
         };
     }
     
-    // ПРИОРИТЕТ 4: Из tg.startParam (если передан при открытии Mini App)
-    if (tg.startParam) {
-        console.log('tg.startParam:', tg.startParam);
+    // ПРИОРИТЕТ 4: Из URL параметра tgWebAppStartParam (если передан)
+    const urlStartParam = urlParams.get('tgWebAppStartParam');
+    if (urlStartParam) {
+        console.log('Найден tgWebAppStartParam в URL:', urlStartParam);
         try {
-            // startParam может быть JSON строкой или просто username
-            const startParamData = JSON.parse(tg.startParam);
+            // Декодируем из base64url
+            let base64 = urlStartParam.replace(/-/g, '+').replace(/_/g, '/');
+            while (base64.length % 4) {
+                base64 += '=';
+            }
+            const decoded = atob(base64);
+            const startParamData = JSON.parse(decoded);
+            console.log('✓ Декодирован tgWebAppStartParam из URL:', startParamData);
             if (startParamData.username || startParamData.user_id) {
-                console.log('✓ Найден username/user_id из tg.startParam');
+                console.log('✓ Найден username/user_id из URL параметра');
                 return {
                     id: startParamData.user_id || startParamData.userId || null,
                     username: startParamData.username || null,
@@ -1840,9 +1887,54 @@ function getTelegramUserInfo() {
                 };
             }
         } catch (e) {
-            // Если startParam не JSON, возможно это просто username
+            console.warn('Не удалось декодировать tgWebAppStartParam из URL:', e);
+        }
+    }
+    
+    // ПРИОРИТЕТ 5: Из tg.startParam (если передан при открытии Mini App)
+    if (tg.startParam) {
+        console.log('tg.startParam (raw):', tg.startParam);
+        try {
+            // startParam может быть base64url закодированным JSON
+            // Пытаемся декодировать из base64url
+            try {
+                // Добавляем padding если нужно
+                let base64 = tg.startParam.replace(/-/g, '+').replace(/_/g, '/');
+                while (base64.length % 4) {
+                    base64 += '=';
+                }
+                const decoded = atob(base64);
+                const startParamData = JSON.parse(decoded);
+                console.log('✓ Декодирован startParam из base64url:', startParamData);
+                if (startParamData.username || startParamData.user_id) {
+                    console.log('✓ Найден username/user_id из tg.startParam (base64)');
+                    return {
+                        id: startParamData.user_id || startParamData.userId || null,
+                        username: startParamData.username || null,
+                        first_name: startParamData.first_name || null,
+                        last_name: null
+                    };
+                }
+            } catch (base64Error) {
+                console.log('Не base64, пытаемся как JSON...');
+            }
+            
+            // Если не base64, пытаемся как JSON
+            const startParamData = JSON.parse(tg.startParam);
+            if (startParamData.username || startParamData.user_id) {
+                console.log('✓ Найден username/user_id из tg.startParam (JSON)');
+                return {
+                    id: startParamData.user_id || startParamData.userId || null,
+                    username: startParamData.username || null,
+                    first_name: startParamData.first_name || null,
+                    last_name: null
+                };
+            }
+        } catch (e) {
+            console.warn('Не удалось распарсить tg.startParam:', e);
+            // Если startParam не JSON и не base64, возможно это просто username
             if (tg.startParam && tg.startParam.length > 0) {
-                console.log('✓ tg.startParam (не JSON, возможно username):', tg.startParam);
+                console.log('✓ tg.startParam (не JSON/base64, возможно username):', tg.startParam);
                 return {
                     id: null,
                     username: tg.startParam,
