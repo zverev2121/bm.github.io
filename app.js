@@ -332,6 +332,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (telegramUserInfo.first_name) {
             localStorage.setItem('game_first_name', telegramUserInfo.first_name);
         }
+        
+        // Обновляем отображение имени пользователя
+        updateUserNameDisplay();
+    } else {
+        // Пытаемся обновить имя из localStorage, если есть
+        updateUserNameDisplay();
     }
     
     // Обновляем URL API перед авторизацией
@@ -1877,6 +1883,37 @@ function getTelegramUserInfo() {
     return null;
 }
 
+// Обновление отображения имени пользователя в header
+function updateUserNameDisplay() {
+    const userNameElement = document.getElementById('user-name');
+    const userNameTextElement = document.getElementById('user-name-text');
+    
+    if (!userNameElement || !userNameTextElement) {
+        return;
+    }
+    
+    // Пытаемся получить имя из Telegram WebApp API
+    const telegramUserInfo = getTelegramUserInfo();
+    let userName = null;
+    
+    if (telegramUserInfo) {
+        // Используем first_name, если есть, иначе username
+        userName = telegramUserInfo.first_name || telegramUserInfo.username || null;
+    }
+    
+    // Если не получили из Telegram API, пытаемся из localStorage
+    if (!userName) {
+        userName = localStorage.getItem('game_first_name') || localStorage.getItem('game_username') || null;
+    }
+    
+    if (userName) {
+        userNameTextElement.textContent = `👤 ${userName}`;
+        userNameElement.style.display = 'block';
+    } else {
+        userNameElement.style.display = 'none';
+    }
+}
+
 // Получение актуального initData (из tg.initData, ручного ввода или БД)
 // ВАЖНО: Приоритет: tg.initData > ручной ввод > БД
 async function getCurrentInitData() {
@@ -1894,6 +1931,9 @@ async function getCurrentInitData() {
             if (userInfo.first_name) {
                 localStorage.setItem('game_first_name', userInfo.first_name);
             }
+            
+            // Обновляем отображение имени пользователя
+            updateUserNameDisplay();
         }
         
         // Обновляем поле ввода (не сохраняем в localStorage)
@@ -1949,6 +1989,9 @@ async function getCurrentInitData() {
         if (telegramUserInfo.first_name) {
             localStorage.setItem('game_first_name', telegramUserInfo.first_name);
         }
+        
+        // Обновляем отображение имени пользователя
+        updateUserNameDisplay();
     }
     
     return null;
@@ -2376,6 +2419,9 @@ async function loginWithInitData() {
                 localStorage.setItem('game_first_name', data.first_name);
                 console.log('First name сохранен из login:', data.first_name);
             }
+            
+            // Обновляем отображение имени пользователя
+            updateUserNameDisplay();
             
             // Дополнительно получаем User ID из /player/init для точности
             try {
