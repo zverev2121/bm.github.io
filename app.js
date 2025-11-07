@@ -688,21 +688,19 @@ async function startBicepsUpgrade() {
                 body: JSON.stringify({})
             });
             
-            // Если получили 401, пытаемся обновить токен через сохраненный initData
-            if (initResponse.status === 401 || initResponse.status === 403) {
-                console.warn('Токен протух, пытаемся обновить через сохраненный initData...');
-                const manualInitData = localStorage.getItem('manual_init_data');
-                if (manualInitData && manualInitData.trim()) {
+            // Если получили 403, пытаемся обновить токен через сохраненный initData
+            if (initResponse.status === 403) {
+                console.warn('Токен протух, пытаемся обновить через initData...');
+                const currentInitData = getCurrentInitData();
+                if (currentInitData && currentInitData.trim()) {
                     const newToken = await loginWithInitData();
                     if (newToken) {
+                        localStorage.setItem('game_access_token', newToken);
                         token = newToken;
                         // Повторяем запрос с новым токеном
                         initResponse = await fetch(`${GAME_API_URL}/player/init`, {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`
-                            },
+                            headers: await getApiHeaders(),
                             body: JSON.stringify({})
                         });
                     }
@@ -741,12 +739,24 @@ async function startBicepsUpgrade() {
         try {
             // ВАЖНО: Получаем актуальный токен в начале каждой итерации
             // Это гарантирует, что после обновления токена все последующие запросы используют новый токен
+            // ВАЖНО: Используем await getAccessToken() для получения актуального токена из localStorage
+            // Это гарантирует, что если токен был обновлен в предыдущей итерации, мы получим новый токен
             let token = await getAccessToken();
             if (!token) {
                 throw new Error('Токен не найден');
             }
             console.log(`[${toUserId}] Токен получен в начале итерации (первые 20 символов): ${token.substring(0, 20)}...`);
             console.log(`[${toUserId}] Токен из localStorage (первые 20 символов): ${localStorage.getItem('game_access_token')?.substring(0, 20)}...`);
+            
+            // ВАЖНО: Проверяем, что токен из getAccessToken() совпадает с токеном из localStorage
+            const tokenFromStorage = localStorage.getItem('game_access_token');
+            if (tokenFromStorage && tokenFromStorage !== token) {
+                console.warn(`⚠️ Обнаружено расхождение токенов в начале итерации для ${toUserId}`);
+                console.warn(`Токен из getAccessToken(): ${token.substring(0, 20)}...`);
+                console.warn(`Токен из localStorage: ${tokenFromStorage.substring(0, 20)}...`);
+                console.warn(`Используем токен из localStorage`);
+                token = tokenFromStorage;
+            }
             
             // ВАЖНО: Получаем актуальное значение селектора каждый раз ПРЯМО ИЗ DOM
             const selector = document.getElementById('interaction-type');
@@ -766,12 +776,16 @@ async function startBicepsUpgrade() {
                     headers: await getApiHeaders()
                 });
                 
-                // Если получили 401, пытаемся обновить токен через сохраненный initData
-                if (response.status === 401 || response.status === 403) {
-                    console.warn(`⚠️ Токен протух для ${toUserId} (дружба), пытаемся обновить через сохраненный initData...`);
+                // Если получили 403, пытаемся обновить токен через сохраненный initData
+                if (response.status === 403) {
+                    console.warn(`⚠️ Токен протух для ${toUserId} (дружба), пытаемся обновить через initData...`);
                     console.warn(`Старый токен (первые 20 символов): ${token ? token.substring(0, 20) : 'null'}...`);
-                    const manualInitData = localStorage.getItem('manual_init_data');
-                    if (manualInitData && manualInitData.trim()) {
+                    
+                    // ВАЖНО: Используем getCurrentInitData() вместо manualInitData
+                    // Это гарантирует, что мы используем актуальный initData (tg.initData > сохраненный > manual)
+                    const currentInitData = getCurrentInitData();
+                    if (currentInitData && currentInitData.trim()) {
+                        console.log('✓ Найден initData для обновления токена');
                         const newToken = await loginWithInitData();
                         if (newToken) {
                             // ВАЖНО: Сохраняем новый токен в localStorage ПЕРЕД обновлением переменной
@@ -794,7 +808,15 @@ async function startBicepsUpgrade() {
                             console.log(`Токен из localStorage (первые 20 символов): ${localStorage.getItem('game_access_token')?.substring(0, 20)}...`);
                             
                             // ВАЖНО: Небольшая задержка для гарантии, что localStorage обновился
-                            await new Promise(resolve => setTimeout(resolve, 10));
+                            await new Promise(resolve => setTimeout(resolve, 50));
+                            
+                            // ВАЖНО: Получаем токен заново из localStorage перед повторным запросом
+                            // Это гарантирует, что мы используем актуальный токен
+                            const refreshedToken = await getAccessToken();
+                            if (refreshedToken && refreshedToken !== token) {
+                                console.log(`⚠️ Обнаружено расхождение токенов, используем токен из getAccessToken()`);
+                                token = refreshedToken;
+                            }
                             
                             console.log(`✓ Токен обновлен, повторяю запрос для ${toUserId}`);
                             console.log(`=== ПОВТОРНАЯ ОТПРАВКА ЗАПРОСА НА ДРУЖБУ ДЛЯ ${toUserId} ===`);
@@ -808,7 +830,8 @@ async function startBicepsUpgrade() {
                             console.error(`❌ Не удалось обновить токен для ${toUserId}`);
                         }
                     } else {
-                        console.error(`❌ initData не найден в localStorage для обновления токена`);
+                        console.error(`❌ initData не найден для обновления токена`);
+                        console.error(`getCurrentInitData() вернул:`, currentInitData);
                     }
                 }
                 
@@ -854,12 +877,16 @@ async function startBicepsUpgrade() {
                     body: JSON.stringify(requestBody)
                 });
                 
-                // Если получили 401, пытаемся обновить токен через сохраненный initData
-                if (response.status === 401 || response.status === 403) {
-                    console.warn(`⚠️ Токен протух для ${toUserId}, пытаемся обновить через сохраненный initData...`);
+                // Если получили 403, пытаемся обновить токен через сохраненный initData
+                if (response.status === 403) {
+                    console.warn(`⚠️ Токен протух для ${toUserId}, пытаемся обновить через initData...`);
                     console.warn(`Старый токен (первые 20 символов): ${token ? token.substring(0, 20) : 'null'}...`);
-                    const manualInitData = localStorage.getItem('manual_init_data');
-                    if (manualInitData && manualInitData.trim()) {
+                    
+                    // ВАЖНО: Используем getCurrentInitData() вместо manualInitData
+                    // Это гарантирует, что мы используем актуальный initData (tg.initData > сохраненный > manual)
+                    const currentInitData = getCurrentInitData();
+                    if (currentInitData && currentInitData.trim()) {
+                        console.log('✓ Найден initData для обновления токена');
                         const newToken = await loginWithInitData();
                         if (newToken) {
                             // ВАЖНО: Сохраняем новый токен в localStorage ПЕРЕД обновлением переменной
@@ -886,7 +913,15 @@ async function startBicepsUpgrade() {
                             console.log(`Токен из localStorage (первые 20 символов): ${localStorage.getItem('game_access_token')?.substring(0, 20)}...`);
                             
                             // ВАЖНО: Небольшая задержка для гарантии, что localStorage обновился
-                            await new Promise(resolve => setTimeout(resolve, 10));
+                            await new Promise(resolve => setTimeout(resolve, 50));
+                            
+                            // ВАЖНО: Получаем токен заново из localStorage перед повторным запросом
+                            // Это гарантирует, что мы используем актуальный токен
+                            const refreshedToken = await getAccessToken();
+                            if (refreshedToken && refreshedToken !== token) {
+                                console.log(`⚠️ Обнаружено расхождение токенов, используем токен из getAccessToken()`);
+                                token = refreshedToken;
+                            }
                             
                             // Повторяем запрос с новым токеном (используем тот же requestBody с правильным типом)
                             // ВАЖНО: Обновляем тип из селектора перед повторной отправкой
@@ -911,7 +946,8 @@ async function startBicepsUpgrade() {
                             console.error(`❌ Не удалось обновить токен для ${toUserId}`);
                         }
                     } else {
-                        console.error(`❌ initData не найден в localStorage для обновления токена`);
+                        console.error(`❌ initData не найден для обновления токена`);
+                        console.error(`getCurrentInitData() вернул:`, currentInitData);
                     }
                 }
                 
