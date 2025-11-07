@@ -260,8 +260,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     initInteractionTypeSelector();
     
     // Проверяем, нужно ли показать настройки при первом запуске
+    // НЕ показываем настройки, если пользователь идентифицирован через Telegram
+    const telegramUserInfo = getTelegramUserInfo();
     const hasSettings = localStorage.getItem('api_server_url') || localStorage.getItem('manual_init_data');
-    if (!hasSettings) {
+    const hasToken = localStorage.getItem('game_access_token');
+    
+    // Показываем настройки только если:
+    // 1. Нет настроек И
+    // 2. Нет данных пользователя из Telegram И
+    // 3. Нет сохраненного токена
+    if (!hasSettings && !telegramUserInfo && !hasToken) {
         // Показываем настройки при первом запуске
         document.getElementById('settings-section').style.display = 'block';
         const welcome = document.getElementById('settings-welcome');
@@ -282,6 +290,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // НЕ прерываем загрузку - продолжаем авторизацию
         // Пользователь может настроить позже через кнопку "Настройки"
+    } else if (telegramUserInfo) {
+        // Если есть данные пользователя из Telegram, сохраняем их
+        console.log('✓ Пользователь идентифицирован через Telegram:');
+        console.log(`  - user_id: ${telegramUserInfo.id}`);
+        console.log(`  - username: ${telegramUserInfo.username || 'не указан'}`);
+        console.log(`  - first_name: ${telegramUserInfo.first_name || 'не указан'}`);
+        
+        if (telegramUserInfo.id) {
+            localStorage.setItem('game_user_id', telegramUserInfo.id.toString());
+        }
+        if (telegramUserInfo.username) {
+            localStorage.setItem('game_username', telegramUserInfo.username);
+        }
+        if (telegramUserInfo.first_name) {
+            localStorage.setItem('game_first_name', telegramUserInfo.first_name);
+        }
     }
     
     // Обновляем URL API перед авторизацией
@@ -328,7 +352,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let token = null;
     
     // ПРИОРИТЕТ 1: Если есть tg.initData от Telegram - используем его (это данные текущего пользователя)
-    if (tg?.initData) {
+    if (tg?.initData && tg.initData.trim() && tg.initData.length >= 50) {
         console.log('✅ Используется initData от Telegram (приоритет)');
         console.log('Это гарантирует, что используются данные текущего пользователя');
         // Очищаем manual_init_data, чтобы не было конфликта
@@ -348,8 +372,41 @@ document.addEventListener('DOMContentLoaded', async () => {
             token = savedToken;
         }
     } 
-    // ПРИОРИТЕТ 2: Если нет tg.initData, но есть manual_init_data - используем его
-    else if (manualInitData) {
+    // ПРИОРИТЕТ 2: Если нет tg.initData, но есть сохраненный токен - пытаемся получить initData с сервера
+    else if (savedToken) {
+        console.log('tg.initData недоступен, но есть сохраненный токен');
+        console.log('Пытаемся получить сохраненный initData с сервера...');
+        
+        // Пытаемся получить сохраненный initData с сервера
+        try {
+            const savedInitData = await getSavedInitDataFromServer();
+            if (savedInitData) {
+                console.log('✓ Получен сохраненный initData с сервера, используем сохраненный токен');
+                token = savedToken;
+            } else {
+                console.warn('Не удалось получить сохраненный initData с сервера, используем сохраненный токен');
+                token = savedToken;
+            }
+        } catch (e) {
+            console.warn('Ошибка при получении сохраненного initData:', e);
+            token = savedToken;
+        }
+    }
+    // ПРИОРИТЕТ 3: Если нет tg.initData и нет токена, но есть данные пользователя из Telegram
+    else {
+        const telegramUserInfo = getTelegramUserInfo();
+        if (telegramUserInfo) {
+            console.log('⚠️ tg.initData недоступен и нет сохраненного токена');
+            console.log('Но пользователь идентифицирован через Telegram:');
+            console.log(`  - user_id: ${telegramUserInfo.id}`);
+            console.log(`  - username: ${telegramUserInfo.username || 'не указан'}`);
+            console.log('Попробуйте обновить страницу или войти заново');
+            // Не показываем настройки, т.к. пользователь известен
+        }
+    }
+    
+    // ПРИОРИТЕТ 4: Если нет tg.initData, но есть manual_init_data - используем его
+    if (!token && manualInitData) {
         console.log('Используется initData, введенный вручную');
         // Пытаемся получить токен из initData
         try {
@@ -454,9 +511,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('biceps-section').style.display = 'block';
     } else {
         // Даже если авторизация не удалась, проверяем наличие сохраненного токена
+        // или данных пользователя из Telegram
         const savedToken = localStorage.getItem('game_access_token');
-        if (savedToken) {
-            console.log('Используется сохраненный токен для загрузки данных');
+        const telegramUserInfo = getTelegramUserInfo();
+        
+        if (savedToken || telegramUserInfo) {
+            if (savedToken) {
+                console.log('Используется сохраненный токен для загрузки данных');
+            } else if (telegramUserInfo) {
+                console.log('Пользователь идентифицирован через Telegram, но токен не найден');
+                console.log('Попробуйте обновить страницу для получения initData');
+            }
             updateStatus(true);
             
             // Показываем все секции
