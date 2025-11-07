@@ -1659,44 +1659,104 @@ async function getCurrentInitData() {
     return null;
 }
 
-// Получение сохраненного initData с сервера из БД по токену
+// Получение сохраненного initData с сервера из БД
+// ПРИОРИТЕТ 1: По username из Telegram (если есть)
+// ПРИОРИТЕТ 2: По токену
 // ВАЖНО: initData не сохраняется в localStorage, только получается из БД
 async function getSavedInitDataFromServer() {
     try {
-        const token = await getAccessToken();
-        if (!token) {
-            console.warn('Токен не найден, невозможно получить initData из БД');
-            return null;
+        // ПРИОРИТЕТ 1: Пытаемся получить initData по username из Telegram
+        const telegramUserInfo = getTelegramUserInfo();
+        if (telegramUserInfo && telegramUserInfo.username) {
+            console.log(`✓ Пытаемся получить initData из БД по username: ${telegramUserInfo.username}`);
+            const url = API_SERVER_URL 
+                ? `${API_SERVER_URL}/auth/get-init-data-by-username`
+                : `${GAME_API_URL}/auth/get-init-data-by-username`;
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ username: telegramUserInfo.username })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.initData) {
+                        console.log(`✓ Получен initData из БД по username: ${telegramUserInfo.username}`);
+                        
+                        // Сохраняем userId, username, first_name и токен, если они есть
+                        if (data.userId) {
+                            localStorage.setItem('game_user_id', data.userId.toString());
+                        }
+                        if (data.username) {
+                            localStorage.setItem('game_username', data.username);
+                        }
+                        if (data.first_name) {
+                            localStorage.setItem('game_first_name', data.first_name);
+                        }
+                        if (data.accessToken) {
+                            localStorage.setItem('game_access_token', data.accessToken);
+                        }
+                        if (data.refreshToken) {
+                            localStorage.setItem('game_refresh_token', data.refreshToken);
+                        }
+                        
+                        // Заполняем поле ввода последним рабочим initData из БД
+                        const manualInitDataInput = document.getElementById('manual-initdata');
+                        if (manualInitDataInput) {
+                            manualInitDataInput.value = data.initData;
+                            console.log('✓ Поле manual-initdata заполнено initData из БД');
+                        }
+                        
+                        return data.initData;
+                    }
+                } else {
+                    console.warn(`Не удалось получить initData по username: ${response.status}`);
+                }
+            } catch (e) {
+                console.warn('Ошибка при получении initData по username:', e);
+            }
         }
         
-        const url = API_SERVER_URL 
-            ? `${API_SERVER_URL}/auth/get-saved-init-data`
-            : `${GAME_API_URL}/auth/get-saved-init-data`;
-        
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Accept': 'application/json'
-            }
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.initData) {
-                console.log('✓ Получен initData из БД');
-                
-                // Заполняем поле ввода последним рабочим initData из БД
-                const manualInitDataInput = document.getElementById('manual-initdata');
-                if (manualInitDataInput) {
-                    manualInitDataInput.value = data.initData;
-                    console.log('✓ Поле manual-initdata заполнено initData из БД');
+        // ПРИОРИТЕТ 2: Пытаемся получить initData по токену
+        const token = await getAccessToken();
+        if (token) {
+            console.log('✓ Пытаемся получить initData из БД по токену');
+            const url = API_SERVER_URL 
+                ? `${API_SERVER_URL}/auth/get-saved-init-data`
+                : `${GAME_API_URL}/auth/get-saved-init-data`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json'
                 }
-                
-                return data.initData;
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.initData) {
+                    console.log('✓ Получен initData из БД по токену');
+                    
+                    // Заполняем поле ввода последним рабочим initData из БД
+                    const manualInitDataInput = document.getElementById('manual-initdata');
+                    if (manualInitDataInput) {
+                        manualInitDataInput.value = data.initData;
+                        console.log('✓ Поле manual-initdata заполнено initData из БД');
+                    }
+                    
+                    return data.initData;
+                }
+            } else {
+                console.warn(`Не удалось получить initData по токену: ${response.status}`);
             }
         } else {
-            console.warn(`Не удалось получить initData из БД: ${response.status}`);
+            console.warn('Токен не найден, невозможно получить initData из БД по токену');
         }
     } catch (e) {
         console.warn('Ошибка при получении initData из БД:', e);
