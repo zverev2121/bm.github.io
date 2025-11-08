@@ -221,7 +221,8 @@ async function saveSettings() {
 }
 
 function resetSettings() {
-    if (confirm('Вы уверены, что хотите сбросить все настройки?')) {
+    if (confirm('Вы уверены, что хотите сбросить все настройки?\n\nЭто очистит:\n- API Server URL\n- Access Token\n- Refresh Token\n- User ID\n- Все данные из localStorage\n\nПосле сброса нужно будет войти заново.')) {
+        // Очищаем все данные из localStorage
         localStorage.removeItem('api_server_url');
         // ВАЖНО: Удаляем все возможные старые значения initData из localStorage
         localStorage.removeItem('manual_init_data');
@@ -231,15 +232,38 @@ function resetSettings() {
         localStorage.removeItem('game_access_token');
         localStorage.removeItem('game_refresh_token');
         localStorage.removeItem('game_user_id');
+        localStorage.removeItem('game_username');
+        localStorage.removeItem('game_first_name');
         
-        document.getElementById('api-server-url').value = '';
-        document.getElementById('manual-initdata').value = '';
+        // Очищаем поля ввода
+        const apiUrlInput = document.getElementById('api-server-url');
+        const initDataInput = document.getElementById('manual-initdata');
+        if (apiUrlInput) apiUrlInput.value = '';
+        if (initDataInput) initDataInput.value = '';
         
+        // Обновляем переменные
         API_SERVER_URL = getApiServerUrl();
         GAME_API_URL = getGameApiUrl();
         
-        tg.showAlert('✅ Настройки сброшены!\n\nПерезагрузите страницу.');
+        console.log('✓ Все настройки очищены из localStorage');
+        console.log('✓ Поля ввода очищены');
+        
+        tg.showAlert('✅ Настройки сброшены!\n\nВсе данные очищены из localStorage.\n\nПерезагрузите страницу для применения изменений.');
         updateSettingsDisplay();
+    }
+}
+
+// Функция для полной очистки кэша (включая перезагрузку страницы)
+function clearAllCache() {
+    if (confirm('⚠️ ВНИМАНИЕ: Это полностью очистит все данные!\n\nОчистится:\n- Все настройки\n- Все токены\n- Все данные из localStorage\n\nПосле этого страница перезагрузится.\n\nПродолжить?')) {
+        // Очищаем все данные из localStorage
+        localStorage.clear();
+        
+        console.log('✓ Весь localStorage очищен');
+        console.log('✓ Перезагружаем страницу...');
+        
+        // Перезагружаем страницу
+        window.location.reload();
     }
 }
 
