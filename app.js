@@ -1249,11 +1249,11 @@ async function loadBossInfo() {
                     // Проверяем, есть ли награда для сбора
                     if (data.success && data.hasReward === true) {
                         try {
-                            await collectBossRewards();
+                            const rewardData = await collectBossRewards();
                             // Показываем сообщение о собранной награде
                             if (bossInfo) {
-                                const rewardMessage = '<p style="color: #28a745; font-weight: bold;">💰 Награда с босса собрана!</p>';
-                                bossInfo.innerHTML = rewardMessage;
+                                const rewardMessage = formatRewardMessage(rewardData);
+                                bossInfo.innerHTML = `<p style="color: #28a745; font-weight: bold;">${rewardMessage}</p>`;
                             }
                         } catch (error) {
                             console.error('Ошибка сбора награды:', error);
@@ -1305,23 +1305,16 @@ async function loadBossInfo() {
         const data = await response.json();
         
         // Проверяем, есть ли награда для сбора
+        let rewardMessageHtml = '';
         if (data.success && data.hasReward === true) {
             try {
-                await collectBossRewards();
-                // Показываем сообщение о собранной награде
-                if (bossInfo) {
-                    const currentContent = bossInfo.innerHTML;
-                    bossInfo.innerHTML = `<p style="color: #28a745; font-weight: bold;">💰 Награда с босса собрана!</p>${currentContent}`;
-                    // Убираем сообщение через 3 секунды
-                    setTimeout(() => {
-                        if (bossInfo.innerHTML.includes('💰 Награда с босса собрана!')) {
-                            bossInfo.innerHTML = bossInfo.innerHTML.replace('<p style="color: #28a745; font-weight: bold;">💰 Награда с босса собрана!</p>', '');
-                        }
-                    }, 3000);
-                }
+                const rewardData = await collectBossRewards();
+                // Форматируем сообщение о награде
+                const rewardMessage = formatRewardMessage(rewardData);
+                rewardMessageHtml = `<p style="color: #28a745; font-weight: bold;">${rewardMessage}</p>`;
             } catch (error) {
                 console.error('Ошибка сбора награды:', error);
-                // Не прерываем загрузку информации о боссе, просто логируем ошибку
+                rewardMessageHtml = `<p style="color: #dc3545;">⚠️ Ошибка сбора награды: ${error.message}</p>`;
             }
         }
         
@@ -1346,9 +1339,8 @@ async function loadBossInfo() {
                 timeInfo += `<br>Окончание боя: <strong>${endTime}</strong>`;
             }
             
-            const rewardMessage = data.hasReward === true ? '<p style="color: #28a745; font-weight: bold;">💰 Награда с босса собрана!</p>' : '';
             bossInfo.innerHTML = `
-                ${rewardMessage}
+                ${rewardMessageHtml}
                 <div>
                     <strong>${session.title || 'Босс'}</strong><br>
                     HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
@@ -2965,8 +2957,9 @@ async function attackNextBoss(mode) {
                 // Бой завершен - собираем награду
                 updateAttackStatus(`✅ ${boss.name} побежден! Сбор награды...`);
                 try {
-                    await collectBossRewards();
-                    updateAttackStatus(`💰 Награда с ${boss.name} собрана!`);
+                    const rewardData = await collectBossRewards();
+                    const rewardMessage = formatRewardMessage(rewardData);
+                    updateAttackStatus(rewardMessage);
                 } catch (error) {
                     console.error('Ошибка сбора награды:', error);
                     updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
@@ -3064,8 +3057,9 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
             const boss = selectedBosses[currentBossIndex];
             updateAttackStatus(`✅ ${boss.name} побежден! Сбор награды...`);
             try {
-                await collectBossRewards();
-                updateAttackStatus(`💰 Награда с ${boss.name} собрана!`);
+                const rewardData = await collectBossRewards();
+                const rewardMessage = formatRewardMessage(rewardData);
+                updateAttackStatus(rewardMessage);
             } catch (error) {
                 console.error('Ошибка сбора награды:', error);
                 updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
@@ -3129,6 +3123,47 @@ function updateAttackStatus(message) {
         const timestamp = new Date().toLocaleTimeString();
         statusContent.innerHTML = `<p><strong>[${timestamp}]</strong> ${message}</p>`;
     }
+}
+
+// Форматирование награды для отображения
+function formatRewardMessage(rewardData) {
+    if (!rewardData || !rewardData.rewards) {
+        return 'Награда получена';
+    }
+    
+    const rewards = rewardData.rewards;
+    const bossName = rewards.title || 'босса';
+    const parts = [`💰 Награда с босса "${bossName}" получена!`];
+    
+    if (rewards.globalReward) {
+        const gr = rewards.globalReward;
+        const rewardParts = [];
+        
+        if (gr.authority) {
+            rewardParts.push(`Авторитет: ${gr.authority.toLocaleString()}`);
+        }
+        if (gr.keys) {
+            rewardParts.push(`Ключи: ${gr.keys}`);
+        }
+        if (gr.currencies && gr.currencies.length > 0) {
+            const currencyNames = {
+                'sugar': 'Сахар',
+                'cigarettes': 'Папиросы',
+                'money': 'Деньги'
+            };
+            const currencies = gr.currencies.map(c => {
+                const name = currencyNames[c.type] || c.type;
+                return `${name}: ${c.amount.toLocaleString()}`;
+            }).join(', ');
+            rewardParts.push(currencies);
+        }
+        
+        if (rewardParts.length > 0) {
+            parts.push(`<br><strong>Получено:</strong> ${rewardParts.join(', ')}`);
+        }
+    }
+    
+    return parts.join('');
 }
 
 // Сбор награды с босса
