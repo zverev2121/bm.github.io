@@ -3508,74 +3508,61 @@ window.updateBossMode = function(bossId, mode) {
     }
 }
 
-// Переключение выбора босса с режимом
+// Добавление босса в очередь атаки (каждый клик добавляет один экземпляр)
 window.toggleBossSelection = function(bossId, bossName, mode = null) {
-    const bossIndex = selectedBosses.findIndex(b => b.id === bossId);
+    const bossData = window.allBosses.find(b => b.id === bossId);
+    if (!bossData) {
+        console.warn(`Босс ${bossId} не найден`);
+        return;
+    }
     
-    if (bossIndex >= 0) {
-        // Убираем из выбранных
-        selectedBosses.splice(bossIndex, 1);
-        updateBossCardSelection(bossId, false);
-    } else {
-        // Добавляем в выбранные (можно выбрать любого босса, даже если ключей недостаточно)
-        const bossData = window.allBosses.find(b => b.id === bossId);
-        if (bossData) {
-            // Всегда берем режим из селектора на карточке
-            const card = document.querySelector(`.boss-card[data-boss-id="${bossId}"]`);
-            let selectedMode = null;
-            
-            if (card) {
-                // Пытаемся получить режим из селектора
-                const selector = card.querySelector(`#boss-mode-${bossId}`);
-                if (selector) {
-                    selectedMode = selector.value;
-                } else if (card.dataset.selectedMode) {
-                    // Если селектора нет, берем из data-атрибута
-                    selectedMode = card.dataset.selectedMode;
-                }
-            }
-            
-            // Если режим не найден, используем переданный или выбираем по умолчанию
-            if (!selectedMode) {
-                if (mode) {
-                    selectedMode = mode;
-                } else {
-                    const availableModes = bossData.availableModes || getAvailableBattleModes(bossData);
-                    // По умолчанию выбираем "pacansky", если доступен
-                    const pacanskyMode = availableModes.find(m => m.key === 'pacansky');
-                    selectedMode = pacanskyMode ? pacanskyMode.key : (availableModes.length > 0 ? availableModes[0].key : null);
-                }
-            }
-            
-            if (!selectedMode) {
-                console.warn(`Не удалось определить режим для босса ${bossId}`);
-                return;
-            }
-            
-            selectedBosses.push({
-                id: bossId,
-                name: bossName,
-                mode: selectedMode
-            });
-            updateBossCardSelection(bossId, true);
+    // Всегда берем режим из селектора на карточке
+    const card = document.querySelector(`.boss-card[data-boss-id="${bossId}"]`);
+    let selectedMode = null;
+    
+    if (card) {
+        // Пытаемся получить режим из селектора
+        const selector = card.querySelector(`#boss-mode-${bossId}`);
+        if (selector) {
+            selectedMode = selector.value;
+        } else if (card.dataset.selectedMode) {
+            // Если селектора нет, берем из data-атрибута
+            selectedMode = card.dataset.selectedMode;
         }
     }
+    
+    // Если режим не найден, используем переданный или выбираем по умолчанию
+    if (!selectedMode) {
+        if (mode) {
+            selectedMode = mode;
+        } else {
+            const availableModes = bossData.availableModes || getAvailableBattleModes(bossData);
+            // По умолчанию выбираем "pacansky", если доступен
+            const pacanskyMode = availableModes.find(m => m.key === 'pacansky');
+            selectedMode = pacanskyMode ? pacanskyMode.key : (availableModes.length > 0 ? availableModes[0].key : null);
+        }
+    }
+    
+    if (!selectedMode) {
+        console.warn(`Не удалось определить режим для босса ${bossId}`);
+        return;
+    }
+    
+    // Каждый клик добавляет один экземпляр босса в очередь
+    selectedBosses.push({
+        id: bossId,
+        name: bossName,
+        mode: selectedMode,
+        quantity: 1
+    });
     
     updateOrderCarousel();
 }
 
-// Обновление визуального состояния карточки босса
+// Обновление визуального состояния карточки босса (больше не используется, но оставляем для совместимости)
 function updateBossCardSelection(bossId, isSelected) {
-    const card = document.querySelector(`.boss-card[data-boss-id="${bossId}"]`);
-    if (card) {
-        if (isSelected) {
-            card.style.opacity = '0.7';
-            card.style.transform = 'scale(0.95)';
-        } else {
-            card.style.opacity = '1';
-            card.style.transform = 'scale(1)';
-        }
-    }
+    // Карточки больше не меняют визуальное состояние при выборе
+    // Каждый клик просто добавляет босса в очередь
 }
 
 // Обновление карусели порядка атаки
@@ -3622,12 +3609,12 @@ function updateOrderCarousel() {
                     <div style="font-size: 11px; color: #ffd700; margin-bottom: 8px; font-weight: 600;">${modeName} ${modeMultiplier}</div>
                 </div>
                 <div style="display: flex; gap: 5px; margin-top: 8px; justify-content: center;">
-                    <button onclick="moveBossInOrder(${boss.id}, -1); event.stopPropagation();" 
+                    <button onclick="moveBossInOrder(${index}, -1); event.stopPropagation();" 
                             style="padding: 4px 8px; font-size: 12px; background: #3d3d3d; color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer; ${index === 0 ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
                             ${index === 0 ? 'disabled' : ''}>←</button>
-                    <button onclick="removeBossFromOrder(${boss.id}); event.stopPropagation();" 
+                    <button onclick="removeBossFromOrder(${index}); event.stopPropagation();" 
                             style="padding: 4px 8px; font-size: 12px; background: #dc3545; color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer;">✕</button>
-                    <button onclick="moveBossInOrder(${boss.id}, 1); event.stopPropagation();" 
+                    <button onclick="moveBossInOrder(${index}, 1); event.stopPropagation();" 
                             style="padding: 4px 8px; font-size: 12px; background: #3d3d3d; color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer; ${index === selectedBosses.length - 1 ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
                             ${index === selectedBosses.length - 1 ? 'disabled' : ''}>→</button>
                 </div>
@@ -3638,10 +3625,9 @@ function updateOrderCarousel() {
     orderCarousel.innerHTML = html;
 }
 
-// Перемещение босса в порядке атаки
-window.moveBossInOrder = function(bossId, direction) {
-    const index = selectedBosses.findIndex(b => b.id === bossId);
-    if (index < 0) return;
+// Перемещение босса в порядке атаки по индексу
+window.moveBossInOrder = function(index, direction) {
+    if (index < 0 || index >= selectedBosses.length) return;
     
     const newIndex = index + direction;
     if (newIndex < 0 || newIndex >= selectedBosses.length) return;
@@ -3650,12 +3636,10 @@ window.moveBossInOrder = function(bossId, direction) {
     updateOrderCarousel();
 }
 
-// Удаление босса из порядка атаки
-window.removeBossFromOrder = function(bossId) {
-    const index = selectedBosses.findIndex(b => b.id === bossId);
-    if (index >= 0) {
+// Удаление босса из порядка атаки по индексу
+window.removeBossFromOrder = function(index) {
+    if (index >= 0 && index < selectedBosses.length) {
         selectedBosses.splice(index, 1);
-        updateBossCardSelection(bossId, false);
         updateOrderCarousel();
     }
 }
@@ -3746,11 +3730,54 @@ async function attackNextBoss() {
             }
         }
         
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        
+        // Обработка 400 с "Session already active"
+        if (!response.ok && response.status === 400 && data.message === "Session already active") {
+            // Бой еще продолжается, ждем 5 секунд и проверяем снова
+            updateAttackStatus(`⚔️ Бой с ${boss.name} еще продолжается, ждем 5 секунд...`);
+            
+            bossAttackInterval = setTimeout(() => {
+                attackNextBoss();
+            }, 5000);
+            return;
         }
         
-        const data = await response.json();
+        // Обработка ошибок лимита или нехватки ключей
+        if (!response.ok || !data.success) {
+            const errorMessage = data.message || data.error || 'Неизвестная ошибка';
+            const lowerMessage = errorMessage.toLowerCase();
+            
+            // Проверяем, является ли это ошибкой лимита или нехватки ключей
+            if (lowerMessage.includes('limit') || 
+                lowerMessage.includes('лимит') || 
+                lowerMessage.includes('key') || 
+                lowerMessage.includes('ключ') ||
+                lowerMessage.includes('not enough') ||
+                lowerMessage.includes('недостаточно')) {
+                // Удаляем все экземпляры этого босса из списка и переходим к следующему
+                updateAttackStatus(`⚠️ ${boss.name}: ${errorMessage}. Переход к следующему боссу...`);
+                
+                // Удаляем все экземпляры текущего босса
+                const currentBossId = boss.id;
+                selectedBosses = selectedBosses.filter(b => b.id !== currentBossId);
+                updateOrderCarousel();
+                
+                // Если список не пуст, продолжаем атаку, иначе останавливаемся
+                // Индекс остается на месте, так как следующий босс займет это место
+                if (currentBossIndex >= selectedBosses.length) {
+                    currentBossIndex = 0;
+                }
+                
+                setTimeout(() => {
+                    attackNextBoss();
+                }, 2000);
+                return;
+            }
+            
+            // Для других ошибок выбрасываем исключение
+            throw new Error(errorMessage);
+        }
         
         // Обновляем информацию о боссе и ключи после start-attack
         if (data.success && data.session) {
@@ -3777,7 +3804,16 @@ async function attackNextBoss() {
                     updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
                 }
                 
-                currentBossIndex++;
+                // Удаляем один экземпляр босса из списка после завершения боя
+                if (currentBossIndex < selectedBosses.length) {
+                    selectedBosses.splice(currentBossIndex, 1);
+                    updateOrderCarousel();
+                }
+                
+                // Если список не пуст, продолжаем атаку, иначе останавливаемся
+                if (currentBossIndex >= selectedBosses.length) {
+                    currentBossIndex = 0;
+                }
                 
                 // Переходим к следующему боссу через небольшую задержку
                 setTimeout(() => {
@@ -3792,9 +3828,15 @@ async function attackNextBoss() {
                     checkBossBattleStatus(boss.id, boss.mode, data.sessionId);
                 }, 5000);
             } else {
-                // Неожиданный ответ
+                // Неожиданный ответ - удаляем текущего босса и переходим к следующему
                 updateAttackStatus(`⚠️ Неожиданный ответ от сервера для ${boss.name}`);
-                currentBossIndex++;
+                if (currentBossIndex < selectedBosses.length) {
+                    selectedBosses.splice(currentBossIndex, 1);
+                    updateOrderCarousel();
+                }
+                if (currentBossIndex >= selectedBosses.length) {
+                    currentBossIndex = 0;
+                }
                 setTimeout(() => {
                     attackNextBoss();
                 }, 2000);
@@ -3807,8 +3849,14 @@ async function attackNextBoss() {
         console.error('Ошибка атаки босса:', error);
         updateAttackStatus(`❌ Ошибка атаки ${boss.name}: ${error.message}`);
         
-        // Переходим к следующему боссу при ошибке
-        currentBossIndex++;
+        // Удаляем текущего босса и переходим к следующему при ошибке
+        if (currentBossIndex < selectedBosses.length) {
+            selectedBosses.splice(currentBossIndex, 1);
+            updateOrderCarousel();
+        }
+        if (currentBossIndex >= selectedBosses.length) {
+            currentBossIndex = 0;
+        }
         setTimeout(() => {
             attackNextBoss();
         }, 2000);
@@ -3869,11 +3917,64 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
             }
         }
         
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        
+        // Обработка 400 с "Session already active"
+        if (!response.ok && response.status === 400 && data.message === "Session already active") {
+            // Бой еще продолжается, ждем 5 секунд и проверяем снова
+            const boss = selectedBosses[currentBossIndex];
+            updateAttackStatus(`⚔️ Бой с ${boss.name} еще продолжается, ждем 5 секунд...`);
+            
+            bossAttackInterval = setTimeout(() => {
+                checkBossBattleStatus(bossId, boss.mode, data.sessionId || data.session?.sessionId);
+            }, 5000);
+            return;
         }
         
-        const data = await response.json();
+        // Обработка ошибок лимита или нехватки ключей
+        if (!response.ok || !data.success) {
+            const errorMessage = data.message || data.error || 'Неизвестная ошибка';
+            const lowerMessage = errorMessage.toLowerCase();
+            
+            // Проверяем, является ли это ошибкой лимита или нехватки ключей
+            if (lowerMessage.includes('limit') || 
+                lowerMessage.includes('лимит') || 
+                lowerMessage.includes('key') || 
+                lowerMessage.includes('ключ') ||
+                lowerMessage.includes('not enough') ||
+                lowerMessage.includes('недостаточно')) {
+                // Удаляем все экземпляры этого босса из списка и переходим к следующему
+                const boss = selectedBosses[currentBossIndex];
+                if (!boss) {
+                    // Если босс уже удален, просто переходим к следующему
+                    setTimeout(() => {
+                        attackNextBoss();
+                    }, 2000);
+                    return;
+                }
+                
+                updateAttackStatus(`⚠️ ${boss.name}: ${errorMessage}. Переход к следующему боссу...`);
+                
+                // Удаляем все экземпляры текущего босса
+                const currentBossId = boss.id;
+                selectedBosses = selectedBosses.filter(b => b.id !== currentBossId);
+                updateOrderCarousel();
+                
+                // Если список не пуст, продолжаем атаку, иначе останавливаемся
+                // Индекс остается на месте, так как следующий босс займет это место
+                if (currentBossIndex >= selectedBosses.length) {
+                    currentBossIndex = 0;
+                }
+                
+                setTimeout(() => {
+                    attackNextBoss();
+                }, 2000);
+                return;
+            }
+            
+            // Для других ошибок выбрасываем исключение
+            throw new Error(errorMessage);
+        }
         
         // Обновляем информацию о боссе и ключи после start-attack
         if (data.success && data.session) {
@@ -3900,7 +4001,16 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
                 updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
             }
             
-            currentBossIndex++;
+            // Удаляем один экземпляр босса из списка после завершения боя
+            if (currentBossIndex < selectedBosses.length) {
+                selectedBosses.splice(currentBossIndex, 1);
+                updateOrderCarousel();
+            }
+            
+            // Если список не пуст, продолжаем атаку, иначе останавливаемся
+            if (currentBossIndex >= selectedBosses.length) {
+                currentBossIndex = 0;
+            }
             
             // Переходим к следующему боссу
             setTimeout(() => {
@@ -3915,10 +4025,16 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
                 checkBossBattleStatus(bossId, boss.mode, data.sessionId);
             }, 5000);
         } else {
-            // Ошибка или неожиданный ответ
+            // Ошибка или неожиданный ответ - удаляем текущего босса и переходим к следующему
             const boss = selectedBosses[currentBossIndex];
             updateAttackStatus(`⚠️ Неожиданный ответ для ${boss.name}`);
-            currentBossIndex++;
+            if (currentBossIndex < selectedBosses.length) {
+                selectedBosses.splice(currentBossIndex, 1);
+                updateOrderCarousel();
+            }
+            if (currentBossIndex >= selectedBosses.length) {
+                currentBossIndex = 0;
+            }
             setTimeout(() => {
                 attackNextBoss();
             }, 2000);
@@ -3929,8 +4045,14 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
         const boss = selectedBosses[currentBossIndex];
         updateAttackStatus(`❌ Ошибка проверки статуса ${boss.name}: ${error.message}`);
         
-        // Переходим к следующему боссу
-        currentBossIndex++;
+        // Удаляем текущего босса и переходим к следующему
+        if (currentBossIndex < selectedBosses.length) {
+            selectedBosses.splice(currentBossIndex, 1);
+            updateOrderCarousel();
+        }
+        if (currentBossIndex >= selectedBosses.length) {
+            currentBossIndex = 0;
+        }
         setTimeout(() => {
             attackNextBoss();
         }, 2000);
@@ -4086,3 +4208,4 @@ async function collectBossRewards() {
         throw error;
     }
 }
+
