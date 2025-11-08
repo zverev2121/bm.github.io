@@ -342,9 +342,6 @@ function updateSettingsDisplay() {
 }
 
 async function showSettingsForm() {
-    // ВАЖНО: При открытии формы настроек всегда обновляем поле ввода из БД
-    // Это гарантирует, что отображается актуальный сохраненный initData, а не старый
-    await loadSettings();
     const welcome = document.getElementById('settings-welcome');
     const form = document.getElementById('settings-form');
     const info = document.getElementById('settings-info');
@@ -352,6 +349,9 @@ async function showSettingsForm() {
     if (welcome) welcome.style.display = 'none';
     if (form) form.style.display = 'flex';
     if (info) info.style.display = 'none';
+    
+    // ВАЖНО: При открытии формы настроек всегда обновляем поле ввода из БД
+    // Это гарантирует, что отображается актуальный сохраненный initData, а не старый
     await loadSettings();
 }
 
@@ -477,203 +477,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     API_SERVER_URL = getApiServerUrl();
     GAME_API_URL = getGameApiUrl();
     
-    // Ищем пользователя по username из URL (переданного через кнопку бота)
-    // ВАЖНО: initData всегда берется из БД, не из tg.initData
+    // loadSettings() уже выполнила поиск по username и заполнила поля
+    // Просто используем токен из localStorage, если он есть
     const savedToken = localStorage.getItem('game_access_token');
     let token = savedToken;
     
-    // ПРИОРИТЕТ 1: Если есть tg.initData от Telegram - используем его (это данные текущего пользователя)
-    if (tg?.initData && tg.initData.trim() && tg.initData.length >= 50) {
-        console.log('✅ Используется initData от Telegram (приоритет)');
-        console.log('Это гарантирует, что используются данные текущего пользователя');
-        // ВАЖНО: initData будет сохранен в БД при авторизации, не сохраняем в localStorage
-        
-        // Обновляем поле ввода для отображения (но не сохраняем в localStorage)
-        const manualInitDataInput = document.getElementById('manual-initdata');
-        if (manualInitDataInput) {
-            manualInitDataInput.value = tg.initData.trim();
-            console.log('✓ Поле manual-initdata обновлено tg.initData (только для отображения)');
-        }
-        
-        // Пытаемся авторизоваться с tg.initData
-        try {
-            token = await loginWithInitData();
-            if (!token) {
-                console.warn('Не удалось получить токен из tg.initData, пробуем сохраненный токен');
-                token = savedToken;
-            }
-        } catch (e) {
-            console.warn('Ошибка при получении токена из tg.initData:', e);
-            token = savedToken;
-        }
-    } 
-    // ПРИОРИТЕТ 2: Если нет tg.initData, но есть сохраненный токен - получаем initData из БД
-    else if (savedToken) {
-        console.log('⚠️ tg.initData недоступен, но есть сохраненный токен');
-        console.log('Получаем последний актуальный initData из БД...');
-        
-        // Получаем initData из БД
-        try {
-            const savedInitData = await getSavedInitDataFromServer();
-            if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
-                console.log('✓✓✓ Получен последний актуальный initData из БД ✓✓✓');
-                console.log(`Длина initData: ${savedInitData.length} символов`);
-                
-                // ВАЖНО: Заполняем поле ввода последним рабочим initData из БД (не сохраняем в localStorage)
-                const manualInitDataInput = document.getElementById('manual-initdata');
-                if (manualInitDataInput) {
-                    manualInitDataInput.value = savedInitData;
-                    console.log('✓✓✓ Поле manual-initdata заполнено последним актуальным initData из БД ✓✓✓');
-                }
-                
-                token = savedToken;
-            } else {
-                console.warn('⚠️ Не удалось получить initData из БД');
-                console.warn('Возможные причины:');
-                console.warn('  1. Пользователь не найден в БД');
-                console.warn('  2. Токен недействителен');
-                console.warn('  3. initData не сохранен в БД для этого пользователя');
-                console.warn('Используем сохраненный токен без initData');
-                token = savedToken;
-            }
-        } catch (e) {
-            console.error('❌ Ошибка при получении initData из БД:', e);
-            console.warn('Используем сохраненный токен без initData');
-            token = savedToken;
-        }
-    }
-    // ПРИОРИТЕТ 3: Если нет tg.initData и нет токена, но есть данные пользователя из Telegram
-    else {
-        const telegramUserInfo = getTelegramUserInfo();
-        if (telegramUserInfo) {
-            console.log('⚠️ tg.initData недоступен и нет сохраненного токена');
-            console.log('Но пользователь идентифицирован через Telegram:');
-            console.log(`  - user_id: ${telegramUserInfo.id}`);
-            console.log(`  - username: ${telegramUserInfo.username || 'не указан'}`);
-            console.log('Попробуйте обновить страницу или войти заново');
-            // Не показываем настройки, т.к. пользователь известен
-            
-            // Пытаемся получить initData из БД, если есть токен
-            const savedToken = localStorage.getItem('game_access_token');
-            if (savedToken) {
-                try {
-                    const savedInitData = await getSavedInitDataFromServer();
-                    if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
-                        // Заполняем поле ввода
-                        const manualInitDataInput = document.getElementById('manual-initdata');
-                        if (manualInitDataInput) {
-                            manualInitDataInput.value = savedInitData;
-                            console.log('✓ Поле manual-initdata заполнено initData из БД');
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Не удалось получить initData из БД:', e);
-                }
-            }
-        }
-    }
-    
-    // ВАЖНО: После всех проверок, если initData все еще не найден, но есть токен - 
-    // пытаемся получить его из БД еще раз (на случай, если токен появился позже)
-    if (!token && savedToken) {
-        console.log('Повторная попытка получить initData из БД...');
-        try {
-            const savedInitData = await getSavedInitDataFromServer();
-            if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
-                console.log('✓ Получен initData из БД при повторной попытке');
-                
-                // Заполняем поле ввода (не сохраняем в localStorage)
-                const manualInitDataInput = document.getElementById('manual-initdata');
-                if (manualInitDataInput) {
-                    manualInitDataInput.value = savedInitData;
-                    console.log('✓ Поле manual-initdata заполнено initData из БД');
-                }
-                
-                token = savedToken;
-            }
-        } catch (e) {
-            console.warn('Ошибка при повторной попытке получить initData:', e);
-        }
-    }
-    
-    // ПРИОРИТЕТ 4: Если нет tg.initData и нет токена, но есть initData в поле ввода - используем его
-    // (это может быть initData, который пользователь только что ввел, но еще не сохранил)
-    if (!token) {
-        const manualInitDataInput = document.getElementById('manual-initdata');
-        const manualInitData = manualInitDataInput?.value?.trim();
-        if (manualInitData && manualInitData.length >= 50) {
-            console.log('Используется initData из поля ввода (временный, не сохранен)');
-            // Пытаемся получить токен из initData
-            try {
-                const loginUrl = API_SERVER_URL 
-                    ? `${API_SERVER_URL}/auth/login`
-                    : `${GAME_API_URL}/auth/login`;
-                
-                const response = await fetch(loginUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify({ initData: manualInitData })
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success && data.accessToken) {
-                        token = data.accessToken;
-                        localStorage.setItem('game_access_token', token);
-                        if (data.refreshToken) {
-                            localStorage.setItem('game_refresh_token', data.refreshToken);
-                        }
-                        if (data.userId) {
-                            localStorage.setItem('game_user_id', data.userId.toString());
-                        }
-                        console.log('✅ Токен получен из сохраненного initData');
-                    } else {
-                        console.warn('Не удалось получить токен из initData, пробуем сохраненный токен');
-                        token = savedToken;
-                    }
-                } else {
-                    console.warn('Ошибка при получении токена из initData, пробуем сохраненный токен');
-                    token = savedToken;
-                }
-            } catch (e) {
-                console.warn('Ошибка при получении токена из initData:', e);
-                token = savedToken;
-            }
-        }
-    } 
-    // ПРИОРИТЕТ 3: Если есть сохраненный токен - используем его, но пытаемся обновить
-    else if (savedToken) {
-        console.log('Используется сохраненный токен');
-        token = savedToken;
-        // Пытаемся авторизоваться для обновления токена (опционально)
-        // Но не блокируем, если это не удалось
-        try {
-            const freshToken = await loginWithInitData();
-            if (freshToken) {
-                token = freshToken;
-            }
-        } catch (e) {
-            console.warn('Не удалось обновить токен через login, используем сохраненный:', e);
-        }
-    } 
-    // ПРИОРИТЕТ 4: Если ничего нет - пытаемся авторизоваться
-    else {
-        // ВСЕГДА пытаемся авторизоваться (даже если есть токен в localStorage)
-        // Это гарантирует, что токен свежий и валидный
-        console.log('Начало авторизации...');
-        token = await loginWithInitData();
-    }
-    
     if (token) {
-        console.log('✓ Авторизация успешна, токен получен');
+        console.log('✓ Токен найден в localStorage (получен через loadSettings)');
         console.log('Токен длина:', token.length);
         console.log('Токен первые 20 символов:', token.substring(0, 20) + '...');
-        
-        // Сохраняем токен в localStorage
-        localStorage.setItem('game_access_token', token);
         
         updateStatus(true);
         
@@ -2095,7 +1907,8 @@ async function getUserByUsernameFromServer(username) {
 // ВАЖНО: initData не сохраняется в localStorage, только получается из БД
 async function getSavedInitDataFromServer() {
     try {
-        const token = await getAccessToken();
+        // ВАЖНО: Берем токен напрямую из localStorage, чтобы избежать циклических вызовов
+        const token = localStorage.getItem('game_access_token');
         if (!token) {
             console.warn('Токен не найден, невозможно получить initData из БД');
             return null;
@@ -2105,10 +1918,14 @@ async function getSavedInitDataFromServer() {
             ? `${API_SERVER_URL}/auth/get-saved-init-data`
             : `${GAME_API_URL}/auth/get-saved-init-data`;
         
-        // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
+        // ВАЖНО: Используем токен напрямую, без getApiHeaders() чтобы избежать циклических вызовов
         const response = await fetch(url, {
             method: 'GET',
-            headers: await getApiHeaders()
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
         });
         
         if (response.ok) {
