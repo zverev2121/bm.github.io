@@ -3338,7 +3338,7 @@ function renderBossList(categoriesData) {
                      data-boss-name="${bossName.replace(/'/g, "\\'")}"
                      data-selected-mode="${currentMode || ''}"
                      style="${cardStyle} border-radius: 12px; padding: 12px; margin-right: 12px; min-width: 180px; cursor: pointer; transition: transform 0.2s;"
-                     onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}', '${currentMode || ''}')">
+                     onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}')">
                     <div class="boss-image" style="width: 100%; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden;">
                         <img src="${getBossImageUrl(bossId, boss)}" 
                              alt="${bossName}" 
@@ -3473,30 +3473,42 @@ window.toggleBossSelection = function(bossId, bossName, mode = null) {
         // Добавляем в выбранные (можно выбрать любого босса, даже если ключей недостаточно)
         const bossData = window.allBosses.find(b => b.id === bossId);
         if (bossData) {
-            // Если режим не указан, берем из карточки или выбираем по умолчанию
-            if (!mode) {
-                const card = document.querySelector(`.boss-card[data-boss-id="${bossId}"]`);
-                if (card && card.dataset.selectedMode) {
-                    mode = card.dataset.selectedMode;
+            // Всегда берем режим из селектора на карточке
+            const card = document.querySelector(`.boss-card[data-boss-id="${bossId}"]`);
+            let selectedMode = null;
+            
+            if (card) {
+                // Пытаемся получить режим из селектора
+                const selector = card.querySelector(`#boss-mode-${bossId}`);
+                if (selector) {
+                    selectedMode = selector.value;
+                } else if (card.dataset.selectedMode) {
+                    // Если селектора нет, берем из data-атрибута
+                    selectedMode = card.dataset.selectedMode;
+                }
+            }
+            
+            // Если режим не найден, используем переданный или выбираем по умолчанию
+            if (!selectedMode) {
+                if (mode) {
+                    selectedMode = mode;
                 } else {
                     const availableModes = bossData.availableModes || getAvailableBattleModes(bossData);
                     // По умолчанию выбираем "pacansky", если доступен
                     const pacanskyMode = availableModes.find(m => m.key === 'pacansky');
-                    mode = pacanskyMode ? pacanskyMode.key : (availableModes.length > 0 ? availableModes[0].key : null);
+                    selectedMode = pacanskyMode ? pacanskyMode.key : (availableModes.length > 0 ? availableModes[0].key : null);
                 }
             }
             
-            if (!mode) {
-                if (tg && tg.showAlert) {
-                    tg.showAlert('Нет доступных режимов боя для этого босса');
-                }
+            if (!selectedMode) {
+                console.warn(`Не удалось определить режим для босса ${bossId}`);
                 return;
             }
             
             selectedBosses.push({
                 id: bossId,
                 name: bossName,
-                mode: mode
+                mode: selectedMode
             });
             updateBossCardSelection(bossId, true);
         }
