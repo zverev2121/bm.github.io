@@ -1249,10 +1249,20 @@ async function loadBossInfo() {
                     const data = await retryResponse.json();
                     
                     // Обновляем ключи из ответа bootstrap
-                    if (data.success && data.keys) {
+                    // Ключи находятся в playerStats.keys
+                    let keysData = null;
+                    if (data.success) {
+                        if (data.playerStats && data.playerStats.keys) {
+                            keysData = data.playerStats.keys;
+                        } else if (data.keys) {
+                            keysData = data.keys;
+                        }
+                    }
+                    
+                    if (keysData) {
                         const oldKeys = { ...bossKeys };
                         bossKeys = {};
-                        for (const [bossIdStr, count] of Object.entries(data.keys)) {
+                        for (const [bossIdStr, count] of Object.entries(keysData)) {
                             const bossId = parseInt(bossIdStr);
                             const keyCount = parseInt(count) || 0;
                             bossKeys[bossId] = keyCount;
@@ -1334,10 +1344,20 @@ async function loadBossInfo() {
         const data = await response.json();
         
         // Обновляем ключи из ответа bootstrap
-        if (data.success && data.keys) {
+        // Ключи находятся в playerStats.keys
+        let keysData = null;
+        if (data.success) {
+            if (data.playerStats && data.playerStats.keys) {
+                keysData = data.playerStats.keys;
+            } else if (data.keys) {
+                keysData = data.keys;
+            }
+        }
+        
+        if (keysData) {
             const oldKeys = { ...bossKeys };
             bossKeys = {};
-            for (const [bossIdStr, count] of Object.entries(data.keys)) {
+            for (const [bossIdStr, count] of Object.entries(keysData)) {
                 const bossId = parseInt(bossIdStr);
                 const keyCount = parseInt(count) || 0;
                 bossKeys[bossId] = keyCount;
@@ -1471,11 +1491,16 @@ async function updateBossKeys() {
         if (bootstrapResponse.ok) {
             const bootstrapData = await bootstrapResponse.json();
             console.log('📦 Bootstrap ответ получен:', bootstrapData);
-            console.log('📦 Bootstrap keys в ответе:', bootstrapData.keys);
+            console.log('📦 Bootstrap playerStats:', bootstrapData.playerStats);
+            console.log('📦 Bootstrap playerStats.keys:', bootstrapData.playerStats?.keys);
             
             // Проверяем разные варианты структуры ответа
+            // Ключи находятся в playerStats.keys
             let keysData = null;
-            if (bootstrapData.keys) {
+            if (bootstrapData.playerStats && bootstrapData.playerStats.keys) {
+                keysData = bootstrapData.playerStats.keys;
+                console.log('✅ Ключи найдены в bootstrapData.playerStats.keys');
+            } else if (bootstrapData.keys) {
                 keysData = bootstrapData.keys;
                 console.log('✅ Ключи найдены в bootstrapData.keys');
             } else if (bootstrapData.data && bootstrapData.data.keys) {
@@ -2992,12 +3017,18 @@ window.loadBossList = async function loadBossList() {
         if (bootstrapResponse.ok) {
             const bootstrapData = await bootstrapResponse.json();
             console.log('📦 Bootstrap данные:', bootstrapData);
-            console.log('📦 Bootstrap keys:', bootstrapData.keys);
+            console.log('📦 Bootstrap playerStats:', bootstrapData.playerStats);
+            console.log('📦 Bootstrap playerStats.keys:', bootstrapData.playerStats?.keys);
             
             // Проверяем разные варианты структуры ответа
+            // Ключи находятся в playerStats.keys
             let keysData = null;
-            if (bootstrapData.keys) {
+            if (bootstrapData.playerStats && bootstrapData.playerStats.keys) {
+                keysData = bootstrapData.playerStats.keys;
+                console.log('✅ Ключи найдены в playerStats.keys');
+            } else if (bootstrapData.keys) {
                 keysData = bootstrapData.keys;
+                console.log('✅ Ключи найдены в корне ответа');
             } else if (bootstrapData.data && bootstrapData.data.keys) {
                 keysData = bootstrapData.data.keys;
             } else if (bootstrapData.success && bootstrapData.keys) {
@@ -3276,22 +3307,38 @@ function renderBossList(categoriesData) {
                 ? 'border: 2px solid #28a745; background: linear-gradient(135deg, #2d5a2d 0%, #1e3a1e 100%);' 
                 : 'border: 2px solid #555; background: linear-gradient(135deg, #2d2d2d 0%, #1e1e1e 100%);';
             
-            // Формируем список режимов для отображения
-            let modesHtml = '';
+            // Проверяем, выбран ли этот босс и какой режим выбран
+            const selectedBoss = selectedBosses.find(b => b.id === bossId);
+            const selectedMode = selectedBoss ? selectedBoss.mode : null;
+            // По умолчанию выбираем "pacansky", если он доступен
+            const defaultMode = availableModes.find(m => m.key === 'pacansky') ? 'pacansky' : (availableModes.length > 0 ? availableModes[0].key : null);
+            const currentMode = selectedMode || defaultMode;
+            
+            // Формируем селектор режимов (как в прокачке бицухи)
+            let modeSelectorHtml = '';
             if (availableModes.length > 0) {
-                modesHtml = '<div class="boss-modes" style="margin-top: 6px; font-size: 10px; display: flex; flex-wrap: wrap; gap: 3px; justify-content: center;">';
-                availableModes.forEach(mode => {
-                    modesHtml += `<span style="background: rgba(255,255,255,0.2); padding: 2px 4px; border-radius: 3px; white-space: nowrap;">${mode.name} ${mode.multiplier}</span>`;
-                });
-                modesHtml += '</div>';
+                modeSelectorHtml = `
+                    <div class="boss-mode-selector" style="margin-top: 6px;">
+                        <select id="boss-mode-${bossId}" 
+                                class="boss-mode-select form-control" 
+                                style="width: 100%; padding: 4px 6px; font-size: 11px; background: rgba(0,0,0,0.5); color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer;"
+                                onchange="updateBossMode(${bossId}, this.value)"
+                                onclick="event.stopPropagation();">
+                            ${availableModes.map(mode => 
+                                `<option value="${mode.key}" ${mode.key === currentMode ? 'selected' : ''}>${mode.name} ${mode.multiplier}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
+                `;
             }
             
             html += `
                 <div class="boss-card" 
                      data-boss-id="${bossId}" 
                      data-boss-name="${bossName.replace(/'/g, "\\'")}"
-                     style="${cardStyle} border-radius: 12px; padding: 12px; margin-right: 12px; min-width: 160px; cursor: pointer; transition: transform 0.2s;"
-                     onclick="showBossModeSelection(${bossId})">
+                     data-selected-mode="${currentMode || ''}"
+                     style="${cardStyle} border-radius: 12px; padding: 12px; margin-right: 12px; min-width: 180px; cursor: pointer; transition: transform 0.2s;"
+                     onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}', '${currentMode || ''}')">
                     <div class="boss-image" style="width: 100%; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden;">
                         <img src="${getBossImageUrl(bossId, boss)}" 
                              alt="${bossName}" 
@@ -3304,11 +3351,11 @@ function renderBossList(categoriesData) {
                     <div class="boss-info-card" style="text-align: center; color: #ffffff;">
                         <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bossName}</div>
                         <div class="boss-hp" style="font-size: 12px; color: #e0e0e0; margin-bottom: 4px;">HP: ${baseHp.toLocaleString()}</div>
-                        <div class="boss-keys" style="font-size: 12px; color: #ffd700; margin-bottom: 4px;">
+                        <div class="boss-keys" style="font-size: 12px; color: #ffd700; margin-bottom: 6px;">
                             🔑 ${keysInfo.hasRequirements ? `${keysInfo.required}/${keysInfo.available}` : keysCount}
                         </div>
-                        ${modesHtml}
-                        ${canAttack ? '<div class="available-indicator" style="font-size: 10px; color: #28a745; margin-top: 4px;">✓ Доступен</div>' : ''}
+                        ${modeSelectorHtml}
+                        ${canAttack ? '<div class="available-indicator" style="font-size: 10px; color: #28a745; margin-top: 6px;">✓ Доступен</div>' : ''}
                     </div>
                 </div>
             `;
@@ -3392,89 +3439,26 @@ function initializeCarousels() {
     });
 }
 
-// Показать выбор режима для босса
-window.showBossModeSelection = function(bossId) {
+// Обновление режима босса через селектор
+window.updateBossMode = function(bossId, mode) {
     const bossData = window.allBosses.find(b => b.id === bossId);
     if (!bossData) {
         console.warn(`Босс ${bossId} не найден`);
         return;
     }
     
-    const availableModes = bossData.availableModes || getAvailableBattleModes(bossData);
-    
-    if (availableModes.length === 0) {
-        if (tg && tg.showAlert) {
-            tg.showAlert('Нет доступных режимов боя для этого босса');
-        }
-        return;
+    // Обновляем data-selected-mode в карточке
+    const card = document.querySelector(`.boss-card[data-boss-id="${bossId}"]`);
+    if (card) {
+        card.dataset.selectedMode = mode;
     }
     
-    // Если режим только один, выбираем его автоматически
-    if (availableModes.length === 1) {
-        toggleBossSelection(bossId, bossData.name, availableModes[0].key);
-        return;
+    // Если босс уже выбран, обновляем его режим
+    const bossIndex = selectedBosses.findIndex(b => b.id === bossId);
+    if (bossIndex >= 0) {
+        selectedBosses[bossIndex].mode = mode;
+        updateOrderCarousel();
     }
-    
-    // Показываем выбор режима
-    const modeOptions = availableModes.map((mode, index) => 
-        `${index + 1}. ${mode.name} ${mode.multiplier}`
-    ).join('\n');
-    
-    const modeText = `Выберите режим боя для ${bossData.name}:\n\n${modeOptions}`;
-    
-    if (tg && tg.showAlert) {
-        // Для Telegram используем простой выбор через confirm
-        // Создаем модальное окно для выбора режима
-        showModeSelectionModal(bossId, bossData.name, availableModes);
-    } else {
-        // Для браузера используем prompt
-        const choice = prompt(modeText + '\n\nВведите номер режима:');
-        if (choice) {
-            const modeIndex = parseInt(choice) - 1;
-            if (modeIndex >= 0 && modeIndex < availableModes.length) {
-                toggleBossSelection(bossId, bossData.name, availableModes[modeIndex].key);
-            }
-        }
-    }
-}
-
-// Показать модальное окно выбора режима
-function showModeSelectionModal(bossId, bossName, availableModes) {
-    const modal = document.getElementById('custom-modal');
-    const modalBody = document.getElementById('custom-modal-body');
-    
-    if (!modal || !modalBody) {
-        // Если модального окна нет, используем простой выбор
-        const choice = prompt(`Выберите режим для ${bossName}:\n\n${availableModes.map((m, i) => `${i+1}. ${m.name} ${m.multiplier}`).join('\n')}\n\nВведите номер:`);
-        if (choice) {
-            const modeIndex = parseInt(choice) - 1;
-            if (modeIndex >= 0 && modeIndex < availableModes.length) {
-                toggleBossSelection(bossId, bossName, availableModes[modeIndex].key);
-            }
-        }
-        return;
-    }
-    
-    let html = `<div style="text-align: center;"><strong>${bossName}</strong><br><br>Выберите режим боя:</div><div style="display: flex; flex-direction: column; gap: 8px; margin-top: 15px;">`;
-    
-    availableModes.forEach((mode, index) => {
-        html += `
-            <button onclick="selectBossMode(${bossId}, '${bossName.replace(/'/g, "\\'")}', '${mode.key}'); closeCustomModal();" 
-                    style="padding: 12px; background: var(--tg-theme-button-color, #3390ec); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
-                ${mode.name} ${mode.multiplier}
-            </button>
-        `;
-    });
-    
-    html += '</div>';
-    modalBody.innerHTML = html;
-    modal.style.display = 'flex';
-    document.body.style.overflow = 'hidden';
-}
-
-// Выбор режима для босса
-window.selectBossMode = function(bossId, bossName, mode) {
-    toggleBossSelection(bossId, bossName, mode);
 }
 
 // Переключение выбора босса с режимом
@@ -3489,17 +3473,24 @@ window.toggleBossSelection = function(bossId, bossName, mode = null) {
         // Добавляем в выбранные (можно выбрать любого босса, даже если ключей недостаточно)
         const bossData = window.allBosses.find(b => b.id === bossId);
         if (bossData) {
-            // Если режим не указан, выбираем первый доступный
+            // Если режим не указан, берем из карточки или выбираем по умолчанию
             if (!mode) {
-                const availableModes = bossData.availableModes || getAvailableBattleModes(bossData);
-                if (availableModes.length > 0) {
-                    mode = availableModes[0].key;
+                const card = document.querySelector(`.boss-card[data-boss-id="${bossId}"]`);
+                if (card && card.dataset.selectedMode) {
+                    mode = card.dataset.selectedMode;
                 } else {
-                    if (tg && tg.showAlert) {
-                        tg.showAlert('Нет доступных режимов боя для этого босса');
-                    }
-                    return;
+                    const availableModes = bossData.availableModes || getAvailableBattleModes(bossData);
+                    // По умолчанию выбираем "pacansky", если доступен
+                    const pacanskyMode = availableModes.find(m => m.key === 'pacansky');
+                    mode = pacanskyMode ? pacanskyMode.key : (availableModes.length > 0 ? availableModes[0].key : null);
                 }
+            }
+            
+            if (!mode) {
+                if (tg && tg.showAlert) {
+                    tg.showAlert('Нет доступных режимов боя для этого босса');
+                }
+                return;
             }
             
             selectedBosses.push({
