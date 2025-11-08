@@ -122,9 +122,11 @@ async function saveSettings() {
     
     // Если введен initData, выполняем login для получения токена
     // ВАЖНО: initData НЕ сохраняется в localStorage, только отправляется на сервер для сохранения в БД
-    if (manualInitData) {
+    // ВАЖНО: При каждом сохранении initData всегда перезаписывается в БД, даже если он не изменился
+    if (manualInitData && manualInitData.trim() && manualInitData.length >= 50) {
         try {
             console.log('Выполнение login с введенным initData...');
+            console.log('ВАЖНО: initData будет перезаписан в БД при успешном login');
             const loginUrl = API_SERVER_URL 
                 ? `${API_SERVER_URL}/auth/login`
                 : `${GAME_API_URL}/auth/login`;
@@ -135,12 +137,13 @@ async function saveSettings() {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify({ initData: manualInitData })
+                body: JSON.stringify({ initData: manualInitData.trim() })
             });
             
             if (response.ok) {
                 const data = await response.json();
                 if (data.success && data.accessToken) {
+                    // ВАЖНО: Токен всегда обновляется в localStorage
                     localStorage.setItem('game_access_token', data.accessToken);
                     if (data.refreshToken) {
                         localStorage.setItem('game_refresh_token', data.refreshToken);
@@ -149,8 +152,9 @@ async function saveSettings() {
                         localStorage.setItem('game_user_id', data.userId.toString());
                     }
                     console.log('✅ Токен получен из initData');
-                    console.log('✅ initData сохранен в БД на сервере');
-                    tg.showAlert('✅ Настройки сохранены!\n\nТокен получен из initData.\n\ninitData сохранен в БД.\n\nПерезагрузите страницу для применения изменений.');
+                    console.log('✅ initData перезаписан в БД на сервере');
+                    console.log('✅ Access token обновлен в БД');
+                    tg.showAlert('✅ Настройки сохранены!\n\nТокен получен из initData.\n\ninitData перезаписан в БД.\n\nПерезагрузите страницу для применения изменений.');
                 } else {
                     const errorMsg = data.message || data.error || 'Неизвестная ошибка';
                     console.error('Ошибка login:', errorMsg);
@@ -165,6 +169,9 @@ async function saveSettings() {
             console.error('Ошибка при сохранении initData:', error);
             tg.showAlert(`⚠️ Настройки сохранены, но ошибка при получении токена:\n${error.message}`);
         }
+    } else if (manualInitData && manualInitData.trim()) {
+        console.warn('initData слишком короткий, пропускаем сохранение');
+        tg.showAlert('⚠️ initData слишком короткий. Минимальная длина: 50 символов.');
     }
     
     // ВАЖНО: Удаляем manual_init_data из localStorage, если он там был (не должен храниться)
