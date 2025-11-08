@@ -1261,16 +1261,8 @@ async function loadBossInfo() {
                             
                             // Показываем модальное окно с наградой
                             showCustomModal(rewardMessageText);
-                            
-                            // Также показываем уведомление в Telegram, если доступно
-                            if (tg && tg.showAlert) {
-                                tg.showAlert(rewardMessageText.replace(/\n/g, ' '));
-                            }
                         } catch (error) {
                             console.error('Ошибка сбора награды:', error);
-                            if (tg && tg.showAlert) {
-                                tg.showAlert(`⚠️ Ошибка сбора награды: ${error.message}`);
-                            }
                         }
                     }
                     
@@ -1330,17 +1322,9 @@ async function loadBossInfo() {
                 
                 // Показываем модальное окно с наградой
                 showCustomModal(rewardMessageText);
-                
-                // Также показываем уведомление в Telegram, если доступно
-                if (tg && tg.showAlert) {
-                    tg.showAlert(rewardMessageText.replace(/\n/g, ' '));
-                }
             } catch (error) {
                 console.error('Ошибка сбора награды:', error);
                 rewardMessageHtml = `<p style="color: #dc3545;">⚠️ Ошибка сбора награды: ${error.message}</p>`;
-                if (tg && tg.showAlert) {
-                    tg.showAlert(`⚠️ Ошибка сбора награды: ${error.message}`);
-                }
             }
         }
         
@@ -1455,13 +1439,16 @@ function updateBossCards() {
     cards.forEach(card => {
         const bossId = parseInt(card.dataset.bossId);
         
-        // Получаем количество ключей (проверяем и строковые, и числовые ключи)
+        // Получаем количество ключей у босса
         let keysCount = 0;
         if (bossKeys[bossId] !== undefined) {
             keysCount = parseInt(bossKeys[bossId]) || 0;
         } else if (bossKeys[String(bossId)] !== undefined) {
             keysCount = parseInt(bossKeys[String(bossId)]) || 0;
         }
+        
+        // Получаем информацию о требуемых ключах
+        const keysInfo = getBossKeysInfo(bossId);
         
         const canAttack = canAttackBoss(bossId);
         
@@ -1470,7 +1457,7 @@ function updateBossCards() {
         // Обновляем количество ключей
         const keysElement = card.querySelector('.boss-keys');
         if (keysElement) {
-            keysElement.textContent = `🔑 ${keysCount}`;
+            keysElement.textContent = `🔑 ${keysInfo.hasRequirements ? `${keysInfo.required}/${keysInfo.available}` : keysCount}`;
         } else {
             console.warn(`⚠️ Не найден элемент .boss-keys для босса ${bossId}`);
         }
@@ -1484,22 +1471,25 @@ function updateBossCards() {
             let availableIndicator = card.querySelector('.available-indicator');
             const infoCard = card.querySelector('.boss-info-card');
             if (!availableIndicator && infoCard) {
+                // Создаем новый индикатор только если его нет
                 availableIndicator = document.createElement('div');
                 availableIndicator.className = 'available-indicator';
                 availableIndicator.style.cssText = 'font-size: 10px; color: #28a745; margin-top: 4px;';
-                infoCard.appendChild(availableIndicator);
-            }
-            if (availableIndicator) {
                 availableIndicator.textContent = '✓ Доступен';
+                infoCard.appendChild(availableIndicator);
+            } else if (availableIndicator) {
+                // Обновляем существующий индикатор
+                availableIndicator.textContent = '✓ Доступен';
+                availableIndicator.style.display = 'block';
             }
         } else {
             card.style.border = '2px solid #555';
             card.style.background = 'linear-gradient(135deg, #2d2d2d 0%, #1e1e1e 100%)';
             
-            // Удаляем индикатор доступности
+            // Скрываем индикатор доступности (не удаляем, чтобы не создавать заново)
             const availableIndicator = card.querySelector('.available-indicator');
             if (availableIndicator) {
-                availableIndicator.remove();
+                availableIndicator.style.display = 'none';
             }
         }
     });
@@ -3010,6 +3000,54 @@ window.loadBossList = async function loadBossList() {
     }
 }
 
+// Получение информации о требуемых ключах для босса
+function getBossKeysInfo(bossId) {
+    const rules = BOSS_ATTACK_RULES[bossId];
+    if (!rules || Object.keys(rules.requiredKeys).length === 0) {
+        // Не требуется ключей
+        return { required: 0, available: 0, hasRequirements: false };
+    }
+    
+    // Суммируем все требуемые ключи
+    let totalRequired = 0;
+    let totalAvailable = 0;
+    
+    for (const [fromBossIdStr, requiredCount] of Object.entries(rules.requiredKeys)) {
+        const fromBossId = parseInt(fromBossIdStr);
+        const required = parseInt(requiredCount);
+        totalRequired += required;
+        
+        // Получаем количество доступных ключей
+        let availableKeys = 0;
+        if (bossKeys[fromBossId] !== undefined) {
+            availableKeys = parseInt(bossKeys[fromBossId]) || 0;
+        } else if (bossKeys[String(fromBossId)] !== undefined) {
+            availableKeys = parseInt(bossKeys[String(fromBossId)]) || 0;
+        }
+        totalAvailable += availableKeys;
+    }
+    
+    return { required: totalRequired, available: totalAvailable, hasRequirements: true };
+}
+
+// Получение URL изображения босса
+function getBossImageUrl(bossId, bossData) {
+    // Приоритет 1: картинка из папки images по ID
+    const localImageUrl = `images/${bossId}.png`;
+    
+    // Приоритет 2: картинка из API (если есть)
+    const apiImageUrl = bossData?.imageUrl || bossData?.image || '';
+    
+    // Возвращаем локальную картинку (она будет загружаться, даже если файла нет - браузер покажет ошибку, но мы обработаем это через onerror)
+    return localImageUrl;
+}
+
+// Получение fallback URL изображения босса (из API)
+function getBossImageUrlFallback(bossId, bossData) {
+    // Картинка из API (если есть)
+    return bossData?.imageUrl || bossData?.image || '';
+}
+
 // Отображение списка боссов с каруселями
 function renderBossList(categoriesData) {
     const container = document.getElementById('boss-list-container');
@@ -3039,13 +3077,16 @@ function renderBossList(categoriesData) {
             const bossId = boss.id;
             const bossName = boss.title;
             const baseHp = boss.baseHp;
-            // Получаем количество ключей (проверяем и строковые, и числовые ключи)
+            // Получаем количество ключей у босса
             let keysCount = 0;
             if (bossKeys[bossId] !== undefined) {
                 keysCount = parseInt(bossKeys[bossId]) || 0;
             } else if (bossKeys[String(bossId)] !== undefined) {
                 keysCount = parseInt(bossKeys[String(bossId)]) || 0;
             }
+            
+            // Получаем информацию о требуемых ключах
+            const keysInfo = getBossKeysInfo(bossId);
             
             const canAttack = canAttackBoss(bossId);
             
@@ -3076,16 +3117,21 @@ function renderBossList(categoriesData) {
                      style="${cardStyle} border-radius: 12px; padding: 12px; margin-right: 12px; min-width: 140px; cursor: pointer; transition: transform 0.2s;"
                      onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}')">
                     <div class="boss-image" style="width: 100%; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden;">
-                        ${boss.imageUrl || boss.image ? 
-                            `<img src="${boss.imageUrl || boss.image}" alt="${bossName}" style="max-width: 100%; max-height: 100%; object-fit: contain;">` :
-                            `<span style="font-size: 40px;">👹</span>`
-                        }
+                        <img src="${getBossImageUrl(bossId, boss)}" 
+                             alt="${bossName}" 
+                             data-fallback="${getBossImageUrlFallback(bossId, boss)}"
+                             style="max-width: 100%; max-height: 100%; object-fit: contain;"
+                             onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
+                             onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
+                        <span style="font-size: 40px; display: none;">👹</span>
                     </div>
                     <div class="boss-info-card" style="text-align: center; color: #ffffff;">
                         <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bossName}</div>
                         <div class="boss-hp" style="font-size: 12px; color: #e0e0e0; margin-bottom: 4px;">HP: ${baseHp.toLocaleString()}</div>
-                        <div class="boss-keys" style="font-size: 12px; color: #ffd700;">🔑 ${keysCount}</div>
-                        ${canAttack ? '<div style="font-size: 10px; color: #28a745; margin-top: 4px;">✓ Доступен</div>' : ''}
+                        <div class="boss-keys" style="font-size: 12px; color: #ffd700;">
+                            🔑 ${keysInfo.hasRequirements ? `${keysInfo.required}/${keysInfo.available}` : keysCount}
+                        </div>
+                        ${canAttack ? '<div class="available-indicator" style="font-size: 10px; color: #28a745; margin-top: 4px;">✓ Доступен</div>' : ''}
                     </div>
                 </div>
             `;
@@ -3229,10 +3275,13 @@ function updateOrderCarousel() {
                  style="border: 2px solid #3390ec; background: linear-gradient(135deg, #2d3d5a 0%, #1e2a3a 100%); border-radius: 12px; padding: 12px; margin-right: 12px; min-width: 140px; position: relative;">
                 <div style="position: absolute; top: 5px; right: 5px; background: #3390ec; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">${index + 1}</div>
                 <div class="boss-image" style="width: 100%; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden;">
-                    ${bossData && (bossData.imageUrl || bossData.image) ? 
-                        `<img src="${bossData.imageUrl || bossData.image}" alt="${boss.name}" style="max-width: 100%; max-height: 100%; object-fit: contain;">` :
-                        `<span style="font-size: 40px;">👹</span>`
-                    }
+                    <img src="${getBossImageUrl(boss.id, bossData)}" 
+                         alt="${boss.name}" 
+                         data-fallback="${getBossImageUrlFallback(boss.id, bossData)}"
+                         style="max-width: 100%; max-height: 100%; object-fit: contain;"
+                         onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
+                         onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
+                    <span style="font-size: 40px; display: none;">👹</span>
                 </div>
                 <div class="boss-info-card" style="text-align: center; color: #ffffff;">
                     <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${boss.name}</div>
@@ -3391,17 +3440,9 @@ async function attackNextBoss(mode) {
                     
                     // Показываем модальное окно с наградой
                     showCustomModal(rewardMessageText);
-                    
-                    // Также показываем уведомление в Telegram, если доступно
-                    if (tg && tg.showAlert) {
-                        tg.showAlert(rewardMessageText.replace(/\n/g, ' '));
-                    }
                 } catch (error) {
                     console.error('Ошибка сбора награды:', error);
                     updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
-                    if (tg && tg.showAlert) {
-                        tg.showAlert(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
-                    }
                 }
                 
                 currentBossIndex++;
@@ -3511,17 +3552,9 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
                 
                 // Показываем модальное окно с наградой
                 showCustomModal(rewardMessageText);
-                
-                // Также показываем уведомление в Telegram, если доступно
-                if (tg && tg.showAlert) {
-                    tg.showAlert(rewardMessageText.replace(/\n/g, ' '));
-                }
             } catch (error) {
                 console.error('Ошибка сбора награды:', error);
                 updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
-                if (tg && tg.showAlert) {
-                    tg.showAlert(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
-                }
             }
             
             currentBossIndex++;
@@ -3611,7 +3644,8 @@ function formatRewardMessage(rewardData, format = 'html') {
                 const currencyNames = {
                     'sugar': 'Сахар',
                     'cigarettes': 'Папиросы',
-                    'money': 'Деньги'
+                    'money': 'Деньги',
+                    'rubles': 'Рубли'
                 };
                 const currencies = gr.currencies.map(c => {
                     const name = currencyNames[c.type] || c.type;
@@ -3644,7 +3678,8 @@ function formatRewardMessage(rewardData, format = 'html') {
                 const currencyNames = {
                     'sugar': 'Сахар',
                     'cigarettes': 'Папиросы',
-                    'money': 'Деньги'
+                    'money': 'Деньги',
+                    'rubles': 'Рубли'
                 };
                 const currencies = gr.currencies.map(c => {
                     const name = currencyNames[c.type] || c.type;
