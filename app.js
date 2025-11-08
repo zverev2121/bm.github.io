@@ -668,15 +668,24 @@ async function startBicepsUpgrade() {
         'Fight': '👊 Начать нападение'
     };
     
-    // Блокируем кнопку
+    // Устанавливаем флаг обработки
+    isBicepsProcessing = true;
+    
+    // Блокируем кнопку и показываем кнопку остановки
     startBtn.disabled = true;
+    startBtn.style.display = 'none';
+    document.getElementById('biceps-stop-btn').style.display = 'block';
     btnText.textContent = '⏳ Выполняется...';
     
     // Получаем токен (с автоматическим обновлением при необходимости)
     let token = await getAccessToken();
     if (!token) {
         tg.showAlert('Токен не найден. Выполните авторизацию');
+        // Восстанавливаем состояние кнопок
+        isBicepsProcessing = false;
         startBtn.disabled = false;
+        startBtn.style.display = 'block';
+        document.getElementById('biceps-stop-btn').style.display = 'none';
         btnText.textContent = buttonTexts[interactionType] || '💪 Начать';
         return;
     }
@@ -742,6 +751,12 @@ async function startBicepsUpgrade() {
     const results = [];
     
     for (const toUserId of userIds) {
+        // Проверяем флаг остановки
+        if (!isBicepsProcessing) {
+            console.log('Обработка остановлена пользователем');
+            break;
+        }
+        
         try {
             // ВАЖНО: Получаем актуальный токен в начале КАЖДОЙ итерации из localStorage
             // Это гарантирует, что после обновления токена в предыдущей итерации, мы используем новый токен
@@ -1009,13 +1024,19 @@ async function startBicepsUpgrade() {
             }
             
             // Обновляем результаты в реальном времени
+            const statusText = !isBicepsProcessing ? '⏹️ Остановлено' : '⏳ Выполняется...';
             resultsContent.innerHTML = `
-                <p><strong>${actionName}</strong></p>
+                <p><strong>${actionName}</strong> ${statusText}</p>
                 <p><strong>Обработано:</strong> ${results.length} / ${userIds.length}</p>
                 <div style="max-height: 200px; overflow-y: auto; margin-top: 10px; padding: 10px; background: var(--tg-theme-secondary-bg-color, #1e1e1e); border-radius: 5px; color: var(--tg-theme-text-color, #ffffff);">
                     ${results.map(r => `<div style="margin: 5px 0; font-size: 12px;">${r}</div>`).join('')}
                 </div>
             `;
+            
+            // Проверяем флаг остановки перед задержкой
+            if (!isBicepsProcessing) {
+                break;
+            }
             
             // Небольшая задержка между запросами
             await new Promise(resolve => setTimeout(resolve, 500));
@@ -1042,12 +1063,65 @@ async function startBicepsUpgrade() {
         </div>
     `;
     
-    showCustomModal(`Готово!\n\n${actionName}\n\nУспешно: ${successCount}\nУже выполнено: ${alreadyDoneCount}\nОшибки: ${errorCount}`);
+    // Показываем итоговое сообщение только если не была остановка
+    if (isBicepsProcessing) {
+        showCustomModal(`Готово!\n\n${actionName}\n\nУспешно: ${successCount}\nУже выполнено: ${alreadyDoneCount}\nОшибки: ${errorCount}`);
+    } else {
+        showCustomModal(`Остановлено!\n\n${actionName}\n\nОбработано: ${results.length} / ${userIds.length}\nУспешно: ${successCount}\nУже выполнено: ${alreadyDoneCount}\nОшибки: ${errorCount}`);
+    }
     
-    // Разблокируем кнопку
+    // Сбрасываем флаг и восстанавливаем кнопки
+    isBicepsProcessing = false;
     startBtn.disabled = false;
+    startBtn.style.display = 'block';
+    document.getElementById('biceps-stop-btn').style.display = 'none';
     btnText.textContent = buttonTexts[interactionType] || '💪 Начать';
 }
+
+// Функция остановки обработки взаимодействий с игроками
+window.stopBicepsProcessing = function() {
+    isBicepsProcessing = false;
+    
+    const startBtn = document.getElementById('biceps-start-btn');
+    const btnText = document.getElementById('biceps-btn-text');
+    const stopBtn = document.getElementById('biceps-stop-btn');
+    const interactionTypeSelect = document.getElementById('interaction-type');
+    const resultsContent = document.getElementById('biceps-results-content');
+    
+    // Обновляем статус в результатах, если они отображаются
+    if (resultsContent) {
+        const currentContent = resultsContent.innerHTML;
+        // Заменяем статус на "Остановлено"
+        const updatedContent = currentContent.replace('⏳ Выполняется...', '⏹️ Остановлено');
+        if (updatedContent !== currentContent) {
+            resultsContent.innerHTML = updatedContent;
+        }
+    }
+    
+    // Восстанавливаем кнопки
+    if (startBtn) {
+        startBtn.disabled = false;
+        startBtn.style.display = 'block';
+    }
+    if (stopBtn) {
+        stopBtn.style.display = 'none';
+    }
+    
+    // Восстанавливаем текст кнопки
+    if (btnText && interactionTypeSelect) {
+        const buttonTexts = {
+            'UpgradeBiceps': '💪 Начать прокачку',
+            'Harknut': '🤮 Начать харкать',
+            'TossDroj': '💩 Начать подкидывать',
+            'SendFriendRequest': '👥 Начать добавление',
+            'Fight': '👊 Начать нападение'
+        };
+        const interactionType = interactionTypeSelect.value;
+        btnText.textContent = buttonTexts[interactionType] || '💪 Начать';
+    }
+    
+    console.log('Обработка взаимодействий остановлена пользователем');
+};
 
 // Обновляем текст кнопки при изменении типа взаимодействия (добавляем после загрузки DOM)
 function initInteractionTypeSelector() {
@@ -2459,6 +2533,9 @@ let bossAttackInterval = null;
 let currentBossIndex = 0;
 let selectedBosses = [];
 let isAttacking = false;
+
+// Флаг для отслеживания процесса взаимодействия с игроками
+let isBicepsProcessing = false;
 
 // Загрузка списка боссов (глобальная функция)
 window.loadBossList = async function loadBossList() {
