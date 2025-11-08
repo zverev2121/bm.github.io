@@ -3789,19 +3789,31 @@ async function attackNextBoss() {
         
         if (data.success) {
             if (data.isOver) {
-                // Бой завершен - собираем награду
-                updateAttackStatus(`✅ ${boss.name} побежден! Сбор награды...`);
-                try {
-                    const rewardData = await collectBossRewards();
-                    const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
-                    const rewardMessageText = formatRewardMessage(rewardData, 'text');
-                    updateAttackStatus(rewardMessageHtml);
-                    
-                    // Показываем модальное окно с наградой
-                    showCustomModal(rewardMessageText);
-                } catch (error) {
-                    console.error('Ошибка сбора награды:', error);
-                    updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
+                // Бой завершен - проверяем, есть ли награда для сбора
+                console.log('🔍 Проверка награды после завершения боя:', {
+                    'data.hasReward': data.hasReward,
+                    'data.session?.hasReward': data.session?.hasReward,
+                    'data': data
+                });
+                const hasReward = data.hasReward === true || (data.session && data.session.hasReward === true);
+                console.log('💰 hasReward:', hasReward);
+                
+                if (hasReward) {
+                    updateAttackStatus(`✅ ${boss.name} побежден! Сбор награды...`);
+                    try {
+                        const rewardData = await collectBossRewards();
+                        const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
+                        const rewardMessageText = formatRewardMessage(rewardData, 'text');
+                        updateAttackStatus(rewardMessageHtml);
+                        
+                        // Показываем модальное окно с наградой
+                        showCustomModal(rewardMessageText);
+                    } catch (error) {
+                        console.error('Ошибка сбора награды:', error);
+                        updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
+                    }
+                } else {
+                    updateAttackStatus(`✅ ${boss.name} побежден! (награда уже собрана или отсутствует)`);
                 }
                 
                 // Удаляем один экземпляр босса из списка после завершения боя
@@ -3985,20 +3997,32 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
         }
         
         if (data.success && data.isOver) {
-            // Бой завершен - собираем награду
+            // Бой завершен - проверяем, есть ли награда для сбора
             const boss = selectedBosses[currentBossIndex];
-            updateAttackStatus(`✅ ${boss.name} побежден! Сбор награды...`);
-            try {
-                const rewardData = await collectBossRewards();
-                const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
-                const rewardMessageText = formatRewardMessage(rewardData, 'text');
-                updateAttackStatus(rewardMessageHtml);
-                
-                // Показываем модальное окно с наградой
-                showCustomModal(rewardMessageText);
-            } catch (error) {
-                console.error('Ошибка сбора награды:', error);
-                updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
+            console.log('🔍 Проверка награды после завершения боя (checkBossBattleStatus):', {
+                'data.hasReward': data.hasReward,
+                'data.session?.hasReward': data.session?.hasReward,
+                'data': data
+            });
+            const hasReward = data.hasReward === true || (data.session && data.session.hasReward === true);
+            console.log('💰 hasReward:', hasReward);
+            
+            if (hasReward) {
+                updateAttackStatus(`✅ ${boss.name} побежден! Сбор награды...`);
+                try {
+                    const rewardData = await collectBossRewards();
+                    const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
+                    const rewardMessageText = formatRewardMessage(rewardData, 'text');
+                    updateAttackStatus(rewardMessageHtml);
+                    
+                    // Показываем модальное окно с наградой
+                    showCustomModal(rewardMessageText);
+                } catch (error) {
+                    console.error('Ошибка сбора награды:', error);
+                    updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
+                }
+            } else {
+                updateAttackStatus(`✅ ${boss.name} побежден! (награда уже собрана или отсутствует)`);
             }
             
             // Удаляем один экземпляр босса из списка после завершения боя
