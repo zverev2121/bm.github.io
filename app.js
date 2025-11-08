@@ -503,7 +503,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         
         // Скрываем другие секции до настройки
-        document.getElementById('boss-section').style.display = 'none';
+        // Примечание: boss-section теперь на вкладке "Атака боссов", управляется через switchTab
         document.getElementById('prison-section').style.display = 'none';
         document.getElementById('stats-section').style.display = 'none';
         document.getElementById('biceps-section').style.display = 'none';
@@ -550,7 +550,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateStatus(true);
         
         // Показываем все секции
-        document.getElementById('boss-section').style.display = 'block';
+        // Примечание: boss-section теперь на вкладке "Атака боссов", управляется через switchTab
         document.getElementById('prison-section').style.display = 'block';
         document.getElementById('stats-section').style.display = 'block';
         document.getElementById('biceps-section').style.display = 'block';
@@ -586,8 +586,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             updateStatus(true);
             
             // Показываем все секции
-            document.getElementById('boss-section').style.display = 'block';
-            document.getElementById('boss-select-section').style.display = 'block';
+            // Примечание: boss-section теперь на вкладке "Атака боссов", управляется через switchTab
             document.getElementById('prison-section').style.display = 'block';
             document.getElementById('stats-section').style.display = 'block';
             document.getElementById('biceps-section').style.display = 'block';
@@ -615,8 +614,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             updateStatus(false);
             
             // Показываем секции, но с ошибкой
-            document.getElementById('boss-section').style.display = 'block';
-            document.getElementById('boss-select-section').style.display = 'block';
+            // Примечание: boss-section теперь на вкладке "Атака боссов", управляется через switchTab
             document.getElementById('prison-section').style.display = 'block';
             document.getElementById('stats-section').style.display = 'block';
             document.getElementById('biceps-section').style.display = 'block';
@@ -1247,6 +1245,21 @@ async function loadBossInfo() {
                     }
                     // Продолжаем с retryResponse
                     const data = await retryResponse.json();
+                    
+                    // Проверяем, есть ли награда для сбора
+                    if (data.success && data.hasReward === true) {
+                        try {
+                            await collectBossRewards();
+                            // Показываем сообщение о собранной награде
+                            if (bossInfo) {
+                                const rewardMessage = '<p style="color: #28a745; font-weight: bold;">💰 Награда с босса собрана!</p>';
+                                bossInfo.innerHTML = rewardMessage;
+                            }
+                        } catch (error) {
+                            console.error('Ошибка сбора награды:', error);
+                        }
+                    }
+                    
                     if (data.success && data.session) {
                         const session = data.session;
                         const hpPercent = ((session.currentHp / session.maxHp) * 100).toFixed(1);
@@ -1268,7 +1281,9 @@ async function loadBossInfo() {
                             timeInfo += `<br>Окончание боя: <strong>${endTime}</strong>`;
                         }
                         
+                        const rewardMessage = data.hasReward === true ? '<p style="color: #28a745; font-weight: bold;">💰 Награда с босса собрана!</p>' : '';
                         bossInfo.innerHTML = `
+                            ${rewardMessage}
                             <div>
                                 <strong>${session.title || 'Босс'}</strong><br>
                                 HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
@@ -1288,6 +1303,28 @@ async function loadBossInfo() {
         }
         
         const data = await response.json();
+        
+        // Проверяем, есть ли награда для сбора
+        if (data.success && data.hasReward === true) {
+            try {
+                await collectBossRewards();
+                // Показываем сообщение о собранной награде
+                if (bossInfo) {
+                    const currentContent = bossInfo.innerHTML;
+                    bossInfo.innerHTML = `<p style="color: #28a745; font-weight: bold;">💰 Награда с босса собрана!</p>${currentContent}`;
+                    // Убираем сообщение через 3 секунды
+                    setTimeout(() => {
+                        if (bossInfo.innerHTML.includes('💰 Награда с босса собрана!')) {
+                            bossInfo.innerHTML = bossInfo.innerHTML.replace('<p style="color: #28a745; font-weight: bold;">💰 Награда с босса собрана!</p>', '');
+                        }
+                    }, 3000);
+                }
+            } catch (error) {
+                console.error('Ошибка сбора награды:', error);
+                // Не прерываем загрузку информации о боссе, просто логируем ошибку
+            }
+        }
+        
         if (data.success && data.session) {
             const session = data.session;
             const hpPercent = ((session.currentHp / session.maxHp) * 100).toFixed(1);
@@ -1309,7 +1346,9 @@ async function loadBossInfo() {
                 timeInfo += `<br>Окончание боя: <strong>${endTime}</strong>`;
             }
             
+            const rewardMessage = data.hasReward === true ? '<p style="color: #28a745; font-weight: bold;">💰 Награда с босса собрана!</p>' : '';
             bossInfo.innerHTML = `
+                ${rewardMessage}
                 <div>
                     <strong>${session.title || 'Босс'}</strong><br>
                     HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
@@ -2923,8 +2962,16 @@ async function attackNextBoss(mode) {
         
         if (data.success) {
             if (data.isOver) {
-                // Бой завершен
-                updateAttackStatus(`✅ ${boss.name} побежден! Переход к следующему...`);
+                // Бой завершен - собираем награду
+                updateAttackStatus(`✅ ${boss.name} побежден! Сбор награды...`);
+                try {
+                    await collectBossRewards();
+                    updateAttackStatus(`💰 Награда с ${boss.name} собрана!`);
+                } catch (error) {
+                    console.error('Ошибка сбора награды:', error);
+                    updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
+                }
+                
                 currentBossIndex++;
                 
                 // Переходим к следующему боссу через небольшую задержку
@@ -3013,9 +3060,17 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
         const data = await response.json();
         
         if (data.success && data.isOver) {
-            // Бой завершен
+            // Бой завершен - собираем награду
             const boss = selectedBosses[currentBossIndex];
-            updateAttackStatus(`✅ ${boss.name} побежден! Переход к следующему...`);
+            updateAttackStatus(`✅ ${boss.name} побежден! Сбор награды...`);
+            try {
+                await collectBossRewards();
+                updateAttackStatus(`💰 Награда с ${boss.name} собрана!`);
+            } catch (error) {
+                console.error('Ошибка сбора награды:', error);
+                updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
+            }
+            
             currentBossIndex++;
             
             // Переходим к следующему боссу
@@ -3073,5 +3128,52 @@ function updateAttackStatus(message) {
     if (statusContent) {
         const timestamp = new Date().toLocaleTimeString();
         statusContent.innerHTML = `<p><strong>[${timestamp}]</strong> ${message}</p>`;
+    }
+}
+
+// Сбор награды с босса
+async function collectBossRewards() {
+    try {
+        let token = await getAccessToken();
+        if (!token) {
+            throw new Error('Токен не найден');
+        }
+        
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        let response = await fetch(`${apiUrl}/boss/rewards`, {
+            method: 'GET',
+            headers: await getApiHeaders()
+        });
+        
+        // Обработка 401/403 - обновляем токен через initData из БД
+        if (response.status === 401 || response.status === 403) {
+            const currentInitData = await getCurrentInitData();
+            if (currentInitData && currentInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    response = await fetch(`${apiUrl}/boss/rewards`, {
+                        method: 'GET',
+                        headers: await getApiHeaders()
+                    });
+                }
+            }
+        }
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            console.log('✅ Награда с босса собрана:', data);
+            return data;
+        } else {
+            throw new Error(data.error || 'Не удалось собрать награду');
+        }
+        
+    } catch (error) {
+        console.error('Ошибка сбора награды с босса:', error);
+        throw error;
     }
 }
