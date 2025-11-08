@@ -1250,13 +1250,27 @@ async function loadBossInfo() {
                     if (data.success && data.hasReward === true) {
                         try {
                             const rewardData = await collectBossRewards();
+                            // Форматируем сообщение о награде
+                            const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
+                            const rewardMessageText = formatRewardMessage(rewardData, 'text');
+                            
                             // Показываем сообщение о собранной награде
                             if (bossInfo) {
-                                const rewardMessage = formatRewardMessage(rewardData);
-                                bossInfo.innerHTML = `<p style="color: #28a745; font-weight: bold;">${rewardMessage}</p>`;
+                                bossInfo.innerHTML = `<p style="color: #28a745; font-weight: bold;">${rewardMessageHtml}</p>`;
+                            }
+                            
+                            // Показываем модальное окно с наградой
+                            showCustomModal(rewardMessageText);
+                            
+                            // Также показываем уведомление в Telegram, если доступно
+                            if (tg && tg.showAlert) {
+                                tg.showAlert(rewardMessageText.replace(/\n/g, ' '));
                             }
                         } catch (error) {
                             console.error('Ошибка сбора награды:', error);
+                            if (tg && tg.showAlert) {
+                                tg.showAlert(`⚠️ Ошибка сбора награды: ${error.message}`);
+                            }
                         }
                     }
                     
@@ -1310,11 +1324,23 @@ async function loadBossInfo() {
             try {
                 const rewardData = await collectBossRewards();
                 // Форматируем сообщение о награде
-                const rewardMessage = formatRewardMessage(rewardData);
-                rewardMessageHtml = `<p style="color: #28a745; font-weight: bold;">${rewardMessage}</p>`;
+                const rewardMessageHtmlFormatted = formatRewardMessage(rewardData, 'html');
+                const rewardMessageText = formatRewardMessage(rewardData, 'text');
+                rewardMessageHtml = `<p style="color: #28a745; font-weight: bold;">${rewardMessageHtmlFormatted}</p>`;
+                
+                // Показываем модальное окно с наградой
+                showCustomModal(rewardMessageText);
+                
+                // Также показываем уведомление в Telegram, если доступно
+                if (tg && tg.showAlert) {
+                    tg.showAlert(rewardMessageText.replace(/\n/g, ' '));
+                }
             } catch (error) {
                 console.error('Ошибка сбора награды:', error);
                 rewardMessageHtml = `<p style="color: #dc3545;">⚠️ Ошибка сбора награды: ${error.message}</p>`;
+                if (tg && tg.showAlert) {
+                    tg.showAlert(`⚠️ Ошибка сбора награды: ${error.message}`);
+                }
             }
         }
         
@@ -1363,6 +1389,89 @@ async function loadBossInfo() {
     }
 }
 
+// Обновление ключей боссов из bootstrap
+async function updateBossKeys() {
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        let bootstrapResponse = await fetch(`${apiUrl}/boss/bootstrap`, {
+            method: 'GET',
+            headers: await getApiHeaders()
+        });
+        
+        // Обработка 401/403 - обновляем токен
+        if (bootstrapResponse.status === 401 || bootstrapResponse.status === 403) {
+            const currentInitData = await getCurrentInitData();
+            if (currentInitData && currentInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    bootstrapResponse = await fetch(`${apiUrl}/boss/bootstrap`, {
+                        method: 'GET',
+                        headers: await getApiHeaders()
+                    });
+                }
+            }
+        }
+        
+        if (bootstrapResponse.ok) {
+            const bootstrapData = await bootstrapResponse.json();
+            if (bootstrapData.success && bootstrapData.keys) {
+                // Обновляем ключи
+                bossKeys = {};
+                for (const [bossIdStr, count] of Object.entries(bootstrapData.keys)) {
+                    bossKeys[parseInt(bossIdStr)] = count;
+                }
+                console.log('✅ Ключи обновлены:', bossKeys);
+                
+                // Обновляем карточки боссов, если они уже загружены
+                updateBossCards();
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка обновления ключей:', error);
+    }
+}
+
+// Обновление карточек боссов с новыми ключами
+function updateBossCards() {
+    const cards = document.querySelectorAll('.boss-card');
+    cards.forEach(card => {
+        const bossId = parseInt(card.dataset.bossId);
+        const keysCount = bossKeys[bossId] || 0;
+        const canAttack = canAttackBoss(bossId);
+        
+        // Обновляем количество ключей
+        const keysElement = card.querySelector('.boss-keys');
+        if (keysElement) {
+            keysElement.textContent = `🔑 ${keysCount}`;
+        }
+        
+        // Обновляем стиль карточки
+        if (canAttack) {
+            card.style.border = '2px solid #28a745';
+            card.style.background = 'linear-gradient(135deg, #2d5a2d 0%, #1e3a1e 100%)';
+            
+            // Добавляем или обновляем индикатор доступности
+            let availableIndicator = card.querySelector('.available-indicator');
+            if (!availableIndicator) {
+                availableIndicator = document.createElement('div');
+                availableIndicator.className = 'available-indicator';
+                availableIndicator.style.cssText = 'font-size: 10px; color: #28a745; margin-top: 4px;';
+                card.querySelector('.boss-info-card').appendChild(availableIndicator);
+            }
+            availableIndicator.textContent = '✓ Доступен';
+        } else {
+            card.style.border = '2px solid #555';
+            card.style.background = 'linear-gradient(135deg, #2d2d2d 0%, #1e1e1e 100%)';
+            
+            // Удаляем индикатор доступности
+            const availableIndicator = card.querySelector('.available-indicator');
+            if (availableIndicator) {
+                availableIndicator.remove();
+            }
+        }
+    });
+}
+
 // Обновление информации о боссе
 async function refreshBossInfo() {
     const btn = event.target;
@@ -1370,9 +1479,12 @@ async function refreshBossInfo() {
     btn.textContent = '🔄 Обновление...';
     
     try {
-        // Просто вызываем loadBossInfo(), которая уже делает запрос на /boss/bootstrap
-        await loadBossInfo();
-        await loadStats();
+        // Обновляем ключи и информацию о боссе
+        await Promise.all([
+            updateBossKeys(),
+            loadBossInfo(),
+            loadStats()
+        ]);
     } catch (error) {
         console.error('Ошибка обновления:', error);
         tg.showAlert(`❌ Ошибка: ${error.message}`);
@@ -2578,8 +2690,59 @@ let currentBossIndex = 0;
 let selectedBosses = [];
 let isAttacking = false;
 
+// Структура данных для правил атаки боссов (ключи)
+// Формат: bossId: { requiredKeys: { fromBossId: count } }
+const BOSS_ATTACK_RULES = {
+    1: { requiredKeys: {} }, // Кирпич - без ключей
+    2: { requiredKeys: { 1: 3 } }, // Сизовый - 3 ключа с Кирпича
+    3: { requiredKeys: { 2: 3 } }, // Махно - 3 ключа с Сизового
+    4: { requiredKeys: { 3: 3 } }, // Лютый - 3 ключа с Махно
+    5: { requiredKeys: { 4: 1 } }, // Шайба - 1 ключ с Лютого
+    6: { requiredKeys: { 5: 1 } }, // Бурят - 1 ключ с Шайбы
+    7: { requiredKeys: { 6: 1 } }, // Дядя Миша - 1 ключ с Бурят
+    8: { requiredKeys: { 7: 1 } }, // Хирург - 1 ключ с Дяди Миши
+    9: { requiredKeys: {} }, // Палыч - без ключей
+    10: { requiredKeys: { 9: 3 } }, // Циплоп - 3 ключа с Палыча
+    11: { requiredKeys: { 10: 3 } }, // Раиса - 3 ключа с Циплопа
+    12: { requiredKeys: { 11: 3 } }, // Бес - 3 ключа с Раисы
+    13: { requiredKeys: { 12: 3 } }, // Паленов - 3 ключа с Беса
+    14: { requiredKeys: { 13: 1 } }, // Блезница - 1 ключ с Паленова
+    15: { requiredKeys: { 14: 1 } }, // Борзов Миша - 1 ключ с Блезницы
+    16: { requiredKeys: { 15: 1 } } // Дюбель - 1 ключ с Борзова
+};
+
+// Глобальная переменная для хранения ключей боссов
+let bossKeys = {};
+
+// Названия категорий
+const CATEGORY_NAMES = {
+    1: 'Беспредельщики',
+    2: 'Вертухаи'
+};
+
 // Флаг для отслеживания процесса взаимодействия с игроками
 let isBicepsProcessing = false;
+
+// Проверка доступности босса для атаки
+function canAttackBoss(bossId) {
+    const rules = BOSS_ATTACK_RULES[bossId];
+    if (!rules) return false;
+    
+    // Если не требуется ключей, можно атаковать
+    if (Object.keys(rules.requiredKeys).length === 0) {
+        return true;
+    }
+    
+    // Проверяем, есть ли все необходимые ключи
+    for (const [fromBossId, requiredCount] of Object.entries(rules.requiredKeys)) {
+        const availableKeys = bossKeys[fromBossId] || 0;
+        if (availableKeys < requiredCount) {
+            return false;
+        }
+    }
+    
+    return true;
+}
 
 // Загрузка списка боссов (глобальная функция)
 window.loadBossList = async function loadBossList() {
@@ -2594,7 +2757,6 @@ window.loadBossList = async function loadBossList() {
     try {
         console.log('=== loadBossList: начало загрузки ===');
         console.log('GAME_API_URL:', GAME_API_URL);
-        console.log('typeof GAME_API_URL:', typeof GAME_API_URL);
         
         if (!GAME_API_URL) {
             throw new Error('GAME_API_URL не определен! Проверьте настройки.');
@@ -2605,15 +2767,43 @@ window.loadBossList = async function loadBossList() {
             throw new Error('Токен не найден');
         }
         
-        console.log('loadBossList: токен получен, длина:', token.length);
-        
         // Определяем правильный URL для запросов (используем прокси если есть)
         const apiUrl = API_SERVER_URL || GAME_API_URL;
-        console.log('Используемый API URL для запросов:', apiUrl);
-        console.log('API_SERVER_URL:', API_SERVER_URL);
-        console.log('GAME_API_URL:', GAME_API_URL);
         
-        // categoryId обязателен для boss/list, поэтому сразу делаем два параллельных запроса
+        // Сначала загружаем ключи из bootstrap
+        console.log('Загружаем ключи из bootstrap...');
+        let bootstrapResponse = await fetch(`${apiUrl}/boss/bootstrap`, {
+            method: 'GET',
+            headers: await getApiHeaders()
+        });
+        
+        // Обработка 401/403 - обновляем токен
+        if (bootstrapResponse.status === 401 || bootstrapResponse.status === 403) {
+            const currentInitData = await getCurrentInitData();
+            if (currentInitData && currentInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    bootstrapResponse = await fetch(`${apiUrl}/boss/bootstrap`, {
+                        method: 'GET',
+                        headers: await getApiHeaders()
+                    });
+                }
+            }
+        }
+        
+        if (bootstrapResponse.ok) {
+            const bootstrapData = await bootstrapResponse.json();
+            if (bootstrapData.success && bootstrapData.keys) {
+                // Сохраняем ключи (преобразуем строковые ключи в числа)
+                bossKeys = {};
+                for (const [bossIdStr, count] of Object.entries(bootstrapData.keys)) {
+                    bossKeys[parseInt(bossIdStr)] = count;
+                }
+                console.log('✅ Ключи загружены:', bossKeys);
+            }
+        }
+        
+        // Загружаем обе категории боссов параллельно
         console.log('Загружаем обе категории боссов параллельно...');
         
         let category1Data = null;
@@ -2624,42 +2814,31 @@ window.loadBossList = async function loadBossList() {
         async function fetchCategoryWithRetry(categoryId) {
             try {
                 const url = `${apiUrl}/boss/list?categoryId=${categoryId}`;
-                console.log(`Запрос категории ${categoryId}: ${url}`);
                 
-                // ВАЖНО: Используем getApiHeaders() для получения актуального токена из БД
                 let response = await fetch(url, {
                     method: 'GET',
                     headers: await getApiHeaders()
                 });
                 
-                console.log(`Категория ${categoryId}: статус ответа`, response.status);
-                
                 // Обработка 401/403 - обновляем токен через initData из БД и повторяем
                 if (response.status === 401 || response.status === 403) {
-                    console.log(`401/403 для категории ${categoryId}, пытаемся обновить токен через initData из БД...`);
                     const currentInitData = await getCurrentInitData();
                     if (currentInitData && currentInitData.trim()) {
                         const newToken = await loginWithInitData();
                         if (newToken) {
-                            // ВАЖНО: Токен уже сохранен в БД на сервере при login
-                            // Используем getApiHeaders() для получения актуального токена из БД
-                            // Повторяем запрос с новым токеном
                             response = await fetch(url, {
                                 method: 'GET',
                                 headers: await getApiHeaders()
                             });
-                            console.log(`Категория ${categoryId} (повтор): статус ответа`, response.status);
                         }
                     }
                 }
                 
                 if (response.ok) {
                     const data = await response.json();
-                    console.log(`✅ Категория ${categoryId} загружена успешно:`, data);
                     return data;
                 } else {
                     const errorText = await response.text();
-                    console.error(`❌ Ошибка загрузки категории ${categoryId}:`, response.status, errorText);
                     throw new Error(`HTTP ${response.status}: ${errorText}`);
                 }
             } catch (err) {
@@ -2743,28 +2922,37 @@ window.loadBossList = async function loadBossList() {
     }
 }
 
-// Отображение списка боссов с чекбоксами
+// Отображение списка боссов с каруселями
 function renderBossList(categoriesData) {
     const container = document.getElementById('boss-list-container');
-    let html = '<div class="boss-list">';
     
     // Сохраняем данные боссов для использования
     window.allBosses = [];
     
+    let html = '';
+    
+    // Обрабатываем каждую категорию
     categoriesData.forEach((categoryData, categoryIndex) => {
         if (!categoryData.success || !categoryData.bosses) return;
         
         const categoryId = categoryData.bosses[0]?.boss?.categoryId || categoryIndex + 1;
-        const categoryName = categoryId === 1 ? 'Категория 1' : 'Категория 2';
+        const categoryName = CATEGORY_NAMES[categoryId] || `Категория ${categoryId}`;
         
-        html += `<h3 style="margin-top: 15px; margin-bottom: 10px; color: #ffffff;">${categoryName}</h3>`;
-        html += '<div class="boss-category" style="margin-bottom: 20px;">';
+        // Создаем карусель для категории
+        html += `
+            <div class="boss-category-section" style="margin-bottom: 30px;">
+                <h3 class="category-title" style="margin-bottom: 15px; color: var(--tg-theme-text-color, #000000); font-size: 18px; font-weight: 600;">${categoryName}</h3>
+                <div class="boss-carousel-container" data-category-id="${categoryId}">
+                    <div class="boss-carousel" id="carousel-category-${categoryId}">
+        `;
         
         categoryData.bosses.forEach((bossData) => {
             const boss = bossData.boss;
             const bossId = boss.id;
             const bossName = boss.title;
             const baseHp = boss.baseHp;
+            const keysCount = bossKeys[bossId] || 0;
+            const canAttack = canAttackBoss(bossId);
             
             // Сохраняем босса
             window.allBosses.push({
@@ -2772,91 +2960,226 @@ function renderBossList(categoriesData) {
                 name: bossName,
                 categoryId: categoryId,
                 baseHp: baseHp,
-                battleModes: boss.battleModes || {}
+                battleModes: boss.battleModes || {},
+                imageUrl: boss.imageUrl || boss.image || ''
             });
             
+            // Определяем стиль карточки (зеленый если можно атаковать)
+            const cardStyle = canAttack 
+                ? 'border: 2px solid #28a745; background: linear-gradient(135deg, #2d5a2d 0%, #1e3a1e 100%);' 
+                : 'border: 2px solid #555; background: linear-gradient(135deg, #2d2d2d 0%, #1e1e1e 100%);';
+            
             html += `
-                <div class="boss-item" style="display: flex; align-items: center; margin: 5px 0; padding: 8px; background: #2d2d2d; border-radius: 5px; color: #ffffff;">
-                    <input type="checkbox" 
-                           class="boss-checkbox" 
-                           data-boss-id="${bossId}" 
-                           data-boss-name="${bossName}"
-                           onchange="updateBossOrder()"
-                           style="margin-right: 10px; width: 20px; height: 20px;">
-                    <label style="flex: 1; cursor: pointer; color: #ffffff;" onclick="document.querySelector('[data-boss-id=\\'${bossId}\\']').click()">
-                        <strong style="color: #ffffff;">${bossName}</strong> <span style="color: #e0e0e0;">(ID: ${bossId}, HP: ${baseHp.toLocaleString()})</span>
-                    </label>
-                    <div class="boss-order-controls" style="margin-left: 10px;">
-                        <button onclick="moveBossUp(${bossId})" style="padding: 2px 8px; font-size: 12px; background: #3d3d3d; color: #ffffff; border: 1px solid #555; border-radius: 3px; cursor: pointer;">↑</button>
-                        <button onclick="moveBossDown(${bossId})" style="padding: 2px 8px; font-size: 12px; background: #3d3d3d; color: #ffffff; border: 1px solid #555; border-radius: 3px; cursor: pointer;">↓</button>
+                <div class="boss-card" 
+                     data-boss-id="${bossId}" 
+                     data-boss-name="${bossName}"
+                     style="${cardStyle} border-radius: 12px; padding: 12px; margin-right: 12px; min-width: 140px; cursor: pointer; transition: transform 0.2s;"
+                     onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}')">
+                    <div class="boss-image" style="width: 100%; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden;">
+                        ${boss.imageUrl || boss.image ? 
+                            `<img src="${boss.imageUrl || boss.image}" alt="${bossName}" style="max-width: 100%; max-height: 100%; object-fit: contain;">` :
+                            `<span style="font-size: 40px;">👹</span>`
+                        }
+                    </div>
+                    <div class="boss-info-card" style="text-align: center; color: #ffffff;">
+                        <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bossName}</div>
+                        <div class="boss-hp" style="font-size: 12px; color: #e0e0e0; margin-bottom: 4px;">HP: ${baseHp.toLocaleString()}</div>
+                        <div class="boss-keys" style="font-size: 12px; color: #ffd700;">🔑 ${keysCount}</div>
+                        ${canAttack ? '<div style="font-size: 10px; color: #28a745; margin-top: 4px;">✓ Доступен</div>' : ''}
                     </div>
                 </div>
             `;
         });
         
-        html += '</div>';
+        html += `
+                    </div>
+                </div>
+            </div>
+        `;
     });
     
-    html += '</div>';
-    html += '<div id="boss-order-display" style="margin-top: 15px; padding: 10px; background: #2d2d2d; border-radius: 5px; display: none; color: #ffffff;">';
-    html += '<strong style="color: #ffffff;">Порядок атаки:</strong>';
-    html += '<div id="boss-order-list" style="margin-top: 5px; color: #e0e0e0;"></div>';
-    html += '</div>';
+    // Карусель для порядка атаки
+    html += `
+        <div class="boss-category-section" style="margin-top: 30px; margin-bottom: 20px;">
+            <h3 class="category-title" style="margin-bottom: 15px; color: var(--tg-theme-text-color, #000000); font-size: 18px; font-weight: 600;">Порядок атаки</h3>
+            <div class="boss-carousel-container" data-category-id="order">
+                <div class="boss-carousel" id="carousel-order">
+                    <div style="padding: 20px; text-align: center; color: var(--tg-theme-hint-color, #999);">
+                        Выберите боссов для атаки
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
     
     container.innerHTML = html;
-    updateBossOrder();
+    
+    // Инициализируем карусели
+    initializeCarousels();
 }
 
-// Обновление порядка атаки
-window.updateBossOrder = function() {
-    const checkboxes = document.querySelectorAll('.boss-checkbox:checked');
-    selectedBosses = Array.from(checkboxes).map(cb => ({
-        id: parseInt(cb.dataset.bossId),
-        name: cb.dataset.bossName
-    }));
+// Инициализация каруселей (свайп)
+function initializeCarousels() {
+    const carousels = document.querySelectorAll('.boss-carousel');
     
-    const orderDisplay = document.getElementById('boss-order-display');
-    const orderList = document.getElementById('boss-order-list');
+    carousels.forEach(carousel => {
+        let isDown = false;
+        let startX;
+        let scrollLeft;
+        
+        carousel.addEventListener('mousedown', (e) => {
+            isDown = true;
+            carousel.style.cursor = 'grabbing';
+            startX = e.pageX - carousel.offsetLeft;
+            scrollLeft = carousel.scrollLeft;
+        });
+        
+        carousel.addEventListener('mouseleave', () => {
+            isDown = false;
+            carousel.style.cursor = 'grab';
+        });
+        
+        carousel.addEventListener('mouseup', () => {
+            isDown = false;
+            carousel.style.cursor = 'grab';
+        });
+        
+        carousel.addEventListener('mousemove', (e) => {
+            if (!isDown) return;
+            e.preventDefault();
+            const x = e.pageX - carousel.offsetLeft;
+            const walk = (x - startX) * 2;
+            carousel.scrollLeft = scrollLeft - walk;
+        });
+        
+        // Touch events для мобильных
+        let touchStartX = 0;
+        let touchScrollLeft = 0;
+        
+        carousel.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].pageX - carousel.offsetLeft;
+            touchScrollLeft = carousel.scrollLeft;
+        });
+        
+        carousel.addEventListener('touchmove', (e) => {
+            const x = e.touches[0].pageX - carousel.offsetLeft;
+            const walk = (x - touchStartX) * 2;
+            carousel.scrollLeft = touchScrollLeft - walk;
+        });
+    });
+}
+
+// Переключение выбора босса
+window.toggleBossSelection = function(bossId, bossName) {
+    const bossIndex = selectedBosses.findIndex(b => b.id === bossId);
     
-    if (orderDisplay && orderList) {
-        if (selectedBosses.length > 0) {
-            orderDisplay.style.display = 'block';
-            orderList.innerHTML = selectedBosses.map((boss, index) => 
-                `${index + 1}. ${boss.name} (ID: ${boss.id})`
-            ).join('<br>');
+    if (bossIndex >= 0) {
+        // Убираем из выбранных
+        selectedBosses.splice(bossIndex, 1);
+        updateBossCardSelection(bossId, false);
+    } else {
+        // Добавляем в выбранные
+        const bossData = window.allBosses.find(b => b.id === bossId);
+        if (bossData && canAttackBoss(bossId)) {
+            selectedBosses.push({
+                id: bossId,
+                name: bossName
+            });
+            updateBossCardSelection(bossId, true);
+        } else if (!canAttackBoss(bossId)) {
+            if (tg && tg.showAlert) {
+                tg.showAlert('Недостаточно ключей для атаки этого босса');
+            }
+        }
+    }
+    
+    updateOrderCarousel();
+}
+
+// Обновление визуального состояния карточки босса
+function updateBossCardSelection(bossId, isSelected) {
+    const card = document.querySelector(`.boss-card[data-boss-id="${bossId}"]`);
+    if (card) {
+        if (isSelected) {
+            card.style.opacity = '0.7';
+            card.style.transform = 'scale(0.95)';
         } else {
-            orderDisplay.style.display = 'none';
+            card.style.opacity = '1';
+            card.style.transform = 'scale(1)';
         }
     }
 }
 
-// Перемещение босса вверх
-window.moveBossUp = function(bossId) {
+// Обновление карусели порядка атаки
+function updateOrderCarousel() {
+    const orderCarousel = document.getElementById('carousel-order');
+    if (!orderCarousel) return;
+    
+    if (selectedBosses.length === 0) {
+        orderCarousel.innerHTML = `
+            <div style="padding: 20px; text-align: center; color: var(--tg-theme-hint-color, #999);">
+                Выберите боссов для атаки
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    selectedBosses.forEach((boss, index) => {
+        const bossData = window.allBosses.find(b => b.id === boss.id);
+        html += `
+            <div class="boss-card-order" 
+                 data-boss-id="${boss.id}"
+                 style="border: 2px solid #3390ec; background: linear-gradient(135deg, #2d3d5a 0%, #1e2a3a 100%); border-radius: 12px; padding: 12px; margin-right: 12px; min-width: 140px; position: relative;">
+                <div style="position: absolute; top: 5px; right: 5px; background: #3390ec; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">${index + 1}</div>
+                <div class="boss-image" style="width: 100%; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden;">
+                    ${bossData && (bossData.imageUrl || bossData.image) ? 
+                        `<img src="${bossData.imageUrl || bossData.image}" alt="${boss.name}" style="max-width: 100%; max-height: 100%; object-fit: contain;">` :
+                        `<span style="font-size: 40px;">👹</span>`
+                    }
+                </div>
+                <div class="boss-info-card" style="text-align: center; color: #ffffff;">
+                    <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${boss.name}</div>
+                </div>
+                <div style="display: flex; gap: 5px; margin-top: 8px; justify-content: center;">
+                    <button onclick="moveBossInOrder(${boss.id}, -1); event.stopPropagation();" 
+                            style="padding: 4px 8px; font-size: 12px; background: #3d3d3d; color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer; ${index === 0 ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
+                            ${index === 0 ? 'disabled' : ''}>←</button>
+                    <button onclick="removeBossFromOrder(${boss.id}); event.stopPropagation();" 
+                            style="padding: 4px 8px; font-size: 12px; background: #dc3545; color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer;">✕</button>
+                    <button onclick="moveBossInOrder(${boss.id}, 1); event.stopPropagation();" 
+                            style="padding: 4px 8px; font-size: 12px; background: #3d3d3d; color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer; ${index === selectedBosses.length - 1 ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
+                            ${index === selectedBosses.length - 1 ? 'disabled' : ''}>→</button>
+                </div>
+            </div>
+        `;
+    });
+    
+    orderCarousel.innerHTML = html;
+}
+
+// Перемещение босса в порядке атаки
+window.moveBossInOrder = function(bossId, direction) {
     const index = selectedBosses.findIndex(b => b.id === bossId);
-    if (index > 0) {
-        [selectedBosses[index], selectedBosses[index - 1]] = [selectedBosses[index - 1], selectedBosses[index]];
-        updateBossOrderDisplay();
+    if (index < 0) return;
+    
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= selectedBosses.length) return;
+    
+    [selectedBosses[index], selectedBosses[newIndex]] = [selectedBosses[newIndex], selectedBosses[index]];
+    updateOrderCarousel();
+}
+
+// Удаление босса из порядка атаки
+window.removeBossFromOrder = function(bossId) {
+    const index = selectedBosses.findIndex(b => b.id === bossId);
+    if (index >= 0) {
+        selectedBosses.splice(index, 1);
+        updateBossCardSelection(bossId, false);
+        updateOrderCarousel();
     }
 }
 
-// Перемещение босса вниз
-window.moveBossDown = function(bossId) {
-    const index = selectedBosses.findIndex(b => b.id === bossId);
-    if (index >= 0 && index < selectedBosses.length - 1) {
-        [selectedBosses[index], selectedBosses[index + 1]] = [selectedBosses[index + 1], selectedBosses[index]];
-        updateBossOrderDisplay();
-    }
-}
-
-// Обновление отображения порядка
-function updateBossOrderDisplay() {
-    const orderList = document.getElementById('boss-order-list');
-    if (orderList && selectedBosses.length > 0) {
-        orderList.innerHTML = selectedBosses.map((boss, index) => 
-            `${index + 1}. ${boss.name} (ID: ${boss.id})`
-        ).join('<br>');
-    }
-}
 
 // Начало автоматической атаки
 window.startBossAutoAttack = async function() {
@@ -2952,17 +3275,37 @@ async function attackNextBoss(mode) {
         
         const data = await response.json();
         
+        // Обновляем информацию о боссе и ключи после start-attack
+        if (data.success && data.session) {
+            await Promise.all([
+                updateBossKeys(),
+                loadBossInfo()
+            ]);
+        }
+        
         if (data.success) {
             if (data.isOver) {
                 // Бой завершен - собираем награду
                 updateAttackStatus(`✅ ${boss.name} побежден! Сбор награды...`);
                 try {
                     const rewardData = await collectBossRewards();
-                    const rewardMessage = formatRewardMessage(rewardData);
-                    updateAttackStatus(rewardMessage);
+                    const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
+                    const rewardMessageText = formatRewardMessage(rewardData, 'text');
+                    updateAttackStatus(rewardMessageHtml);
+                    
+                    // Показываем модальное окно с наградой
+                    showCustomModal(rewardMessageText);
+                    
+                    // Также показываем уведомление в Telegram, если доступно
+                    if (tg && tg.showAlert) {
+                        tg.showAlert(rewardMessageText.replace(/\n/g, ' '));
+                    }
                 } catch (error) {
                     console.error('Ошибка сбора награды:', error);
                     updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
+                    if (tg && tg.showAlert) {
+                        tg.showAlert(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
+                    }
                 }
                 
                 currentBossIndex++;
@@ -2971,7 +3314,7 @@ async function attackNextBoss(mode) {
                 setTimeout(() => {
                     attackNextBoss(mode);
                 }, 1000);
-            } else if (data.sessionId) {
+            } else if (data.sessionId || data.session) {
                 // Бой продолжается, проверяем статус каждые 5 секунд
                 updateAttackStatus(`⚔️ Бой с ${boss.name} продолжается...`);
                 
@@ -3052,17 +3395,37 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
         
         const data = await response.json();
         
+        // Обновляем информацию о боссе и ключи после start-attack
+        if (data.success && data.session) {
+            await Promise.all([
+                updateBossKeys(),
+                loadBossInfo()
+            ]);
+        }
+        
         if (data.success && data.isOver) {
             // Бой завершен - собираем награду
             const boss = selectedBosses[currentBossIndex];
             updateAttackStatus(`✅ ${boss.name} побежден! Сбор награды...`);
             try {
                 const rewardData = await collectBossRewards();
-                const rewardMessage = formatRewardMessage(rewardData);
-                updateAttackStatus(rewardMessage);
+                const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
+                const rewardMessageText = formatRewardMessage(rewardData, 'text');
+                updateAttackStatus(rewardMessageHtml);
+                
+                // Показываем модальное окно с наградой
+                showCustomModal(rewardMessageText);
+                
+                // Также показываем уведомление в Telegram, если доступно
+                if (tg && tg.showAlert) {
+                    tg.showAlert(rewardMessageText.replace(/\n/g, ' '));
+                }
             } catch (error) {
                 console.error('Ошибка сбора награды:', error);
                 updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
+                if (tg && tg.showAlert) {
+                    tg.showAlert(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
+                }
             }
             
             currentBossIndex++;
@@ -3071,7 +3434,7 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
             setTimeout(() => {
                 attackNextBoss(mode);
             }, 1000);
-        } else if (data.success && data.sessionId) {
+        } else if (data.success && (data.sessionId || data.session)) {
             // Бой продолжается, проверяем снова через 5 секунд
             const boss = selectedBosses[currentBossIndex];
             updateAttackStatus(`⚔️ Бой с ${boss.name} продолжается...`);
@@ -3126,44 +3489,81 @@ function updateAttackStatus(message) {
 }
 
 // Форматирование награды для отображения
-function formatRewardMessage(rewardData) {
+function formatRewardMessage(rewardData, format = 'html') {
     if (!rewardData || !rewardData.rewards) {
         return 'Награда получена';
     }
     
     const rewards = rewardData.rewards;
     const bossName = rewards.title || 'босса';
-    const parts = [`💰 Награда с босса "${bossName}" получена!`];
     
-    if (rewards.globalReward) {
-        const gr = rewards.globalReward;
-        const rewardParts = [];
+    if (format === 'text') {
+        // Текстовый формат для модального окна и уведомлений
+        const parts = [`💰 Награда с босса "${bossName}" получена!`];
         
-        if (gr.authority) {
-            rewardParts.push(`Авторитет: ${gr.authority.toLocaleString()}`);
-        }
-        if (gr.keys) {
-            rewardParts.push(`Ключи: ${gr.keys}`);
-        }
-        if (gr.currencies && gr.currencies.length > 0) {
-            const currencyNames = {
-                'sugar': 'Сахар',
-                'cigarettes': 'Папиросы',
-                'money': 'Деньги'
-            };
-            const currencies = gr.currencies.map(c => {
-                const name = currencyNames[c.type] || c.type;
-                return `${name}: ${c.amount.toLocaleString()}`;
-            }).join(', ');
-            rewardParts.push(currencies);
+        if (rewards.globalReward) {
+            const gr = rewards.globalReward;
+            const rewardParts = [];
+            
+            if (gr.authority) {
+                rewardParts.push(`Авторитет: ${gr.authority.toLocaleString()}`);
+            }
+            if (gr.keys) {
+                rewardParts.push(`Ключи: ${gr.keys}`);
+            }
+            if (gr.currencies && gr.currencies.length > 0) {
+                const currencyNames = {
+                    'sugar': 'Сахар',
+                    'cigarettes': 'Папиросы',
+                    'money': 'Деньги'
+                };
+                const currencies = gr.currencies.map(c => {
+                    const name = currencyNames[c.type] || c.type;
+                    return `${name}: ${c.amount.toLocaleString()}`;
+                }).join(', ');
+                rewardParts.push(currencies);
+            }
+            
+            if (rewardParts.length > 0) {
+                parts.push(`\n\nПолучено:\n${rewardParts.join('\n')}`);
+            }
         }
         
-        if (rewardParts.length > 0) {
-            parts.push(`<br><strong>Получено:</strong> ${rewardParts.join(', ')}`);
+        return parts.join('');
+    } else {
+        // HTML формат для встраивания в интерфейс
+        const parts = [`💰 Награда с босса "${bossName}" получена!`];
+        
+        if (rewards.globalReward) {
+            const gr = rewards.globalReward;
+            const rewardParts = [];
+            
+            if (gr.authority) {
+                rewardParts.push(`Авторитет: ${gr.authority.toLocaleString()}`);
+            }
+            if (gr.keys) {
+                rewardParts.push(`Ключи: ${gr.keys}`);
+            }
+            if (gr.currencies && gr.currencies.length > 0) {
+                const currencyNames = {
+                    'sugar': 'Сахар',
+                    'cigarettes': 'Папиросы',
+                    'money': 'Деньги'
+                };
+                const currencies = gr.currencies.map(c => {
+                    const name = currencyNames[c.type] || c.type;
+                    return `${name}: ${c.amount.toLocaleString()}`;
+                }).join(', ');
+                rewardParts.push(currencies);
+            }
+            
+            if (rewardParts.length > 0) {
+                parts.push(`<br><strong>Получено:</strong> ${rewardParts.join(', ')}`);
+            }
         }
+        
+        return parts.join('');
     }
-    
-    return parts.join('');
 }
 
 // Сбор награды с босса

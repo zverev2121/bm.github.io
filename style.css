@@ -596,3 +596,72 @@ header h1 {
 .tab-content[style*="display: none"] {
     display: none !important;
 }
+
+/* Карусели боссов */
+.boss-carousel-container {
+    width: 100%;
+    overflow: hidden;
+    position: relative;
+}
+
+.boss-carousel {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+    padding: 10px 0;
+    cursor: grab;
+}
+
+.boss-carousel::-webkit-scrollbar {
+    height: 6px;
+}
+
+.boss-carousel::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.boss-carousel::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+}
+
+.boss-carousel::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.boss-carousel:active {
+    cursor: grabbing;
+}
+
+.boss-card {
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: pan-y;
+}
+
+.boss-card:active {
+    transform: scale(0.95);
+}
+
+.boss-card-order {
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: pan-y;
+}
+
+.boss-category-section {
+    margin-bottom: 25px;
+}
+
+.category-title {
+    margin-bottom: 12px;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--tg-theme-text-color, #000000);
+}
