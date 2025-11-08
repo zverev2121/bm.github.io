@@ -69,16 +69,36 @@ console.log('Используется прокси:', !!API_SERVER_URL);
 async function loadSettings() {
     const apiUrl = localStorage.getItem('api_server_url') || '';
     // ВАЖНО: initData НЕ хранится в localStorage, только в БД
-    // ВАЖНО: Поле ввода заполняется initData из БД по username (из URL параметра)
+    // ВАЖНО: Поле ввода заполняется initData из БД по username (из URL параметра или Telegram WebApp API)
     // Если пользователь не найден в БД - поле остается пустым, пользователь должен ввести initData вручную
     let manualInitData = '';
     
     // ПРИОРИТЕТ 1: Ищем пользователя по username из URL (переданного через кнопку бота)
     const urlParams = new URLSearchParams(window.location.search);
-    const urlUsername = urlParams.get('username');
+    let urlUsername = urlParams.get('username');
+    
+    // Если username нет в URL, пытаемся получить из Telegram WebApp API
+    // Это нужно для работы кнопки в профиле бота, которая не передает параметры в URL
+    if (!urlUsername) {
+        const telegramUserInfo = getTelegramUserInfo();
+        if (telegramUserInfo && telegramUserInfo.username) {
+            urlUsername = telegramUserInfo.username;
+            console.log('✓ Username получен из Telegram WebApp API:', urlUsername);
+            // Сохраняем данные пользователя из Telegram
+            if (telegramUserInfo.id) {
+                localStorage.setItem('game_user_id', telegramUserInfo.id.toString());
+            }
+            if (telegramUserInfo.username) {
+                localStorage.setItem('game_username', telegramUserInfo.username);
+            }
+            if (telegramUserInfo.first_name) {
+                localStorage.setItem('game_first_name', telegramUserInfo.first_name);
+            }
+        }
+    }
     
     if (urlUsername) {
-        console.log('Поиск пользователя по username из URL:', urlUsername);
+        console.log('Поиск пользователя по username:', urlUsername);
         try {
             const userData = await getUserByUsernameFromServer(urlUsername);
             if (userData && userData.success && userData.initData) {
@@ -1819,9 +1839,20 @@ function updateUserNameDisplay() {
 // ВАЖНО: initData всегда берется из БД, не из tg.initData
 // ВАЖНО: initData НЕ хранится в localStorage, только в БД
 async function getCurrentInitData() {
-    // ПРИОРИТЕТ 1: Пытаемся найти по username из URL
+    // ПРИОРИТЕТ 1: Пытаемся найти по username из URL или Telegram WebApp API
     const urlParams = new URLSearchParams(window.location.search);
-    const urlUsername = urlParams.get('username');
+    let urlUsername = urlParams.get('username');
+    
+    // Если username нет в URL, пытаемся получить из Telegram WebApp API
+    // Это нужно для работы кнопки в профиле бота, которая не передает параметры в URL
+    if (!urlUsername) {
+        const telegramUserInfo = getTelegramUserInfo();
+        if (telegramUserInfo && telegramUserInfo.username) {
+            urlUsername = telegramUserInfo.username;
+            console.log('✓ Username для поиска initData получен из Telegram WebApp API:', urlUsername);
+        }
+    }
+    
     if (urlUsername) {
         try {
             const userData = await getUserByUsernameFromServer(urlUsername);
