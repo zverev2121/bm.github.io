@@ -1414,16 +1414,31 @@ async function updateBossKeys() {
         
         if (bootstrapResponse.ok) {
             const bootstrapData = await bootstrapResponse.json();
-            if (bootstrapData.success && bootstrapData.keys) {
+            
+            // Проверяем разные варианты структуры ответа
+            let keysData = null;
+            if (bootstrapData.keys) {
+                keysData = bootstrapData.keys;
+            } else if (bootstrapData.data && bootstrapData.data.keys) {
+                keysData = bootstrapData.data.keys;
+            } else if (bootstrapData.success && bootstrapData.keys) {
+                keysData = bootstrapData.keys;
+            }
+            
+            if (keysData) {
                 // Обновляем ключи
                 bossKeys = {};
-                for (const [bossIdStr, count] of Object.entries(bootstrapData.keys)) {
-                    bossKeys[parseInt(bossIdStr)] = count;
+                for (const [bossIdStr, count] of Object.entries(keysData)) {
+                    const bossId = parseInt(bossIdStr);
+                    const keyCount = parseInt(count) || 0;
+                    bossKeys[bossId] = keyCount;
                 }
                 console.log('✅ Ключи обновлены:', bossKeys);
                 
                 // Обновляем карточки боссов, если они уже загружены
                 updateBossCards();
+            } else {
+                console.warn('⚠️ Ключи не найдены в ответе bootstrap при обновлении');
             }
         }
     } catch (error) {
@@ -1436,7 +1451,15 @@ function updateBossCards() {
     const cards = document.querySelectorAll('.boss-card');
     cards.forEach(card => {
         const bossId = parseInt(card.dataset.bossId);
-        const keysCount = bossKeys[bossId] || 0;
+        
+        // Получаем количество ключей (проверяем и строковые, и числовые ключи)
+        let keysCount = 0;
+        if (bossKeys[bossId] !== undefined) {
+            keysCount = parseInt(bossKeys[bossId]) || 0;
+        } else if (bossKeys[String(bossId)] !== undefined) {
+            keysCount = parseInt(bossKeys[String(bossId)]) || 0;
+        }
+        
         const canAttack = canAttackBoss(bossId);
         
         // Обновляем количество ключей
@@ -2726,7 +2749,10 @@ let isBicepsProcessing = false;
 // Проверка доступности босса для атаки
 function canAttackBoss(bossId) {
     const rules = BOSS_ATTACK_RULES[bossId];
-    if (!rules) return false;
+    if (!rules) {
+        console.warn(`⚠️ Правила для босса ${bossId} не найдены`);
+        return false;
+    }
     
     // Если не требуется ключей, можно атаковать
     if (Object.keys(rules.requiredKeys).length === 0) {
@@ -2734,9 +2760,20 @@ function canAttackBoss(bossId) {
     }
     
     // Проверяем, есть ли все необходимые ключи
-    for (const [fromBossId, requiredCount] of Object.entries(rules.requiredKeys)) {
-        const availableKeys = bossKeys[fromBossId] || 0;
-        if (availableKeys < requiredCount) {
+    for (const [fromBossIdStr, requiredCount] of Object.entries(rules.requiredKeys)) {
+        const fromBossId = parseInt(fromBossIdStr);
+        const required = parseInt(requiredCount);
+        
+        // Получаем количество ключей (проверяем и строковые, и числовые ключи)
+        let availableKeys = 0;
+        if (bossKeys[fromBossId] !== undefined) {
+            availableKeys = parseInt(bossKeys[fromBossId]) || 0;
+        } else if (bossKeys[String(fromBossId)] !== undefined) {
+            availableKeys = parseInt(bossKeys[String(fromBossId)]) || 0;
+        }
+        
+        if (availableKeys < required) {
+            console.log(`❌ Босс ${bossId}: недостаточно ключей. Нужно ${required} с босса ${fromBossId}, есть ${availableKeys}`);
             return false;
         }
     }
@@ -2793,14 +2830,35 @@ window.loadBossList = async function loadBossList() {
         
         if (bootstrapResponse.ok) {
             const bootstrapData = await bootstrapResponse.json();
-            if (bootstrapData.success && bootstrapData.keys) {
+            console.log('📦 Bootstrap данные:', bootstrapData);
+            console.log('📦 Bootstrap keys:', bootstrapData.keys);
+            
+            // Проверяем разные варианты структуры ответа
+            let keysData = null;
+            if (bootstrapData.keys) {
+                keysData = bootstrapData.keys;
+            } else if (bootstrapData.data && bootstrapData.data.keys) {
+                keysData = bootstrapData.data.keys;
+            } else if (bootstrapData.success && bootstrapData.keys) {
+                keysData = bootstrapData.keys;
+            }
+            
+            if (keysData) {
                 // Сохраняем ключи (преобразуем строковые ключи в числа)
                 bossKeys = {};
-                for (const [bossIdStr, count] of Object.entries(bootstrapData.keys)) {
-                    bossKeys[parseInt(bossIdStr)] = count;
+                for (const [bossIdStr, count] of Object.entries(keysData)) {
+                    const bossId = parseInt(bossIdStr);
+                    const keyCount = parseInt(count) || 0;
+                    bossKeys[bossId] = keyCount;
+                    console.log(`🔑 Босс ${bossId}: ${keyCount} ключей`);
                 }
                 console.log('✅ Ключи загружены:', bossKeys);
+            } else {
+                console.warn('⚠️ Ключи не найдены в ответе bootstrap');
+                console.warn('Структура ответа:', JSON.stringify(bootstrapData, null, 2));
             }
+        } else {
+            console.error('❌ Ошибка загрузки bootstrap:', bootstrapResponse.status);
         }
         
         // Загружаем обе категории боссов параллельно
@@ -2951,8 +3009,20 @@ function renderBossList(categoriesData) {
             const bossId = boss.id;
             const bossName = boss.title;
             const baseHp = boss.baseHp;
-            const keysCount = bossKeys[bossId] || 0;
+            // Получаем количество ключей (проверяем и строковые, и числовые ключи)
+            let keysCount = 0;
+            if (bossKeys[bossId] !== undefined) {
+                keysCount = parseInt(bossKeys[bossId]) || 0;
+            } else if (bossKeys[String(bossId)] !== undefined) {
+                keysCount = parseInt(bossKeys[String(bossId)]) || 0;
+            }
+            
             const canAttack = canAttackBoss(bossId);
+            
+            // Логирование для отладки
+            if (keysCount > 0 || bossId <= 2) {
+                console.log(`🎯 Босс ${bossId} (${bossName}): ключей=${keysCount}, доступен=${canAttack}, bossKeys[${bossId}]=${bossKeys[bossId]}, bossKeys["${bossId}"]=${bossKeys[String(bossId)]}`);
+            }
             
             // Сохраняем босса
             window.allBosses.push({
@@ -3078,18 +3148,14 @@ window.toggleBossSelection = function(bossId, bossName) {
         selectedBosses.splice(bossIndex, 1);
         updateBossCardSelection(bossId, false);
     } else {
-        // Добавляем в выбранные
+        // Добавляем в выбранные (можно выбрать любого босса, даже если ключей недостаточно)
         const bossData = window.allBosses.find(b => b.id === bossId);
-        if (bossData && canAttackBoss(bossId)) {
+        if (bossData) {
             selectedBosses.push({
                 id: bossId,
                 name: bossName
             });
             updateBossCardSelection(bossId, true);
-        } else if (!canAttackBoss(bossId)) {
-            if (tg && tg.showAlert) {
-                tg.showAlert('Недостаточно ключей для атаки этого босса');
-            }
         }
     }
     
