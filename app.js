@@ -39,6 +39,33 @@ function closeCustomModal() {
     }
 }
 
+// Функция переключения вкладок
+window.switchTab = function switchTab(tabName) {
+    // Скрываем все вкладки
+    const allTabs = document.querySelectorAll('.tab-content');
+    allTabs.forEach(tab => {
+        tab.style.display = 'none';
+    });
+    
+    // Убираем активный класс со всех кнопок
+    const allButtons = document.querySelectorAll('.tab-button');
+    allButtons.forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Показываем выбранную вкладку
+    const selectedTab = document.getElementById(`tab-${tabName}`);
+    if (selectedTab) {
+        selectedTab.style.display = 'block';
+    }
+    
+    // Добавляем активный класс к выбранной кнопке
+    const selectedButton = document.getElementById(`tab-btn-${tabName}`);
+    if (selectedButton) {
+        selectedButton.classList.add('active');
+    }
+}
+
 // Базовый URL API игры
 // Загружается из localStorage или используется значение по умолчанию
 function getApiServerUrl() {
@@ -405,6 +432,8 @@ async function toggleSettings() {
 
 // Инициализация
 document.addEventListener('DOMContentLoaded', async () => {
+    // Инициализация: показываем вкладку "Основное" по умолчанию
+    switchTab('main');
     updateStatus(false);
     
     // ВАЖНО: Очищаем все возможные старые значения initData из localStorage при загрузке
@@ -454,7 +483,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Скрываем другие секции до настройки
         document.getElementById('boss-section').style.display = 'none';
-        document.getElementById('boss-select-section').style.display = 'none';
         document.getElementById('prison-section').style.display = 'none';
         document.getElementById('stats-section').style.display = 'none';
         document.getElementById('biceps-section').style.display = 'none';
@@ -502,7 +530,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Показываем все секции
         document.getElementById('boss-section').style.display = 'block';
-        document.getElementById('boss-select-section').style.display = 'block';
         document.getElementById('prison-section').style.display = 'block';
         document.getElementById('stats-section').style.display = 'block';
         document.getElementById('biceps-section').style.display = 'block';
