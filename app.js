@@ -1914,13 +1914,10 @@ async function getSavedInitDataFromServer() {
             ? `${API_SERVER_URL}/auth/get-saved-init-data`
             : `${GAME_API_URL}/auth/get-saved-init-data`;
         
+        // ВАЖНО: Используем getApiHeaders() для получения актуального токена из БД
         const response = await fetch(url, {
             method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            }
+            headers: await getApiHeaders()
         });
         
         if (response.ok) {
@@ -2009,12 +2006,14 @@ async function getAccessToken() {
         if (response.ok) {
             const data = await response.json();
             if (data.success && data.accessToken) {
-                console.log('✓ Получен актуальный токен из БД');
+                console.log(`[getAccessToken] ✓ Получен актуальный токен из БД (первые 20 символов): ${data.accessToken.substring(0, 20)}...`);
                 return data.accessToken;
+            } else {
+                console.warn('[getAccessToken] Ответ от сервера не содержит токен:', data);
             }
         } else if (response.status === 404) {
             // Токен не найден в БД, пытаемся получить через login
-            console.log('Токен не найден в БД, пытаемся получить через login...');
+            console.log('[getAccessToken] Токен не найден в БД, пытаемся получить через login...');
             try {
                 const newToken = await loginWithInitData();
                 if (newToken) {
@@ -2051,6 +2050,13 @@ async function getApiHeaders(additionalHeaders = {}) {
     const token = await getAccessToken();
     // ВАЖНО: initData всегда получаем из БД, не из localStorage
     const initData = await getCurrentInitData();
+    
+    // Логируем токен для отладки (первые 20 символов)
+    if (token) {
+        console.log(`[getApiHeaders] Токен получен из БД (первые 20 символов): ${token.substring(0, 20)}...`);
+    } else {
+        console.warn('[getApiHeaders] Токен не найден в БД!');
+    }
     
     const headers = {
         'Content-Type': 'application/json',
@@ -2506,18 +2512,14 @@ window.loadBossList = async function loadBossList() {
         
         // Функция для выполнения запроса с повторной попыткой при 401/403
         async function fetchCategoryWithRetry(categoryId) {
-            let attemptToken = token;
-            
             try {
                 const url = `${apiUrl}/boss/list?categoryId=${categoryId}`;
                 console.log(`Запрос категории ${categoryId}: ${url}`);
                 
+                // ВАЖНО: Используем getApiHeaders() для получения актуального токена из БД
                 let response = await fetch(url, {
                     method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${attemptToken}`
-                    }
+                    headers: await getApiHeaders()
                 });
                 
                 console.log(`Категория ${categoryId}: статус ответа`, response.status);
@@ -2529,14 +2531,12 @@ window.loadBossList = async function loadBossList() {
                     if (currentInitData && currentInitData.trim()) {
                         const newToken = await loginWithInitData();
                         if (newToken) {
-                            attemptToken = newToken;
+                            // ВАЖНО: Токен уже сохранен в БД на сервере при login
+                            // Используем getApiHeaders() для получения актуального токена из БД
                             // Повторяем запрос с новым токеном
                             response = await fetch(url, {
                                 method: 'GET',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${attemptToken}`
-                                }
+                                headers: await getApiHeaders()
                             });
                             console.log(`Категория ${categoryId} (повтор): статус ответа`, response.status);
                         }
