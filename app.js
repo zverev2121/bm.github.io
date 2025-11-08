@@ -69,33 +69,39 @@ console.log('Используется прокси:', !!API_SERVER_URL);
 async function loadSettings() {
     const apiUrl = localStorage.getItem('api_server_url') || '';
     // ВАЖНО: initData НЕ хранится в localStorage, только в БД
-    // Получаем initData из БД для отображения в поле ввода
+    // ВАЖНО: Поле ввода всегда заполняется актуальным initData из БД или tg.initData
+    // Это гарантирует, что при сохранении используется актуальный initData
     let manualInitData = '';
-    const savedToken = localStorage.getItem('game_access_token');
-    if (savedToken) {
-        console.log('Получаем initData из БД для отображения...');
-        try {
-            const savedInitData = await getSavedInitDataFromServer();
-            if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
-                manualInitData = savedInitData;
-                console.log('✓ Получен initData из БД при загрузке настроек');
-            }
-        } catch (e) {
-            console.warn('Не удалось получить initData из БД при загрузке настроек:', e);
-        }
-    }
     
-    // Если есть tg.initData, используем его для отображения
+    // ПРИОРИТЕТ 1: tg.initData (самый актуальный)
     if (tg?.initData && tg.initData.trim() && tg.initData.length >= 50) {
         manualInitData = tg.initData.trim();
-        console.log('✓ Используется tg.initData для отображения');
+        console.log('✓ Используется tg.initData для отображения (приоритет)');
+    } else {
+        // ПРИОРИТЕТ 2: Получаем initData из БД
+        const savedToken = localStorage.getItem('game_access_token');
+        if (savedToken) {
+            console.log('Получаем актуальный initData из БД для отображения...');
+            try {
+                const savedInitData = await getSavedInitDataFromServer();
+                if (savedInitData && savedInitData.trim() && savedInitData.length >= 50) {
+                    manualInitData = savedInitData.trim();
+                    console.log('✓ Получен актуальный initData из БД при загрузке настроек');
+                }
+            } catch (e) {
+                console.warn('Не удалось получить initData из БД при загрузке настроек:', e);
+            }
+        }
     }
     
     if (document.getElementById('api-server-url')) {
         document.getElementById('api-server-url').value = apiUrl;
     }
     if (document.getElementById('manual-initdata')) {
+        // ВАЖНО: Всегда заполняем поле актуальным initData из БД или tg.initData
+        // Это гарантирует, что поле не содержит старый initData
         document.getElementById('manual-initdata').value = manualInitData;
+        console.log('✓ Поле ввода заполнено актуальным initData (длина:', manualInitData.length, ')');
     }
     
     API_SERVER_URL = getApiServerUrl();
@@ -106,7 +112,12 @@ async function loadSettings() {
 
 async function saveSettings() {
     const apiUrl = document.getElementById('api-server-url').value.trim();
+    // ВАЖНО: Берем initData напрямую из поля ввода
+    // Поле ввода всегда заполняется актуальным initData из БД при загрузке
     const manualInitData = document.getElementById('manual-initdata').value.trim();
+    
+    console.log('Сохранение настроек...');
+    console.log('InitData из поля ввода (длина):', manualInitData ? manualInitData.length : 0);
     
     if (apiUrl) {
         // Проверяем, что URL заканчивается на /api
@@ -154,6 +165,22 @@ async function saveSettings() {
                     console.log('✅ Токен получен из initData');
                     console.log('✅ initData перезаписан в БД на сервере');
                     console.log('✅ Access token обновлен в БД');
+                    
+                    // ВАЖНО: После успешного сохранения обновляем поле ввода актуальным initData из БД
+                    // Это гарантирует, что поле всегда содержит актуальный initData
+                    try {
+                        const savedInitData = await getSavedInitDataFromServer();
+                        if (savedInitData && savedInitData.trim()) {
+                            const manualInitDataInput = document.getElementById('manual-initdata');
+                            if (manualInitDataInput) {
+                                manualInitDataInput.value = savedInitData.trim();
+                                console.log('✓ Поле ввода обновлено актуальным initData из БД');
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Не удалось обновить поле ввода из БД:', e);
+                    }
+                    
                     tg.showAlert('✅ Настройки сохранены!\n\nТокен получен из initData.\n\ninitData перезаписан в БД.\n\nПерезагрузите страницу для применения изменений.');
                 } else {
                     const errorMsg = data.message || data.error || 'Неизвестная ошибка';
@@ -174,8 +201,12 @@ async function saveSettings() {
         tg.showAlert('⚠️ initData слишком короткий. Минимальная длина: 50 символов.');
     }
     
-    // ВАЖНО: Удаляем manual_init_data из localStorage, если он там был (не должен храниться)
+    // ВАЖНО: Удаляем все возможные старые значения initData из localStorage
+    // initData НЕ должен храниться в localStorage, только в БД
     localStorage.removeItem('manual_init_data');
+    localStorage.removeItem('init_data');
+    localStorage.removeItem('initData');
+    localStorage.removeItem('game_init_data');
     
     console.log('Настройки сохранены:');
     console.log('- API Server URL:', API_SERVER_URL || 'не указан (прямое подключение)');
@@ -192,7 +223,11 @@ async function saveSettings() {
 function resetSettings() {
     if (confirm('Вы уверены, что хотите сбросить все настройки?')) {
         localStorage.removeItem('api_server_url');
+        // ВАЖНО: Удаляем все возможные старые значения initData из localStorage
         localStorage.removeItem('manual_init_data');
+        localStorage.removeItem('init_data');
+        localStorage.removeItem('initData');
+        localStorage.removeItem('game_init_data');
         localStorage.removeItem('game_access_token');
         localStorage.removeItem('game_refresh_token');
         localStorage.removeItem('game_user_id');
@@ -280,6 +315,14 @@ async function toggleSettings() {
 // Инициализация
 document.addEventListener('DOMContentLoaded', async () => {
     updateStatus(false);
+    
+    // ВАЖНО: Очищаем все возможные старые значения initData из localStorage при загрузке
+    // initData НЕ должен храниться в localStorage, только в БД
+    localStorage.removeItem('manual_init_data');
+    localStorage.removeItem('init_data');
+    localStorage.removeItem('initData');
+    localStorage.removeItem('game_init_data');
+    console.log('✓ Очищены все возможные старые значения initData из localStorage');
     
     // Загружаем настройки (async, т.к. может получать initData с сервера)
     await loadSettings();
