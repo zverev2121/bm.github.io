@@ -779,12 +779,10 @@ async function startBicepsUpgrade() {
         // Пытаемся получить из API /player/init
         try {
             console.log('Получение User ID из API...');
+            // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
             let initResponse = await fetch(`${GAME_API_URL}/player/init`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
+                headers: await getApiHeaders(),
                 body: JSON.stringify({})
             });
             
@@ -795,8 +793,8 @@ async function startBicepsUpgrade() {
                 if (currentInitData && currentInitData.trim()) {
                     const newToken = await loginWithInitData();
                     if (newToken) {
-                        localStorage.setItem('game_access_token', newToken);
-                        token = newToken;
+                        // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
+                        // Используем getApiHeaders() для получения актуального токена
                         // Повторяем запрос с новым токеном
                         initResponse = await fetch(`${GAME_API_URL}/player/init`, {
                             method: 'POST',
@@ -1245,17 +1243,11 @@ async function loadBossInfo() {
             throw new Error('Токен не найден');
         }
         
-        // Создаем заголовки для авторизации
-        const headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token}`
-        };
-        
         const apiUrl = API_SERVER_URL || GAME_API_URL;
-        const response = await fetch(`${apiUrl}/boss/bootstrap`, {
+        // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
+        let response = await fetch(`${apiUrl}/boss/bootstrap`, {
             method: 'GET',
-            headers: headers
+            headers: await getApiHeaders()
         });
         
         // Если получили 401/403, пытаемся обновить токен через initData из БД
@@ -1265,12 +1257,12 @@ async function loadBossInfo() {
             if (currentInitData && currentInitData.trim()) {
                 const newToken = await loginWithInitData();
                 if (newToken) {
-                    token = newToken;
-                    headers['Authorization'] = `Bearer ${token}`;
+                    // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
+                    // Используем getApiHeaders() для получения актуального токена
                     // Повторяем запрос с новым токеном
                     const retryResponse = await fetch(`${apiUrl}/boss/bootstrap`, {
                         method: 'GET',
-                        headers: headers
+                        headers: await getApiHeaders()
                     });
                     if (!retryResponse.ok) {
                         throw new Error(`HTTP ${retryResponse.status}: ${retryResponse.statusText}`);
@@ -1394,20 +1386,15 @@ async function loadPrisons() {
     try {
         // Запрашиваем оба эндпоинта параллельно
         console.log('Загрузка тюрем и информации об игроке...');
+        // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
         let prisonsResponse = await fetch(`${GAME_API_URL}/prisons/tops-all`, {
             method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
+            headers: await getApiHeaders()
         });
         
         let playerResponse = await fetch(`${GAME_API_URL}/player/init`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
+            headers: await getApiHeaders(),
             body: JSON.stringify({})
         });
         
@@ -1419,22 +1406,17 @@ async function loadPrisons() {
             if (currentInitData && currentInitData.trim()) {
                 const newToken = await loginWithInitData();
                 if (newToken) {
-                    token = newToken;
+                    // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
+                    // Используем getApiHeaders() для получения актуального токена
                     // Повторяем запросы с новым токеном
                     [prisonsResponse, playerResponse] = await Promise.all([
                         fetch(`${GAME_API_URL}/prisons/tops-all`, {
                             method: 'GET',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`
-                            }
+                            headers: await getApiHeaders()
                         }),
                         fetch(`${GAME_API_URL}/player/init`, {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`
-                            },
+                            headers: await getApiHeaders(),
                             body: JSON.stringify({})
                         })
                     ]);
@@ -1508,20 +1490,15 @@ async function loadPrisonInfo() {
     
     try {
         // Загружаем информацию о тюрьме и чекпоинты параллельно
+        // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
         let prisonResponse = await fetch(`${GAME_API_URL}/player/prison/${prisonId}`, {
             method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
+            headers: await getApiHeaders()
         });
         
         let checkpointsResponse = await fetch(`${GAME_API_URL}/player/prison/${prisonId}/checkpoints?isDay=${isDay}`, {
             method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
+            headers: await getApiHeaders()
         });
         
         // Если получили 401/403, пытаемся обновить токен через initData из БД
@@ -1532,22 +1509,17 @@ async function loadPrisonInfo() {
             if (currentInitData && currentInitData.trim()) {
                 const newToken = await loginWithInitData();
                 if (newToken) {
-                    token = newToken;
+                    // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
+                    // Используем getApiHeaders() для получения актуального токена
                     // Повторяем запросы с новым токеном
                     [prisonResponse, checkpointsResponse] = await Promise.all([
                         fetch(`${GAME_API_URL}/player/prison/${prisonId}`, {
                             method: 'GET',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`
-                            }
+                            headers: await getApiHeaders()
                         }),
                         fetch(`${GAME_API_URL}/player/prison/${prisonId}/checkpoints?isDay=${isDay}`, {
                             method: 'GET',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`
-                            }
+                            headers: await getApiHeaders()
                         })
                     ]);
                 }
@@ -1693,12 +1665,10 @@ async function startPrisonWalk() {
             `;
             
             // POST запрос для работы в тюрьме
+            // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
             let response = await fetch(`${GAME_API_URL}/player/prison/${prisonId}/work?isDay=${isDay}`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                }
+                headers: await getApiHeaders()
             });
             
             // Если получили 401/403, пытаемся обновить токен через initData из БД
@@ -1708,14 +1678,12 @@ async function startPrisonWalk() {
                 if (currentInitData && currentInitData.trim()) {
                     const newToken = await loginWithInitData();
                     if (newToken) {
-                        token = newToken;
+                        // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
+                        // Используем getApiHeaders() для получения актуального токена
                         // Повторяем запрос с новым токеном
                         response = await fetch(`${GAME_API_URL}/player/prison/${prisonId}/work?isDay=${isDay}`, {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`
-                            }
+                            headers: await getApiHeaders()
                         });
                     }
                 }
@@ -1814,12 +1782,10 @@ async function loadStats() {
     
     try {
         // Получаем информацию о боссе для отображения энергии
+        // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
         let response = await fetch(`${GAME_API_URL}/boss/bootstrap`, {
             method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
+            headers: await getApiHeaders()
         });
         
         // Если получили 401/403, пытаемся обновить токен через initData из БД
@@ -1829,14 +1795,12 @@ async function loadStats() {
             if (currentInitData && currentInitData.trim()) {
                 const newToken = await loginWithInitData();
                 if (newToken) {
-                    token = newToken;
+                    // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
+                    // Используем getApiHeaders() для получения актуального токена
                     // Повторяем запрос с новым токеном
                     response = await fetch(`${GAME_API_URL}/boss/bootstrap`, {
                         method: 'GET',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
-                        }
+                        headers: await getApiHeaders()
                     });
                 }
             }
@@ -2038,12 +2002,10 @@ async function getSavedInitDataFromServer() {
             ? `${API_SERVER_URL}/auth/get-saved-init-data`
             : `${GAME_API_URL}/auth/get-saved-init-data`;
         
+        // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
         const response = await fetch(url, {
             method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Accept': 'application/json'
-            }
+            headers: await getApiHeaders()
         });
         
         if (response.ok) {
@@ -2887,12 +2849,10 @@ async function attackNextBoss(mode) {
         const apiUrl = API_SERVER_URL || GAME_API_URL;
         
         // Начинаем атаку
+        // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
         let response = await fetch(`${apiUrl}/boss/start-attack`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
+            headers: await getApiHeaders(),
             body: JSON.stringify({
                 bossId: boss.id,
                 mode: mode,
@@ -2906,13 +2866,11 @@ async function attackNextBoss(mode) {
             if (currentInitData && currentInitData.trim()) {
                 const newToken = await loginWithInitData();
                 if (newToken) {
-                    token = newToken;
+                    // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
+                    // Используем getApiHeaders() для получения актуального токена
                     response = await fetch(`${apiUrl}/boss/start-attack`, {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
-                        },
+                        headers: await getApiHeaders(),
                         body: JSON.stringify({
                             bossId: boss.id,
                             mode: mode,
@@ -2982,12 +2940,10 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
         }
         
         const apiUrl = API_SERVER_URL || GAME_API_URL;
+        // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
         let response = await fetch(`${apiUrl}/boss/start-attack`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
+            headers: await getApiHeaders(),
             body: JSON.stringify({
                 bossId: bossId,
                 mode: mode,
@@ -2995,19 +2951,17 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
             })
         });
         
-        // Обработка 401
+        // Обработка 401/403 - обновляем токен через initData из БД
         if (response.status === 401 || response.status === 403) {
-            const manualInitData = localStorage.getItem('manual_init_data');
-            if (manualInitData && manualInitData.trim()) {
+            const currentInitData = await getCurrentInitData();
+            if (currentInitData && currentInitData.trim()) {
                 const newToken = await loginWithInitData();
                 if (newToken) {
-                    token = newToken;
+                    // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
+                    // Используем getApiHeaders() для получения актуального токена
                     response = await fetch(`${apiUrl}/boss/start-attack`, {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
-                        },
+                        headers: await getApiHeaders(),
                         body: JSON.stringify({
                             bossId: bossId,
                             mode: mode,
