@@ -210,22 +210,22 @@
             </div>
         </main>
         
-        <!-- Таббар внизу экрана -->
-        <div class="tab-bar">
-            <button class="tab-button active" onclick="switchTab('main')" id="tab-btn-main">
-                <span class="tab-icon">🏠</span>
-                <span class="tab-label">Основное</span>
-            </button>
-            <button class="tab-button" onclick="switchTab('boss-attack')" id="tab-btn-boss-attack">
-                <span class="tab-icon">⚔️</span>
-                <span class="tab-label">Атака боссов</span>
-            </button>
-        </div>
-        
         <!-- Кнопка настроек внизу экрана -->
         <div class="settings-button-container">
             <button class="btn btn-secondary" onclick="toggleSettings()" id="settings-toggle-btn">⚙️ Настройки</button>
         </div>
+    </div>
+    
+    <!-- Таббар внизу экрана (вне контейнера для правильного позиционирования) -->
+    <div class="tab-bar" id="tab-bar">
+        <button class="tab-button active" id="tab-btn-main" type="button">
+            <span class="tab-icon">🏠</span>
+            <span class="tab-label">Основное</span>
+        </button>
+        <button class="tab-button" id="tab-btn-boss-attack" type="button">
+            <span class="tab-icon">⚔️</span>
+            <span class="tab-label">Атака боссов</span>
+        </button>
     </div>
 
     <!-- Кастомное модальное окно с темным фоном -->

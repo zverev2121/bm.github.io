@@ -64,6 +64,9 @@ window.switchTab = function switchTab(tabName) {
     if (selectedButton) {
         selectedButton.classList.add('active');
     }
+    
+    // Прокручиваем вверх при переключении вкладок
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // Базовый URL API игры
@@ -434,6 +437,24 @@ async function toggleSettings() {
 document.addEventListener('DOMContentLoaded', async () => {
     // Инициализация: показываем вкладку "Основное" по умолчанию
     switchTab('main');
+    
+    // Добавляем обработчики событий для кнопок таббара (для лучшей совместимости с Telegram)
+    const tabButtons = document.querySelectorAll('.tab-button');
+    tabButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const tabName = this.id.replace('tab-btn-', '');
+            switchTab(tabName);
+        });
+        button.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const tabName = this.id.replace('tab-btn-', '');
+            switchTab(tabName);
+        });
+    });
+    
     updateStatus(false);
     
     // ВАЖНО: Очищаем все возможные старые значения initData из localStorage при загрузке
