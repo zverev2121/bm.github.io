@@ -547,6 +547,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Токен длина:', token.length);
         console.log('Токен первые 20 символов:', token.substring(0, 20) + '...');
         
+        // Устанавливаем статус "Подключено" если токен найден (значит login был успешным ранее)
         updateStatus(true);
         
         // Показываем все секции
@@ -583,7 +584,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (telegramUserInfo) {
             console.log('Пользователь идентифицирован через Telegram, но токен не найден в БД');
             console.log('Попробуйте обновить страницу для получения initData');
-            updateStatus(true);
+            // НЕ устанавливаем статус "Подключено" здесь - статус должен устанавливаться только на основе успешности login
+            // Если getAccessToken() вызвал loginWithInitData() и он обвалился, статус уже установлен в "Отключено"
             
             // Показываем все секции
             // Примечание: boss-section теперь на вкладке "Атака боссов", управляется через switchTab
@@ -1246,6 +1248,27 @@ async function loadBossInfo() {
                     // Продолжаем с retryResponse
                     const data = await retryResponse.json();
                     
+                    // Обновляем ключи из ответа bootstrap
+                    if (data.success && data.keys) {
+                        const oldKeys = { ...bossKeys };
+                        bossKeys = {};
+                        for (const [bossIdStr, count] of Object.entries(data.keys)) {
+                            const bossId = parseInt(bossIdStr);
+                            const keyCount = parseInt(count) || 0;
+                            bossKeys[bossId] = keyCount;
+                            if (oldKeys[bossId] !== keyCount) {
+                                console.log(`🔑 [loadBossInfo retry] Босс ${bossId}: ${oldKeys[bossId] || 0} → ${keyCount} ключей`);
+                            }
+                        }
+                        console.log('✅ [loadBossInfo retry] Ключи обновлены:', bossKeys);
+                        
+                        // Обновляем карточки, если они уже отрисованы
+                        const existingCards = document.querySelectorAll('.boss-card');
+                        if (existingCards.length > 0) {
+                            updateBossCards();
+                        }
+                    }
+                    
                     // Проверяем, есть ли награда для сбора
                     if (data.success && data.hasReward === true) {
                         try {
@@ -1309,6 +1332,27 @@ async function loadBossInfo() {
         }
         
         const data = await response.json();
+        
+        // Обновляем ключи из ответа bootstrap
+        if (data.success && data.keys) {
+            const oldKeys = { ...bossKeys };
+            bossKeys = {};
+            for (const [bossIdStr, count] of Object.entries(data.keys)) {
+                const bossId = parseInt(bossIdStr);
+                const keyCount = parseInt(count) || 0;
+                bossKeys[bossId] = keyCount;
+                if (oldKeys[bossId] !== keyCount) {
+                    console.log(`🔑 [loadBossInfo] Босс ${bossId}: ${oldKeys[bossId] || 0} → ${keyCount} ключей`);
+                }
+            }
+            console.log('✅ [loadBossInfo] Ключи обновлены:', bossKeys);
+            
+            // Обновляем карточки, если они уже отрисованы
+            const existingCards = document.querySelectorAll('.boss-card');
+            if (existingCards.length > 0) {
+                updateBossCards();
+            }
+        }
         
         // Проверяем, есть ли награда для сбора
         let rewardMessageHtml = '';
@@ -1377,6 +1421,33 @@ async function loadBossInfo() {
 async function updateBossKeys() {
     try {
         const apiUrl = API_SERVER_URL || GAME_API_URL;
+        
+        // Сначала загружаем ключи из БД
+        console.log('🔄 Загрузка ключей из БД...');
+        try {
+            const keysResponse = await fetch(`${apiUrl}/boss/keys`, {
+                method: 'GET',
+                headers: await getApiHeaders()
+            });
+            
+            if (keysResponse.ok) {
+                const keysData = await keysResponse.json();
+                if (keysData.success && keysData.keys) {
+                    bossKeys = {};
+                    for (const [bossIdStr, count] of Object.entries(keysData.keys)) {
+                        const bossId = parseInt(bossIdStr);
+                        const keyCount = parseInt(count) || 0;
+                        bossKeys[bossId] = keyCount;
+                    }
+                    console.log('✅ Ключи загружены из БД:', bossKeys);
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ Не удалось загрузить ключи из БД:', error);
+        }
+        
+        // Затем обновляем из bootstrap
+        console.log('🔄 Обновление ключей из bootstrap...');
         let bootstrapResponse = await fetch(`${apiUrl}/boss/bootstrap`, {
             method: 'GET',
             headers: await getApiHeaders()
@@ -1384,6 +1455,7 @@ async function updateBossKeys() {
         
         // Обработка 401/403 - обновляем токен
         if (bootstrapResponse.status === 401 || bootstrapResponse.status === 403) {
+            console.log('⚠️ Токен протух, обновляем...');
             const currentInitData = await getCurrentInitData();
             if (currentInitData && currentInitData.trim()) {
                 const newToken = await loginWithInitData();
@@ -1398,35 +1470,60 @@ async function updateBossKeys() {
         
         if (bootstrapResponse.ok) {
             const bootstrapData = await bootstrapResponse.json();
+            console.log('📦 Bootstrap ответ получен:', bootstrapData);
+            console.log('📦 Bootstrap keys в ответе:', bootstrapData.keys);
             
             // Проверяем разные варианты структуры ответа
             let keysData = null;
             if (bootstrapData.keys) {
                 keysData = bootstrapData.keys;
+                console.log('✅ Ключи найдены в bootstrapData.keys');
             } else if (bootstrapData.data && bootstrapData.data.keys) {
                 keysData = bootstrapData.data.keys;
+                console.log('✅ Ключи найдены в bootstrapData.data.keys');
             } else if (bootstrapData.success && bootstrapData.keys) {
                 keysData = bootstrapData.keys;
+                console.log('✅ Ключи найдены в bootstrapData.success.keys');
+            } else {
+                console.warn('⚠️ Ключи не найдены в ответе. Полная структура:', JSON.stringify(bootstrapData, null, 2));
             }
             
             if (keysData) {
+                // Сохраняем старые ключи для сравнения
+                const oldKeys = { ...bossKeys };
+                
                 // Обновляем ключи
                 bossKeys = {};
                 for (const [bossIdStr, count] of Object.entries(keysData)) {
                     const bossId = parseInt(bossIdStr);
                     const keyCount = parseInt(count) || 0;
                     bossKeys[bossId] = keyCount;
+                    if (oldKeys[bossId] !== keyCount) {
+                        console.log(`🔑 Босс ${bossId}: ${oldKeys[bossId] || 0} → ${keyCount} ключей (изменение)`);
+                    }
                 }
-                console.log('✅ Ключи обновлены:', bossKeys);
+                console.log('✅ Ключи обновлены из bootstrap:', bossKeys);
                 
                 // Обновляем карточки боссов, если они уже загружены
-                updateBossCards();
+                const existingCards = document.querySelectorAll('.boss-card');
+                if (existingCards.length > 0) {
+                    console.log(`🔄 Обновление ${existingCards.length} карточек с новыми ключами...`);
+                    updateBossCards();
+                } else {
+                    console.log('ℹ️ Карточки еще не отрисованы, обновление будет при рендеринге');
+                }
             } else {
                 console.warn('⚠️ Ключи не найдены в ответе bootstrap при обновлении');
+                console.warn('Структура ответа:', JSON.stringify(bootstrapData, null, 2));
             }
+        } else {
+            console.error(`❌ Ошибка загрузки bootstrap: HTTP ${bootstrapResponse.status}`);
+            const errorText = await bootstrapResponse.text();
+            console.error('Текст ошибки:', errorText);
         }
     } catch (error) {
-        console.error('Ошибка обновления ключей:', error);
+        console.error('❌ Ошибка обновления ключей:', error);
+        console.error('Стек ошибки:', error.stack);
     }
 }
 
@@ -2501,16 +2598,22 @@ async function loginWithInitData() {
             if (authHeader) {
                 console.log('Токен найден в заголовках');
                 // Токен уже сохранен в БД на сервере при авторизации
+                // Устанавливаем статус "Подключено" при успешном получении access_token
+                updateStatus(true);
                 return authHeader;
             }
             
             // Если нет данных, возвращаем ошибку
+            // Устанавливаем статус "Отключено" если login обвалился
+            updateStatus(false);
             throw new Error('Получен ответ 204 без данных. Возможно, проблема с прокси-сервером.');
         }
         
         if (!response.ok) {
             const errorText = await response.text();
             console.error(`Ошибка авторизации: ${response.status}`, errorText);
+            // Устанавливаем статус "Отключено" если запрос login обвалился
+            updateStatus(false);
             
             // Пробуем распарсить как JSON
             try {
@@ -2640,13 +2743,19 @@ async function loginWithInitData() {
             
             // ВАЖНО: Возвращаем токен напрямую из ответа сервера
             // Токен уже сохранен в БД на сервере
+            // Устанавливаем статус "Подключено" при успешном получении access_token
+            updateStatus(true);
             return data.accessToken;
         } else {
             console.error('Ошибка авторизации: нет токена в ответе', data);
+            // Устанавливаем статус "Отключено" если login обвалился (нет токена в ответе)
+            updateStatus(false);
             return null;
         }
     } catch (error) {
         console.error('Ошибка авторизации:', error);
+        // Устанавливаем статус "Отключено" если запрос login обвалился
+        updateStatus(false);
         console.error('Тип ошибки:', error.name);
         console.error('Сообщение:', error.message);
         console.error('Стек:', error.stack);
@@ -2745,6 +2854,32 @@ const CATEGORY_NAMES = {
     2: 'Вертухаи'
 };
 
+// Названия и множители режимов боя
+const BATTLE_MODE_INFO = {
+    'pacansky': { name: 'Пацанский', multiplier: 'x1' },
+    'blotnoy': { name: 'Блатной', multiplier: 'x3' },
+    'avtoritetny': { name: 'Авторитетный', multiplier: 'x6' },
+    'odin': { name: 'В одного', multiplier: 'x1' }
+};
+
+// Получение доступных режимов боя для босса
+function getAvailableBattleModes(bossData) {
+    const battleModes = bossData?.battleModes || {};
+    const availableModes = [];
+    
+    for (const [modeKey, modeInfo] of Object.entries(battleModes)) {
+        if (modeInfo && BATTLE_MODE_INFO[modeKey]) {
+            availableModes.push({
+                key: modeKey,
+                name: BATTLE_MODE_INFO[modeKey].name,
+                multiplier: BATTLE_MODE_INFO[modeKey].multiplier
+            });
+        }
+    }
+    
+    return availableModes;
+}
+
 // Флаг для отслеживания процесса взаимодействия с игроками
 let isBicepsProcessing = false;
 
@@ -2809,7 +2944,31 @@ window.loadBossList = async function loadBossList() {
         // Определяем правильный URL для запросов (используем прокси если есть)
         const apiUrl = API_SERVER_URL || GAME_API_URL;
         
-        // Сначала загружаем ключи из bootstrap
+        // Сначала загружаем ключи из БД
+        console.log('Загружаем ключи из БД...');
+        try {
+            const keysResponse = await fetch(`${apiUrl}/boss/keys`, {
+                method: 'GET',
+                headers: await getApiHeaders()
+            });
+            
+            if (keysResponse.ok) {
+                const keysData = await keysResponse.json();
+                if (keysData.success && keysData.keys) {
+                    bossKeys = {};
+                    for (const [bossIdStr, count] of Object.entries(keysData.keys)) {
+                        const bossId = parseInt(bossIdStr);
+                        const keyCount = parseInt(count) || 0;
+                        bossKeys[bossId] = keyCount;
+                    }
+                    console.log('✅ Ключи загружены из БД:', bossKeys);
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ Не удалось загрузить ключи из БД:', error);
+        }
+        
+        // Затем загружаем и обновляем ключи из bootstrap
         console.log('Загружаем ключи из bootstrap...');
         let bootstrapResponse = await fetch(`${apiUrl}/boss/bootstrap`, {
             method: 'GET',
@@ -2846,15 +3005,18 @@ window.loadBossList = async function loadBossList() {
             }
             
             if (keysData) {
-                // Сохраняем ключи (преобразуем строковые ключи в числа)
+                // Обновляем ключи (преобразуем строковые ключи в числа)
+                const oldKeys = { ...bossKeys };
                 bossKeys = {};
                 for (const [bossIdStr, count] of Object.entries(keysData)) {
                     const bossId = parseInt(bossIdStr);
                     const keyCount = parseInt(count) || 0;
                     bossKeys[bossId] = keyCount;
-                    console.log(`🔑 Босс ${bossId}: ${keyCount} ключей`);
+                    if (oldKeys[bossId] !== keyCount) {
+                        console.log(`🔑 Босс ${bossId}: ${oldKeys[bossId] || 0} → ${keyCount} ключей`);
+                    }
                 }
-                console.log('✅ Ключи загружены:', bossKeys);
+                console.log('✅ Ключи обновлены из bootstrap:', bossKeys);
                 
                 // Если карточки уже отрисованы, обновляем их
                 const existingCards = document.querySelectorAll('.boss-card');
@@ -3095,6 +3257,9 @@ function renderBossList(categoriesData) {
                 console.log(`🎯 Босс ${bossId} (${bossName}): ключей=${keysCount}, доступен=${canAttack}, bossKeys[${bossId}]=${bossKeys[bossId]}, bossKeys["${bossId}"]=${bossKeys[String(bossId)]}`);
             }
             
+            // Получаем доступные режимы боя
+            const availableModes = getAvailableBattleModes(boss);
+            
             // Сохраняем босса
             window.allBosses.push({
                 id: bossId,
@@ -3102,7 +3267,8 @@ function renderBossList(categoriesData) {
                 categoryId: categoryId,
                 baseHp: baseHp,
                 battleModes: boss.battleModes || {},
-                imageUrl: boss.imageUrl || boss.image || ''
+                imageUrl: boss.imageUrl || boss.image || '',
+                availableModes: availableModes
             });
             
             // Определяем стиль карточки (зеленый если можно атаковать)
@@ -3110,12 +3276,22 @@ function renderBossList(categoriesData) {
                 ? 'border: 2px solid #28a745; background: linear-gradient(135deg, #2d5a2d 0%, #1e3a1e 100%);' 
                 : 'border: 2px solid #555; background: linear-gradient(135deg, #2d2d2d 0%, #1e1e1e 100%);';
             
+            // Формируем список режимов для отображения
+            let modesHtml = '';
+            if (availableModes.length > 0) {
+                modesHtml = '<div class="boss-modes" style="margin-top: 6px; font-size: 10px; display: flex; flex-wrap: wrap; gap: 3px; justify-content: center;">';
+                availableModes.forEach(mode => {
+                    modesHtml += `<span style="background: rgba(255,255,255,0.2); padding: 2px 4px; border-radius: 3px; white-space: nowrap;">${mode.name} ${mode.multiplier}</span>`;
+                });
+                modesHtml += '</div>';
+            }
+            
             html += `
                 <div class="boss-card" 
                      data-boss-id="${bossId}" 
-                     data-boss-name="${bossName}"
-                     style="${cardStyle} border-radius: 12px; padding: 12px; margin-right: 12px; min-width: 140px; cursor: pointer; transition: transform 0.2s;"
-                     onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}')">
+                     data-boss-name="${bossName.replace(/'/g, "\\'")}"
+                     style="${cardStyle} border-radius: 12px; padding: 12px; margin-right: 12px; min-width: 160px; cursor: pointer; transition: transform 0.2s;"
+                     onclick="showBossModeSelection(${bossId})">
                     <div class="boss-image" style="width: 100%; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden;">
                         <img src="${getBossImageUrl(bossId, boss)}" 
                              alt="${bossName}" 
@@ -3128,9 +3304,10 @@ function renderBossList(categoriesData) {
                     <div class="boss-info-card" style="text-align: center; color: #ffffff;">
                         <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bossName}</div>
                         <div class="boss-hp" style="font-size: 12px; color: #e0e0e0; margin-bottom: 4px;">HP: ${baseHp.toLocaleString()}</div>
-                        <div class="boss-keys" style="font-size: 12px; color: #ffd700;">
+                        <div class="boss-keys" style="font-size: 12px; color: #ffd700; margin-bottom: 4px;">
                             🔑 ${keysInfo.hasRequirements ? `${keysInfo.required}/${keysInfo.available}` : keysCount}
                         </div>
+                        ${modesHtml}
                         ${canAttack ? '<div class="available-indicator" style="font-size: 10px; color: #28a745; margin-top: 4px;">✓ Доступен</div>' : ''}
                     </div>
                 </div>
@@ -3215,8 +3392,93 @@ function initializeCarousels() {
     });
 }
 
-// Переключение выбора босса
-window.toggleBossSelection = function(bossId, bossName) {
+// Показать выбор режима для босса
+window.showBossModeSelection = function(bossId) {
+    const bossData = window.allBosses.find(b => b.id === bossId);
+    if (!bossData) {
+        console.warn(`Босс ${bossId} не найден`);
+        return;
+    }
+    
+    const availableModes = bossData.availableModes || getAvailableBattleModes(bossData);
+    
+    if (availableModes.length === 0) {
+        if (tg && tg.showAlert) {
+            tg.showAlert('Нет доступных режимов боя для этого босса');
+        }
+        return;
+    }
+    
+    // Если режим только один, выбираем его автоматически
+    if (availableModes.length === 1) {
+        toggleBossSelection(bossId, bossData.name, availableModes[0].key);
+        return;
+    }
+    
+    // Показываем выбор режима
+    const modeOptions = availableModes.map((mode, index) => 
+        `${index + 1}. ${mode.name} ${mode.multiplier}`
+    ).join('\n');
+    
+    const modeText = `Выберите режим боя для ${bossData.name}:\n\n${modeOptions}`;
+    
+    if (tg && tg.showAlert) {
+        // Для Telegram используем простой выбор через confirm
+        // Создаем модальное окно для выбора режима
+        showModeSelectionModal(bossId, bossData.name, availableModes);
+    } else {
+        // Для браузера используем prompt
+        const choice = prompt(modeText + '\n\nВведите номер режима:');
+        if (choice) {
+            const modeIndex = parseInt(choice) - 1;
+            if (modeIndex >= 0 && modeIndex < availableModes.length) {
+                toggleBossSelection(bossId, bossData.name, availableModes[modeIndex].key);
+            }
+        }
+    }
+}
+
+// Показать модальное окно выбора режима
+function showModeSelectionModal(bossId, bossName, availableModes) {
+    const modal = document.getElementById('custom-modal');
+    const modalBody = document.getElementById('custom-modal-body');
+    
+    if (!modal || !modalBody) {
+        // Если модального окна нет, используем простой выбор
+        const choice = prompt(`Выберите режим для ${bossName}:\n\n${availableModes.map((m, i) => `${i+1}. ${m.name} ${m.multiplier}`).join('\n')}\n\nВведите номер:`);
+        if (choice) {
+            const modeIndex = parseInt(choice) - 1;
+            if (modeIndex >= 0 && modeIndex < availableModes.length) {
+                toggleBossSelection(bossId, bossName, availableModes[modeIndex].key);
+            }
+        }
+        return;
+    }
+    
+    let html = `<div style="text-align: center;"><strong>${bossName}</strong><br><br>Выберите режим боя:</div><div style="display: flex; flex-direction: column; gap: 8px; margin-top: 15px;">`;
+    
+    availableModes.forEach((mode, index) => {
+        html += `
+            <button onclick="selectBossMode(${bossId}, '${bossName.replace(/'/g, "\\'")}', '${mode.key}'); closeCustomModal();" 
+                    style="padding: 12px; background: var(--tg-theme-button-color, #3390ec); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                ${mode.name} ${mode.multiplier}
+            </button>
+        `;
+    });
+    
+    html += '</div>';
+    modalBody.innerHTML = html;
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+// Выбор режима для босса
+window.selectBossMode = function(bossId, bossName, mode) {
+    toggleBossSelection(bossId, bossName, mode);
+}
+
+// Переключение выбора босса с режимом
+window.toggleBossSelection = function(bossId, bossName, mode = null) {
     const bossIndex = selectedBosses.findIndex(b => b.id === bossId);
     
     if (bossIndex >= 0) {
@@ -3227,9 +3489,23 @@ window.toggleBossSelection = function(bossId, bossName) {
         // Добавляем в выбранные (можно выбрать любого босса, даже если ключей недостаточно)
         const bossData = window.allBosses.find(b => b.id === bossId);
         if (bossData) {
+            // Если режим не указан, выбираем первый доступный
+            if (!mode) {
+                const availableModes = bossData.availableModes || getAvailableBattleModes(bossData);
+                if (availableModes.length > 0) {
+                    mode = availableModes[0].key;
+                } else {
+                    if (tg && tg.showAlert) {
+                        tg.showAlert('Нет доступных режимов боя для этого босса');
+                    }
+                    return;
+                }
+            }
+            
             selectedBosses.push({
                 id: bossId,
-                name: bossName
+                name: bossName,
+                mode: mode
             });
             updateBossCardSelection(bossId, true);
         }
@@ -3269,10 +3545,12 @@ function updateOrderCarousel() {
     let html = '';
     selectedBosses.forEach((boss, index) => {
         const bossData = window.allBosses.find(b => b.id === boss.id);
+        const modeName = boss.mode ? (BATTLE_MODE_INFO[boss.mode]?.name || boss.mode) : 'Не выбран';
+        const modeMultiplier = boss.mode ? (BATTLE_MODE_INFO[boss.mode]?.multiplier || '') : '';
         html += `
             <div class="boss-card-order" 
                  data-boss-id="${boss.id}"
-                 style="border: 2px solid #3390ec; background: linear-gradient(135deg, #2d3d5a 0%, #1e2a3a 100%); border-radius: 12px; padding: 12px; margin-right: 12px; min-width: 140px; position: relative;">
+                 style="border: 2px solid #3390ec; background: linear-gradient(135deg, #2d3d5a 0%, #1e2a3a 100%); border-radius: 12px; padding: 12px; margin-right: 12px; min-width: 160px; position: relative;">
                 <div style="position: absolute; top: 5px; right: 5px; background: #3390ec; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">${index + 1}</div>
                 <div class="boss-image" style="width: 100%; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden;">
                     <img src="${getBossImageUrl(boss.id, bossData)}" 
@@ -3285,6 +3563,7 @@ function updateOrderCarousel() {
                 </div>
                 <div class="boss-info-card" style="text-align: center; color: #ffffff;">
                     <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${boss.name}</div>
+                    <div style="font-size: 11px; color: #ffd700; margin-bottom: 8px; font-weight: 600;">${modeName} ${modeMultiplier}</div>
                 </div>
                 <div style="display: flex; gap: 5px; margin-top: 8px; justify-content: center;">
                     <button onclick="moveBossInOrder(${boss.id}, -1); event.stopPropagation();" 
@@ -3333,21 +3612,16 @@ window.startBossAutoAttack = async function() {
         return;
     }
     
-    const mode = document.getElementById('attack-mode-select').value;
-    
-    // Проверяем доступность режима для выбранных боссов
-    const invalidBosses = selectedBosses.filter(boss => {
-        const bossData = window.allBosses.find(b => b.id === boss.id);
-        return bossData && !bossData.battleModes[mode];
-    });
-    
-    if (invalidBosses.length > 0) {
-        tg.showAlert(`Режим "${mode}" недоступен для: ${invalidBosses.map(b => b.name).join(', ')}`);
+    // Проверяем, что у всех боссов выбран режим
+    const bossesWithoutMode = selectedBosses.filter(boss => !boss.mode);
+    if (bossesWithoutMode.length > 0) {
+        tg.showAlert(`У следующих боссов не выбран режим: ${bossesWithoutMode.map(b => b.name).join(', ')}`);
         return;
     }
     
+    const bossList = selectedBosses.map(b => `${b.name} (${BATTLE_MODE_INFO[b.mode]?.name || b.mode})`).join(', ');
     const confirmed = await new Promise(resolve => {
-        tg.showConfirm(`Начать атаку на ${selectedBosses.length} боссов в режиме "${mode}"?`, resolve);
+        tg.showConfirm(`Начать атаку на ${selectedBosses.length} боссов?\n\n${bossList}`, resolve);
     });
     
     if (!confirmed) return;
@@ -3359,18 +3633,20 @@ window.startBossAutoAttack = async function() {
     document.getElementById('stop-boss-attack-btn').style.display = 'block';
     document.getElementById('boss-attack-status').style.display = 'block';
     
-    attackNextBoss(mode);
+    attackNextBoss();
 }
 
 // Атака следующего босса
-async function attackNextBoss(mode) {
+async function attackNextBoss() {
     if (!isAttacking || currentBossIndex >= selectedBosses.length) {
         stopBossAutoAttack();
         return;
     }
     
     const boss = selectedBosses[currentBossIndex];
-    updateAttackStatus(`Атака на ${boss.name} (${currentBossIndex + 1}/${selectedBosses.length})...`);
+    const mode = boss.mode;
+    const modeName = BATTLE_MODE_INFO[mode]?.name || mode;
+    updateAttackStatus(`Атака на ${boss.name} (${modeName}) (${currentBossIndex + 1}/${selectedBosses.length})...`);
     
     try {
         let token = await getAccessToken();
@@ -3449,7 +3725,7 @@ async function attackNextBoss(mode) {
                 
                 // Переходим к следующему боссу через небольшую задержку
                 setTimeout(() => {
-                    attackNextBoss(mode);
+                    attackNextBoss();
                 }, 1000);
             } else if (data.sessionId || data.session) {
                 // Бой продолжается, проверяем статус каждые 5 секунд
@@ -3457,14 +3733,14 @@ async function attackNextBoss(mode) {
                 
                 // Проверяем статус через 5 секунд
                 bossAttackInterval = setTimeout(() => {
-                    checkBossBattleStatus(boss.id, mode, data.sessionId);
+                    checkBossBattleStatus(boss.id, boss.mode, data.sessionId);
                 }, 5000);
             } else {
                 // Неожиданный ответ
                 updateAttackStatus(`⚠️ Неожиданный ответ от сервера для ${boss.name}`);
                 currentBossIndex++;
                 setTimeout(() => {
-                    attackNextBoss(mode);
+                    attackNextBoss();
                 }, 2000);
             }
         } else {
@@ -3478,7 +3754,7 @@ async function attackNextBoss(mode) {
         // Переходим к следующему боссу при ошибке
         currentBossIndex++;
         setTimeout(() => {
-            attackNextBoss(mode);
+            attackNextBoss();
         }, 2000);
     }
 }
@@ -3486,6 +3762,17 @@ async function attackNextBoss(mode) {
 // Проверка статуса боя
 async function checkBossBattleStatus(bossId, mode, sessionId) {
     if (!isAttacking) return;
+    
+    // Получаем режим из selectedBosses, если не передан
+    if (!mode) {
+        const boss = selectedBosses.find(b => b.id === bossId);
+        if (boss && boss.mode) {
+            mode = boss.mode;
+        } else {
+            console.error(`Режим не найден для босса ${bossId}`);
+            return;
+        }
+    }
     
     try {
         let token = await getAccessToken();
@@ -3561,7 +3848,7 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
             
             // Переходим к следующему боссу
             setTimeout(() => {
-                attackNextBoss(mode);
+                attackNextBoss();
             }, 1000);
         } else if (data.success && (data.sessionId || data.session)) {
             // Бой продолжается, проверяем снова через 5 секунд
@@ -3569,7 +3856,7 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
             updateAttackStatus(`⚔️ Бой с ${boss.name} продолжается...`);
             
             bossAttackInterval = setTimeout(() => {
-                checkBossBattleStatus(bossId, mode, data.sessionId);
+                checkBossBattleStatus(bossId, boss.mode, data.sessionId);
             }, 5000);
         } else {
             // Ошибка или неожиданный ответ
@@ -3577,7 +3864,7 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
             updateAttackStatus(`⚠️ Неожиданный ответ для ${boss.name}`);
             currentBossIndex++;
             setTimeout(() => {
-                attackNextBoss(mode);
+                attackNextBoss();
             }, 2000);
         }
         
@@ -3589,7 +3876,7 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
         // Переходим к следующему боссу
         currentBossIndex++;
         setTimeout(() => {
-            attackNextBoss(mode);
+            attackNextBoss();
         }, 2000);
     }
 }
