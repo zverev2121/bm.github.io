@@ -3352,7 +3352,7 @@ function renderBossList(categoriesData) {
                      data-boss-name="${bossName.replace(/'/g, "\\'")}"
                      data-selected-mode="${currentMode || ''}"
                      data-base-hp="${baseHp}"
-                     style="${cardStyle} border-radius: 12px; padding: 12px; margin-right: 12px; min-width: 180px; cursor: pointer; transition: transform 0.2s;"
+                     style="${cardStyle} border-radius: 12px; padding: 10px; margin-right: 12px; min-width: 140px; cursor: pointer; transition: transform 0.2s;"
                      onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}')">
                     <div class="boss-image" style="width: 100%; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden;">
                         <img src="${getBossImageUrl(bossId, boss)}" 
@@ -3438,6 +3438,12 @@ function preventBossAttackTabClose() {
             return;
         }
         
+        // Если это карусель, не мешаем нативному скроллу
+        const isInCarousel = e.target.closest('.boss-carousel');
+        if (isInCarousel) {
+            return; // Позволяем нативному скроллу карусели работать
+        }
+        
         const touch = e.touches[0];
         const deltaY = touch.pageY - touchStartY;
         const deltaX = Math.abs(touch.pageX - touchStartX);
@@ -3449,14 +3455,9 @@ function preventBossAttackTabClose() {
         }
         
         // Если пользователь скроллит вверх и находится в начале страницы,
-        // и это вертикальный скролл (не горизонтальный свайп в карусели),
-        // предотвращаем закрытие страницы Telegram
+        // и это вертикальный скролл, предотвращаем закрытие страницы Telegram
         if (isVerticalScroll && deltaY > 0 && scrollTop <= 10) {
-            // Проверяем, что это не горизонтальный свайп в карусели
-            const isInCarousel = e.target.closest('.boss-carousel');
-            if (!isInCarousel || Math.abs(deltaX) < Math.abs(deltaY)) {
-                e.stopPropagation();
-            }
+            e.stopPropagation();
         }
     };
     
@@ -3465,80 +3466,15 @@ function preventBossAttackTabClose() {
     document.addEventListener('touchmove', handleTouchMove, { passive: false });
 }
 
-// Инициализация каруселей (свайп)
+// Инициализация каруселей (нативный скролл)
 function initializeCarousels() {
+    // Карусели используют нативный скролл браузера
+    // Никаких кастомных обработчиков не требуется
     const carousels = document.querySelectorAll('.boss-carousel');
-    
     carousels.forEach(carousel => {
-        let isDown = false;
-        let startX;
-        let scrollLeft;
-        
-        carousel.addEventListener('mousedown', (e) => {
-            isDown = true;
-            carousel.style.cursor = 'grabbing';
-            startX = e.pageX - carousel.offsetLeft;
-            scrollLeft = carousel.scrollLeft;
-        });
-        
-        carousel.addEventListener('mouseleave', () => {
-            isDown = false;
-            carousel.style.cursor = 'grab';
-        });
-        
-        carousel.addEventListener('mouseup', () => {
-            isDown = false;
-            carousel.style.cursor = 'grab';
-        });
-        
-        carousel.addEventListener('mousemove', (e) => {
-            if (!isDown) return;
-            e.preventDefault();
-            const x = e.pageX - carousel.offsetLeft;
-            const walk = (x - startX) * 2;
-            carousel.scrollLeft = scrollLeft - walk;
-        });
-        
-        // Touch events для мобильных
-        let touchStartX = 0;
-        let touchStartY = 0;
-        let touchScrollLeft = 0;
-        let isHorizontalSwipe = null; // null = не определено, true = горизонтальный, false = вертикальный
-        
-        carousel.addEventListener('touchstart', (e) => {
-            touchStartX = e.touches[0].pageX;
-            touchStartY = e.touches[0].pageY;
-            touchScrollLeft = carousel.scrollLeft;
-            isHorizontalSwipe = null;
-        }, { passive: true });
-        
-        carousel.addEventListener('touchmove', (e) => {
-            const touch = e.touches[0];
-            const currentX = touch.pageX;
-            const currentY = touch.pageY;
-            
-            // Определяем направление движения
-            const deltaX = Math.abs(currentX - touchStartX);
-            const deltaY = Math.abs(currentY - touchStartY);
-            
-            // Определяем направление при первом движении (если еще не определили)
-            if (isHorizontalSwipe === null && (deltaX > 3 || deltaY > 3)) {
-                isHorizontalSwipe = deltaX > deltaY;
-            }
-            
-            // Если это горизонтальный свайп, обрабатываем его
-            if (isHorizontalSwipe === true || (isHorizontalSwipe === null && deltaX > deltaY)) {
-                e.preventDefault();
-                e.stopPropagation();
-                const walk = (currentX - touchStartX);
-                carousel.scrollLeft = touchScrollLeft - walk;
-            }
-            // Если это вертикальный скролл, не мешаем ему (позволяем скроллить страницу)
-        }, { passive: false });
-        
-        carousel.addEventListener('touchend', () => {
-            isHorizontalSwipe = null;
-        }, { passive: true });
+        // Убеждаемся, что нативный скролл включен
+        carousel.style.overflowX = 'auto';
+        carousel.style.overflowY = 'hidden';
     });
 }
 
@@ -3669,7 +3605,7 @@ function updateOrderCarousel() {
         html += `
             <div class="boss-card-order" 
                  data-boss-id="${boss.id}"
-                 style="border: 2px solid #3390ec; background: linear-gradient(135deg, #2d3d5a 0%, #1e2a3a 100%); border-radius: 12px; padding: 12px; margin-right: 12px; min-width: 160px; position: relative;">
+                 style="border: 2px solid #3390ec; background: linear-gradient(135deg, #2d3d5a 0%, #1e2a3a 100%); border-radius: 12px; padding: 10px; margin-right: 12px; min-width: 130px; position: relative;">
                 <div style="position: absolute; top: 5px; right: 5px; background: #3390ec; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">${index + 1}</div>
                 <div class="boss-image" style="width: 100%; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden;">
                     <img src="${getBossImageUrl(boss.id, bossData)}" 
