@@ -1449,6 +1449,9 @@ async function updateBossKeys() {
 // Обновление карточек боссов с новыми ключами
 function updateBossCards() {
     const cards = document.querySelectorAll('.boss-card');
+    console.log(`🔄 Обновление ${cards.length} карточек боссов с новыми ключами`);
+    console.log('🔑 Текущие ключи:', bossKeys);
+    
     cards.forEach(card => {
         const bossId = parseInt(card.dataset.bossId);
         
@@ -1462,10 +1465,14 @@ function updateBossCards() {
         
         const canAttack = canAttackBoss(bossId);
         
+        console.log(`  📋 Босс ${bossId}: ключей=${keysCount}, доступен=${canAttack}`);
+        
         // Обновляем количество ключей
         const keysElement = card.querySelector('.boss-keys');
         if (keysElement) {
             keysElement.textContent = `🔑 ${keysCount}`;
+        } else {
+            console.warn(`⚠️ Не найден элемент .boss-keys для босса ${bossId}`);
         }
         
         // Обновляем стиль карточки
@@ -1475,13 +1482,16 @@ function updateBossCards() {
             
             // Добавляем или обновляем индикатор доступности
             let availableIndicator = card.querySelector('.available-indicator');
-            if (!availableIndicator) {
+            const infoCard = card.querySelector('.boss-info-card');
+            if (!availableIndicator && infoCard) {
                 availableIndicator = document.createElement('div');
                 availableIndicator.className = 'available-indicator';
                 availableIndicator.style.cssText = 'font-size: 10px; color: #28a745; margin-top: 4px;';
-                card.querySelector('.boss-info-card').appendChild(availableIndicator);
+                infoCard.appendChild(availableIndicator);
             }
-            availableIndicator.textContent = '✓ Доступен';
+            if (availableIndicator) {
+                availableIndicator.textContent = '✓ Доступен';
+            }
         } else {
             card.style.border = '2px solid #555';
             card.style.background = 'linear-gradient(135deg, #2d2d2d 0%, #1e1e1e 100%)';
@@ -1493,6 +1503,8 @@ function updateBossCards() {
             }
         }
     });
+    
+    console.log('✅ Карточки обновлены');
 }
 
 // Обновление информации о боссе
@@ -2853,6 +2865,13 @@ window.loadBossList = async function loadBossList() {
                     console.log(`🔑 Босс ${bossId}: ${keyCount} ключей`);
                 }
                 console.log('✅ Ключи загружены:', bossKeys);
+                
+                // Если карточки уже отрисованы, обновляем их
+                const existingCards = document.querySelectorAll('.boss-card');
+                if (existingCards.length > 0) {
+                    console.log('🔄 Обнаружены существующие карточки, обновляем их...');
+                    updateBossCards();
+                }
             } else {
                 console.warn('⚠️ Ключи не найдены в ответе bootstrap');
                 console.warn('Структура ответа:', JSON.stringify(bootstrapData, null, 2));
@@ -2928,14 +2947,25 @@ window.loadBossList = async function loadBossList() {
         }
         
         // Если получили данные, отображаем
+        // Убеждаемся, что ключи загружены перед рендерингом
+        console.log('🔑 Ключи перед рендерингом:', bossKeys);
+        
         if (category1Data && category2Data) {
             renderBossList([category1Data, category2Data]);
+            // После рендеринга убеждаемся, что карточки обновлены с актуальными ключами
+            setTimeout(() => {
+                updateBossCards();
+            }, 100);
         } else if (category1Data || category2Data) {
             // Если получили только одну категорию, отображаем что есть
             const categories = [];
             if (category1Data) categories.push(category1Data);
             if (category2Data) categories.push(category2Data);
             renderBossList(categories);
+            // После рендеринга убеждаемся, что карточки обновлены с актуальными ключами
+            setTimeout(() => {
+                updateBossCards();
+            }, 100);
         } else {
             const errorMsg = lastError?.message || 'Не удалось загрузить список боссов';
             console.error('Не удалось загрузить данные ни с одного эндпоинта');
