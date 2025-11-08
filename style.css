@@ -612,8 +612,9 @@ header h1 {
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
-    padding: 10px 0;
+    padding: 10px 16px;
     cursor: grab;
+    touch-action: pan-x;
 }
 
 .boss-carousel::-webkit-scrollbar {
@@ -641,7 +642,7 @@ header h1 {
     flex-shrink: 0;
     user-select: none;
     -webkit-user-select: none;
-    touch-action: pan-y;
+    touch-action: pan-x pan-y;
 }
 
 .boss-card:active {
@@ -652,7 +653,7 @@ header h1 {
     flex-shrink: 0;
     user-select: none;
     -webkit-user-select: none;
-    touch-action: pan-y;
+    touch-action: pan-x pan-y;
 }
 
 .boss-category-section {

@@ -2881,11 +2881,22 @@ const CATEGORY_NAMES = {
 
 // Названия и множители режимов боя
 const BATTLE_MODE_INFO = {
-    'pacansky': { name: 'Пацанский', multiplier: 'x1' },
-    'blotnoy': { name: 'Блатной', multiplier: 'x3' },
-    'avtoritetny': { name: 'Авторитетный', multiplier: 'x6' },
-    'odin': { name: 'В одного', multiplier: 'x1' }
+    'pacansky': { name: 'Пацанский', multiplier: 'x1', multiplierValue: 1 },
+    'blotnoy': { name: 'Блатной', multiplier: 'x3', multiplierValue: 3 },
+    'avtoritetny': { name: 'Авторитетный', multiplier: 'x6', multiplierValue: 6 },
+    'odin': { name: 'В одного', multiplier: 'x1', multiplierValue: 1 }
 };
+
+// Получить множитель HP для режима
+function getModeMultiplier(modeKey) {
+    return BATTLE_MODE_INFO[modeKey]?.multiplierValue || 1;
+}
+
+// Вычислить HP босса с учетом режима
+function calculateBossHp(baseHp, modeKey) {
+    const multiplier = getModeMultiplier(modeKey);
+    return baseHp * multiplier;
+}
 
 // Получение доступных режимов боя для босса
 function getAvailableBattleModes(bossData) {
@@ -3314,6 +3325,9 @@ function renderBossList(categoriesData) {
             const defaultMode = availableModes.find(m => m.key === 'pacansky') ? 'pacansky' : (availableModes.length > 0 ? availableModes[0].key : null);
             const currentMode = selectedMode || defaultMode;
             
+            // Вычисляем HP с учетом множителя режима
+            const currentHp = currentMode ? calculateBossHp(baseHp, currentMode) : baseHp;
+            
             // Формируем селектор режимов (как в прокачке бицухи)
             let modeSelectorHtml = '';
             if (availableModes.length > 0) {
@@ -3337,6 +3351,7 @@ function renderBossList(categoriesData) {
                      data-boss-id="${bossId}" 
                      data-boss-name="${bossName.replace(/'/g, "\\'")}"
                      data-selected-mode="${currentMode || ''}"
+                     data-base-hp="${baseHp}"
                      style="${cardStyle} border-radius: 12px; padding: 12px; margin-right: 12px; min-width: 180px; cursor: pointer; transition: transform 0.2s;"
                      onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}')">
                     <div class="boss-image" style="width: 100%; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden;">
@@ -3350,7 +3365,7 @@ function renderBossList(categoriesData) {
                     </div>
                     <div class="boss-info-card" style="text-align: center; color: #ffffff;">
                         <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bossName}</div>
-                        <div class="boss-hp" style="font-size: 12px; color: #e0e0e0; margin-bottom: 4px;">HP: ${baseHp.toLocaleString()}</div>
+                        <div class="boss-hp" data-base-hp="${baseHp}" style="font-size: 12px; color: #e0e0e0; margin-bottom: 4px;">HP: ${currentHp.toLocaleString()}</div>
                         <div class="boss-keys" style="font-size: 12px; color: #ffd700; margin-bottom: 6px;">
                             🔑 ${keysInfo.hasRequirements ? `${keysInfo.required}/${keysInfo.available}` : keysCount}
                         </div>
@@ -3386,6 +3401,68 @@ function renderBossList(categoriesData) {
     
     // Инициализируем карусели
     initializeCarousels();
+    
+    // Защита от закрытия страницы при скролле вверх на вкладке "Атака боссов"
+    preventBossAttackTabClose();
+}
+
+// Защита от закрытия страницы при скролле вверх на вкладке "Атака боссов"
+let bossAttackTabClosePrevented = false;
+function preventBossAttackTabClose() {
+    // Добавляем обработчики только один раз
+    if (bossAttackTabClosePrevented) return;
+    bossAttackTabClosePrevented = true;
+    
+    const bossAttackTab = document.getElementById('tab-boss-attack');
+    if (!bossAttackTab) return;
+    
+    let touchStartY = 0;
+    let touchStartX = 0;
+    let isVerticalScroll = false;
+    
+    // Обработчик на уровне документа для предотвращения закрытия страницы
+    const handleTouchStart = (e) => {
+        // Проверяем, что событие произошло внутри вкладки "Атака боссов"
+        if (!bossAttackTab.contains(e.target) && !bossAttackTab.contains(e.target.closest('.boss-carousel'))) {
+            return;
+        }
+        
+        touchStartY = e.touches[0].pageY;
+        touchStartX = e.touches[0].pageX;
+        isVerticalScroll = false;
+    };
+    
+    const handleTouchMove = (e) => {
+        // Проверяем, что событие произошло внутри вкладки "Атака боссов"
+        if (!bossAttackTab.contains(e.target) && !bossAttackTab.contains(e.target.closest('.boss-carousel'))) {
+            return;
+        }
+        
+        const touch = e.touches[0];
+        const deltaY = touch.pageY - touchStartY;
+        const deltaX = Math.abs(touch.pageX - touchStartX);
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        
+        // Определяем, что это вертикальный скролл
+        if (Math.abs(deltaY) > deltaX && Math.abs(deltaY) > 5) {
+            isVerticalScroll = true;
+        }
+        
+        // Если пользователь скроллит вверх и находится в начале страницы,
+        // и это вертикальный скролл (не горизонтальный свайп в карусели),
+        // предотвращаем закрытие страницы Telegram
+        if (isVerticalScroll && deltaY > 0 && scrollTop <= 10) {
+            // Проверяем, что это не горизонтальный свайп в карусели
+            const isInCarousel = e.target.closest('.boss-carousel');
+            if (!isInCarousel || Math.abs(deltaX) < Math.abs(deltaY)) {
+                e.stopPropagation();
+            }
+        }
+    };
+    
+    // Добавляем обработчики на уровне документа для перехвата событий
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
 }
 
 // Инициализация каруселей (свайп)
@@ -3424,18 +3501,44 @@ function initializeCarousels() {
         
         // Touch events для мобильных
         let touchStartX = 0;
+        let touchStartY = 0;
         let touchScrollLeft = 0;
+        let isHorizontalSwipe = null; // null = не определено, true = горизонтальный, false = вертикальный
         
         carousel.addEventListener('touchstart', (e) => {
-            touchStartX = e.touches[0].pageX - carousel.offsetLeft;
+            touchStartX = e.touches[0].pageX;
+            touchStartY = e.touches[0].pageY;
             touchScrollLeft = carousel.scrollLeft;
-        });
+            isHorizontalSwipe = null;
+        }, { passive: true });
         
         carousel.addEventListener('touchmove', (e) => {
-            const x = e.touches[0].pageX - carousel.offsetLeft;
-            const walk = (x - touchStartX) * 2;
-            carousel.scrollLeft = touchScrollLeft - walk;
-        });
+            const touch = e.touches[0];
+            const currentX = touch.pageX;
+            const currentY = touch.pageY;
+            
+            // Определяем направление движения
+            const deltaX = Math.abs(currentX - touchStartX);
+            const deltaY = Math.abs(currentY - touchStartY);
+            
+            // Определяем направление при первом движении (если еще не определили)
+            if (isHorizontalSwipe === null && (deltaX > 3 || deltaY > 3)) {
+                isHorizontalSwipe = deltaX > deltaY;
+            }
+            
+            // Если это горизонтальный свайп, обрабатываем его
+            if (isHorizontalSwipe === true || (isHorizontalSwipe === null && deltaX > deltaY)) {
+                e.preventDefault();
+                e.stopPropagation();
+                const walk = (currentX - touchStartX);
+                carousel.scrollLeft = touchScrollLeft - walk;
+            }
+            // Если это вертикальный скролл, не мешаем ему (позволяем скроллить страницу)
+        }, { passive: false });
+        
+        carousel.addEventListener('touchend', () => {
+            isHorizontalSwipe = null;
+        }, { passive: true });
     });
 }
 
@@ -3451,6 +3554,14 @@ window.updateBossMode = function(bossId, mode) {
     const card = document.querySelector(`.boss-card[data-boss-id="${bossId}"]`);
     if (card) {
         card.dataset.selectedMode = mode;
+        
+        // Обновляем HP с учетом множителя режима
+        const baseHp = parseInt(card.dataset.baseHp) || bossData.baseHp;
+        const newHp = calculateBossHp(baseHp, mode);
+        const hpElement = card.querySelector('.boss-hp');
+        if (hpElement) {
+            hpElement.textContent = `HP: ${newHp.toLocaleString()}`;
+        }
     }
     
     // Если босс уже выбран, обновляем его режим
@@ -3550,6 +3661,11 @@ function updateOrderCarousel() {
         const bossData = window.allBosses.find(b => b.id === boss.id);
         const modeName = boss.mode ? (BATTLE_MODE_INFO[boss.mode]?.name || boss.mode) : 'Не выбран';
         const modeMultiplier = boss.mode ? (BATTLE_MODE_INFO[boss.mode]?.multiplier || '') : '';
+        
+        // Вычисляем HP с учетом множителя режима
+        const baseHp = bossData ? bossData.baseHp : 0;
+        const currentHp = boss.mode ? calculateBossHp(baseHp, boss.mode) : baseHp;
+        
         html += `
             <div class="boss-card-order" 
                  data-boss-id="${boss.id}"
@@ -3566,6 +3682,7 @@ function updateOrderCarousel() {
                 </div>
                 <div class="boss-info-card" style="text-align: center; color: #ffffff;">
                     <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${boss.name}</div>
+                    <div style="font-size: 11px; color: #e0e0e0; margin-bottom: 4px;">HP: ${currentHp.toLocaleString()}</div>
                     <div style="font-size: 11px; color: #ffd700; margin-bottom: 8px; font-weight: 600;">${modeName} ${modeMultiplier}</div>
                 </div>
                 <div style="display: flex; gap: 5px; margin-top: 8px; justify-content: center;">
