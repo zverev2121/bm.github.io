@@ -3437,159 +3437,8 @@ function renderBossList(categoriesData) {
     
     // Инициализируем карусели
     initializeCarousels();
-    
-    // Защита от закрытия страницы при скролле вверх на вкладке "Атака боссов"
-    preventBossAttackTabClose();
 }
 
-// Защита от закрытия страницы при скролле вверх на вкладке "Атака боссов"
-let bossAttackTabClosePrevented = false;
-function preventBossAttackTabClose() {
-    // Добавляем обработчики только один раз
-    if (bossAttackTabClosePrevented) return;
-    bossAttackTabClosePrevented = true;
-    
-    const bossAttackTab = document.getElementById('tab-boss-attack');
-    if (!bossAttackTab) return;
-    
-    let touchStartY = 0;
-    let touchStartX = 0;
-    let touchStartedInBossTab = false;
-    let touchStartTime = 0;
-    let lastTouchY = 0;
-    let lastTouchX = 0;
-    
-    // Функция для проверки, активна ли вкладка "Атака боссов"
-    function isBossAttackTabActive() {
-        const tab = document.getElementById('tab-boss-attack');
-        if (!tab) return false;
-        const style = window.getComputedStyle(tab);
-        return style.display !== 'none';
-    }
-    
-    // Функция для проверки, находится ли элемент внутри вкладки "Атака боссов"
-    function isElementInBossTab(element) {
-        if (!element) return false;
-        return bossAttackTab.contains(element);
-    }
-    
-    // Обработчик на уровне документа для предотвращения закрытия страницы
-    // Используем capture phase для более раннего перехвата событий
-    const handleTouchStart = (e) => {
-        // Проверяем, активна ли вкладка "Атака боссов"
-        if (!isBossAttackTabActive()) {
-            touchStartedInBossTab = false;
-            return;
-        }
-        
-        const target = e.target;
-        
-        // Если это карусель, не мешаем нативному скроллу
-        const isInCarousel = target.closest('.boss-carousel');
-        if (isInCarousel) {
-            touchStartedInBossTab = false;
-            return; // Позволяем нативному скроллу карусели работать
-        }
-        
-        // Проверяем, что событие произошло внутри вкладки "Атака боссов"
-        if (!isElementInBossTab(target)) {
-            touchStartedInBossTab = false;
-            return;
-        }
-        
-        touchStartedInBossTab = true;
-        touchStartY = e.touches[0].pageY;
-        touchStartX = e.touches[0].pageX;
-        lastTouchY = touchStartY;
-        lastTouchX = touchStartX;
-        touchStartTime = Date.now();
-    };
-    
-    const handleTouchMove = (e) => {
-        // Если вкладка не активна, не обрабатываем
-        if (!isBossAttackTabActive()) {
-            touchStartedInBossTab = false;
-            return;
-        }
-        
-        // Если это карусель, не мешаем нативному скроллу
-        const target = e.target;
-        const isInCarousel = target.closest('.boss-carousel');
-        if (isInCarousel) {
-            return; // Позволяем нативному скроллу карусели работать
-        }
-        
-        // Дополнительная проверка: если событие происходит в области вкладки,
-        // но тач не начался во вкладке, все равно проверяем (для быстрого скролла)
-        if (!touchStartedInBossTab) {
-            // Проверяем, находится ли текущая позиция тача в области вкладки
-            if (e.touches && e.touches[0]) {
-                const touch = e.touches[0];
-                const elementAtPoint = document.elementFromPoint(touch.clientX, touch.clientY);
-                if (elementAtPoint && isElementInBossTab(elementAtPoint)) {
-                    // Если тач в области вкладки, начинаем отслеживать
-                    touchStartedInBossTab = true;
-                    touchStartY = touch.pageY;
-                    touchStartX = touch.pageX;
-                    lastTouchY = touchStartY;
-                    lastTouchX = touchStartX;
-                } else {
-                    return;
-                }
-            } else {
-                return;
-            }
-        }
-        
-        if (!e.touches || !e.touches[0]) {
-            return;
-        }
-        
-        const touch = e.touches[0];
-        const currentY = touch.pageY;
-        const currentX = touch.pageX;
-        
-        // Используем как начальную позицию, так и последнюю позицию для более точного определения
-        const deltaYFromStart = currentY - touchStartY;
-        const deltaYFromLast = lastTouchY !== 0 ? currentY - lastTouchY : 0;
-        const deltaX = Math.abs(currentX - touchStartX);
-        const absDeltaY = Math.abs(deltaYFromStart);
-        
-        // Обновляем последнюю позицию
-        lastTouchY = currentY;
-        lastTouchX = currentX;
-        
-        // Быстро определяем вертикальный скролл (меньший порог для быстрого определения)
-        // При быстром скролле deltaY может быть большим, поэтому проверяем даже при малых значениях
-        // Также проверяем направление по последнему движению для более быстрого определения
-        const isVertical = absDeltaY > deltaX || (absDeltaY > 2 && deltaX < 10);
-        // Проверяем направление: используем последнее движение, если оно есть, иначе начальное
-        const isScrollingUp = deltaYFromStart > 0 || (deltaYFromLast > 0 && lastTouchY !== 0);
-        
-        // Если пользователь скроллит вверх и это вертикальный скролл,
-        // предотвращаем закрытие страницы Telegram
-        // Блокируем даже при малом движении, чтобы предотвратить закрытие при быстром скролле
-        if (isVertical && isScrollingUp) {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            return false;
-        }
-    };
-    
-    const handleTouchEnd = (e) => {
-        touchStartedInBossTab = false;
-        lastTouchY = 0;
-        lastTouchX = 0;
-    };
-    
-    // Добавляем обработчики на уровне документа с capture phase для более раннего перехвата
-    // Используем capture: true для перехвата событий до того, как они достигнут целевого элемента
-    document.addEventListener('touchstart', handleTouchStart, { passive: true, capture: true });
-    document.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
-    document.addEventListener('touchend', handleTouchEnd, { passive: true, capture: true });
-    document.addEventListener('touchcancel', handleTouchEnd, { passive: true, capture: true });
-}
 
 // Инициализация каруселей (нативный скролл)
 function initializeCarousels() {
@@ -3673,13 +3522,23 @@ window.toggleBossSelection = function(bossId, bossName, mode = null) {
         return;
     }
     
-    // Каждый клик добавляет один экземпляр босса в очередь
-    selectedBosses.push({
-        id: bossId,
-        name: bossName,
-        mode: selectedMode,
-        quantity: 1
-    });
+    // Проверяем, есть ли уже такой же босс с таким же режимом в конце списка
+    const lastBoss = selectedBosses.length > 0 ? selectedBosses[selectedBosses.length - 1] : null;
+    if (lastBoss && lastBoss.id === bossId && lastBoss.mode === selectedMode) {
+        // Если последний босс такой же - увеличиваем количество оружий
+        lastBoss.weaponsCount = (lastBoss.weaponsCount || 1) + 1;
+        console.log(`🔫 Увеличено количество оружий для ${bossName}: ${lastBoss.weaponsCount}`);
+    } else {
+        // Каждый клик добавляет один экземпляр босса в очередь
+        selectedBosses.push({
+            id: bossId,
+            name: bossName,
+            mode: selectedMode,
+            quantity: 1,
+            weaponsCount: 1, // Количество оружий для этого босса (по умолчанию 1)
+            weaponsUsed: 0   // Количество использованных оружий
+        });
+    }
     
     updateOrderCarousel();
 }
@@ -3731,7 +3590,8 @@ function updateOrderCarousel() {
                 <div class="boss-info-card" style="text-align: center; color: #ffffff;">
                     <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${boss.name}</div>
                     <div style="font-size: 11px; color: #e0e0e0; margin-bottom: 4px;">HP: ${currentHp.toLocaleString()}</div>
-                    <div style="font-size: 11px; color: #ffd700; margin-bottom: 8px; font-weight: 600;">${modeName} ${modeMultiplier}</div>
+                    <div style="font-size: 11px; color: #ffd700; margin-bottom: 4px; font-weight: 600;">${modeName} ${modeMultiplier}</div>
+                    <div style="font-size: 10px; color: #ff6b6b; margin-bottom: 8px; font-weight: 600;">🔫 Оружий: ${boss.weaponsCount || 1}</div>
                 </div>
                 <div style="display: flex; gap: 5px; margin-top: 8px; justify-content: center;">
                     <button onclick="moveBossInOrder(${index}, -1); event.stopPropagation();" 
@@ -3811,7 +3671,10 @@ async function attackNextBoss() {
     const boss = selectedBosses[currentBossIndex];
     const mode = boss.mode;
     const modeName = BATTLE_MODE_INFO[mode]?.name || mode;
-    updateAttackStatus(`Атака на ${boss.name} (${modeName}) (${currentBossIndex + 1}/${selectedBosses.length})...`);
+    const weaponsCount = boss.weaponsCount || 1;
+    const weaponsUsed = boss.weaponsUsed || 0;
+    const currentWeapon = weaponsUsed + 1;
+    updateAttackStatus(`Атака на ${boss.name} (${modeName}) - Оружие ${currentWeapon}/${weaponsCount} (${currentBossIndex + 1}/${selectedBosses.length})...`);
     
     try {
         let token = await getAccessToken();
@@ -3859,13 +3722,15 @@ async function attackNextBoss() {
         
         // Обработка 400 с "Session already active"
         if (!response.ok && response.status === 400 && data.message === "Session already active") {
-            // Бой еще продолжается, ждем 5 секунд и пробуем напасть снова на того же босса
+            // Бой еще продолжается, проверяем статус через bootstrap
             // НЕ переходим к следующему боссу, остаемся на текущем индексе
-            updateAttackStatus(`⚔️ Бой с ${boss.name} еще продолжается, ждем 5 секунд и попробуем снова...`);
+            const weaponsUsed = boss.weaponsUsed || 0;
+            const weaponsCount = boss.weaponsCount || 1;
+            updateAttackStatus(`⚔️ Бой с ${boss.name} уже активен. Проверка статуса через bootstrap... (Оружие ${weaponsUsed + 1}/${weaponsCount})`);
             
             bossAttackInterval = setTimeout(() => {
-                // Повторяем атаку на того же босса (не увеличиваем currentBossIndex)
-                attackNextBoss();
+                // Проверяем статус через bootstrap вместо повторной атаки
+                checkBossBattleStatus(boss.id, boss.mode, null);
             }, 5000);
             return;
         }
@@ -3915,57 +3780,26 @@ async function attackNextBoss() {
         }
         
         if (data.success) {
+            // После успешного start-attack всегда проверяем bootstrap для отслеживания статуса
+            // Не проверяем isOver здесь, так как статус будем проверять через bootstrap
             if (data.isOver) {
-                // Бой завершен - проверяем, есть ли награда для сбора
-                console.log('🔍 Проверка награды после завершения боя:', {
-                    'data.hasReward': data.hasReward,
-                    'data.session?.hasReward': data.session?.hasReward,
-                    'data': data
-                });
-                const hasReward = data.hasReward === true || (data.session && data.session.hasReward === true);
-                console.log('💰 hasReward:', hasReward);
+                // Если бой уже завершен сразу после start-attack, проверяем награду через bootstrap
+                const weaponsUsed = boss.weaponsUsed || 0;
+                const weaponsCount = boss.weaponsCount || 1;
+                updateAttackStatus(`⚔️ Бой с ${boss.name} завершен. Проверка награды через bootstrap... (Оружие ${weaponsUsed + 1}/${weaponsCount})`);
                 
-                if (hasReward) {
-                    updateAttackStatus(`✅ ${boss.name} побежден! Сбор награды...`);
-                    try {
-                        const rewardData = await collectBossRewards();
-                        const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
-                        const rewardMessageText = formatRewardMessage(rewardData, 'text');
-                        updateAttackStatus(rewardMessageHtml);
-                        
-                        // Показываем модальное окно с наградой
-                        showCustomModal(rewardMessageText);
-                    } catch (error) {
-                        console.error('Ошибка сбора награды:', error);
-                        updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
-                    }
-                } else {
-                    updateAttackStatus(`✅ ${boss.name} побежден! (награда уже собрана или отсутствует)`);
-                }
-                
-                // Удаляем один экземпляр босса из списка после завершения боя
-                // Только после успешного завершения боя переходим к следующему боссу
-                if (currentBossIndex < selectedBosses.length) {
-                    selectedBosses.splice(currentBossIndex, 1);
-                    updateOrderCarousel();
-                }
-                
-                // Если список не пуст, продолжаем атаку, иначе останавливаемся
-                if (currentBossIndex >= selectedBosses.length) {
-                    currentBossIndex = 0;
-                }
-                
-                // Переходим к следующему боссу через небольшую задержку
-                // Только после успешного завершения боя
-                setTimeout(() => {
-                    attackNextBoss();
+                // Проверяем статус через bootstrap сразу
+                bossAttackInterval = setTimeout(() => {
+                    checkBossBattleStatus(boss.id, boss.mode, data.sessionId);
                 }, 1000);
             } else if (data.sessionId || data.session) {
-                // Успешно напали, бой продолжается - проверяем статус каждые 5 секунд
+                // Успешно напали, бой продолжается - проверяем статус через bootstrap каждые 5 секунд
                 // НЕ переходим к следующему боссу, остаемся на текущем
-                updateAttackStatus(`⚔️ Бой с ${boss.name} продолжается...`);
+                const weaponsUsed = boss.weaponsUsed || 0;
+                const weaponsCount = boss.weaponsCount || 1;
+                updateAttackStatus(`⚔️ Бой с ${boss.name} начат. Проверка статуса через bootstrap... (Оружие ${weaponsUsed + 1}/${weaponsCount})`);
                 
-                // Проверяем статус через 5 секунд
+                // Проверяем статус через bootstrap через 5 секунд
                 bossAttackInterval = setTimeout(() => {
                     checkBossBattleStatus(boss.id, boss.mode, data.sessionId);
                 }, 5000);
@@ -4005,7 +3839,7 @@ async function attackNextBoss() {
     }
 }
 
-// Проверка статуса боя
+// Проверка статуса боя через bootstrap
 async function checkBossBattleStatus(bossId, mode, sessionId) {
     if (!isAttacking) return;
     
@@ -4027,15 +3861,10 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
         }
         
         const apiUrl = API_SERVER_URL || GAME_API_URL;
-        // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
-        let response = await fetch(`${apiUrl}/boss/start-attack`, {
-            method: 'POST',
-            headers: await getApiHeaders(),
-            body: JSON.stringify({
-                bossId: bossId,
-                mode: mode,
-                comboMode: null
-            })
+        // ВАЖНО: Используем bootstrap для проверки статуса, а не start-attack
+        let response = await fetch(`${apiUrl}/boss/bootstrap`, {
+            method: 'GET',
+            headers: await getApiHeaders()
         });
         
         // Обработка 401/403 - обновляем токен через initData из БД
@@ -4046,152 +3875,125 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
                 if (newToken) {
                     // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
                     // Используем getApiHeaders() для получения актуального токена
-                    response = await fetch(`${apiUrl}/boss/start-attack`, {
-                        method: 'POST',
-                        headers: await getApiHeaders(),
-                        body: JSON.stringify({
-                            bossId: bossId,
-                            mode: mode,
-                            comboMode: null
-                        })
+                    response = await fetch(`${apiUrl}/boss/bootstrap`, {
+                        method: 'GET',
+                        headers: await getApiHeaders()
                     });
                 }
             }
         }
         
-        const data = await response.json();
-        
-        // Обработка 400 с "Session already active"
-        if (!response.ok && response.status === 400 && data.message === "Session already active") {
-            // Бой еще продолжается, ждем 5 секунд и проверяем снова
-            const boss = selectedBosses[currentBossIndex];
-            updateAttackStatus(`⚔️ Бой с ${boss.name} еще продолжается, ждем 5 секунд...`);
-            
-            bossAttackInterval = setTimeout(() => {
-                checkBossBattleStatus(bossId, boss.mode, data.sessionId || data.session?.sessionId);
-            }, 5000);
-            return;
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        // Обработка ошибок лимита или нехватки ключей
-        if (!response.ok || !data.success) {
-            const errorMessage = data.message || data.error || 'Неизвестная ошибка';
-            const lowerMessage = errorMessage.toLowerCase();
+        const data = await response.json();
+        
+        // Обновляем ключи из bootstrap
+        if (data.success) {
+            await updateBossKeys();
+        }
+        
+        // Проверяем hasReward в bootstrap
+        const hasReward = data.success && data.hasReward === true;
+        const boss = selectedBosses[currentBossIndex];
+        
+        if (hasReward) {
+            // Награда готова - собираем её
+            console.log('💰 Награда готова, собираем...');
+            updateAttackStatus(`✅ ${boss.name} побежден! Сбор награды...`);
             
-            // Проверяем, является ли это ошибкой лимита или нехватки ключей
-            if (lowerMessage.includes('limit') || 
-                lowerMessage.includes('лимит') || 
-                lowerMessage.includes('key') || 
-                lowerMessage.includes('ключ') ||
-                lowerMessage.includes('not enough') ||
-                lowerMessage.includes('недостаточно')) {
-                // Удаляем все экземпляры этого босса из списка и переходим к следующему
-                const boss = selectedBosses[currentBossIndex];
-                if (!boss) {
-                    // Если босс уже удален, просто переходим к следующему
+            try {
+                const rewardData = await collectBossRewards();
+                const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
+                const rewardMessageText = formatRewardMessage(rewardData, 'text');
+                updateAttackStatus(rewardMessageHtml);
+                
+                // Показываем модальное окно с наградой
+                showCustomModal(rewardMessageText);
+                
+                // Увеличиваем счетчик использованных оружий
+                if (boss) {
+                    boss.weaponsUsed = (boss.weaponsUsed || 0) + 1;
+                    const weaponsCount = boss.weaponsCount || 1;
+                    const weaponsUsed = boss.weaponsUsed || 0;
+                    
+                    console.log(`🔫 Оружие ${weaponsUsed}/${weaponsCount} использовано для ${boss.name}`);
+                    
+                    // Если еще есть оружия, начинаем следующую атаку
+                    if (weaponsUsed < weaponsCount) {
+                        updateAttackStatus(`🔫 Оружие ${weaponsUsed}/${weaponsCount} завершено. Начинаем атаку оружием ${weaponsUsed + 1}/${weaponsCount}...`);
+                        // Небольшая задержка перед следующей атакой
+                        setTimeout(() => {
+                            attackNextBoss();
+                        }, 1000);
+                    } else {
+                        // Все оружия использованы - удаляем босса и переходим к следующему
+                        updateAttackStatus(`✅ Все оружия (${weaponsCount}) использованы для ${boss.name}. Переход к следующему боссу...`);
+                        if (currentBossIndex < selectedBosses.length) {
+                            selectedBosses.splice(currentBossIndex, 1);
+                            updateOrderCarousel();
+                        }
+                        if (currentBossIndex >= selectedBosses.length) {
+                            currentBossIndex = 0;
+                        }
+                        setTimeout(() => {
+                            attackNextBoss();
+                        }, 1000);
+                    }
+                } else {
+                    // Босс не найден - переходим к следующему
+                    if (currentBossIndex < selectedBosses.length) {
+                        selectedBosses.splice(currentBossIndex, 1);
+                        updateOrderCarousel();
+                    }
+                    if (currentBossIndex >= selectedBosses.length) {
+                        currentBossIndex = 0;
+                    }
+                    setTimeout(() => {
+                        attackNextBoss();
+                    }, 1000);
+                }
+            } catch (error) {
+                console.error('Ошибка сбора награды:', error);
+                updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
+                // При ошибке сбора награды все равно переходим к следующему оружию или боссу
+                if (boss) {
+                    boss.weaponsUsed = (boss.weaponsUsed || 0) + 1;
+                    const weaponsCount = boss.weaponsCount || 1;
+                    const weaponsUsed = boss.weaponsUsed || 0;
+                    
+                    if (weaponsUsed < weaponsCount) {
+                        setTimeout(() => {
+                            attackNextBoss();
+                        }, 2000);
+                    } else {
+                        if (currentBossIndex < selectedBosses.length) {
+                            selectedBosses.splice(currentBossIndex, 1);
+                            updateOrderCarousel();
+                        }
+                        if (currentBossIndex >= selectedBosses.length) {
+                            currentBossIndex = 0;
+                        }
+                        setTimeout(() => {
+                            attackNextBoss();
+                        }, 2000);
+                    }
+                } else {
                     setTimeout(() => {
                         attackNextBoss();
                     }, 2000);
-                    return;
                 }
-                
-                updateAttackStatus(`⚠️ ${boss.name}: ${errorMessage}. Переход к следующему боссу...`);
-                
-                // Удаляем все экземпляры текущего босса
-                const currentBossId = boss.id;
-                selectedBosses = selectedBosses.filter(b => b.id !== currentBossId);
-                updateOrderCarousel();
-                
-                // Если список не пуст, продолжаем атаку, иначе останавливаемся
-                // Индекс остается на месте, так как следующий босс займет это место
-                if (currentBossIndex >= selectedBosses.length) {
-                    currentBossIndex = 0;
-                }
-                
-                setTimeout(() => {
-                    attackNextBoss();
-                }, 2000);
-                return;
             }
-            
-            // Для других ошибок выбрасываем исключение
-            throw new Error(errorMessage);
-        }
-        
-        // Обновляем информацию о боссе и ключи после start-attack
-        if (data.success && data.session) {
-            await Promise.all([
-                updateBossKeys(),
-                loadBossInfo()
-            ]);
-        }
-        
-        if (data.success && data.isOver) {
-            // Бой завершен - проверяем, есть ли награда для сбора
-            const boss = selectedBosses[currentBossIndex];
-            console.log('🔍 Проверка награды после завершения боя (checkBossBattleStatus):', {
-                'data.hasReward': data.hasReward,
-                'data.session?.hasReward': data.session?.hasReward,
-                'data': data
-            });
-            const hasReward = data.hasReward === true || (data.session && data.session.hasReward === true);
-            console.log('💰 hasReward:', hasReward);
-            
-            if (hasReward) {
-                updateAttackStatus(`✅ ${boss.name} побежден! Сбор награды...`);
-                try {
-                    const rewardData = await collectBossRewards();
-                    const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
-                    const rewardMessageText = formatRewardMessage(rewardData, 'text');
-                    updateAttackStatus(rewardMessageHtml);
-                    
-                    // Показываем модальное окно с наградой
-                    showCustomModal(rewardMessageText);
-                } catch (error) {
-                    console.error('Ошибка сбора награды:', error);
-                    updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
-                }
-            } else {
-                updateAttackStatus(`✅ ${boss.name} побежден! (награда уже собрана или отсутствует)`);
-            }
-            
-            // Удаляем один экземпляр босса из списка после завершения боя
-            if (currentBossIndex < selectedBosses.length) {
-                selectedBosses.splice(currentBossIndex, 1);
-                updateOrderCarousel();
-            }
-            
-            // Если список не пуст, продолжаем атаку, иначе останавливаемся
-            if (currentBossIndex >= selectedBosses.length) {
-                currentBossIndex = 0;
-            }
-            
-            // Переходим к следующему боссу
-            setTimeout(() => {
-                attackNextBoss();
-            }, 1000);
-        } else if (data.success && (data.sessionId || data.session)) {
-            // Бой продолжается, проверяем снова через 5 секунд
-            const boss = selectedBosses[currentBossIndex];
-            updateAttackStatus(`⚔️ Бой с ${boss.name} продолжается...`);
+        } else {
+            // Награда еще не готова - проверяем снова через 5 секунд
+            const weaponsUsed = boss ? (boss.weaponsUsed || 0) : 0;
+            const weaponsCount = boss ? (boss.weaponsCount || 1) : 1;
+            updateAttackStatus(`⚔️ Бой с ${boss.name} продолжается... (Оружие ${weaponsUsed + 1}/${weaponsCount})`);
             
             bossAttackInterval = setTimeout(() => {
-                checkBossBattleStatus(bossId, boss.mode, data.sessionId);
+                checkBossBattleStatus(bossId, mode, sessionId);
             }, 5000);
-        } else {
-            // Ошибка или неожиданный ответ - удаляем текущего босса и переходим к следующему
-            const boss = selectedBosses[currentBossIndex];
-            updateAttackStatus(`⚠️ Неожиданный ответ для ${boss.name}`);
-            if (currentBossIndex < selectedBosses.length) {
-                selectedBosses.splice(currentBossIndex, 1);
-                updateOrderCarousel();
-            }
-            if (currentBossIndex >= selectedBosses.length) {
-                currentBossIndex = 0;
-            }
-            setTimeout(() => {
-                attackNextBoss();
-            }, 2000);
         }
         
     } catch (error) {
