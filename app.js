@@ -4092,6 +4092,7 @@ window.updateBossMode = function(bossId, mode) {
     }
     
     // Обновляем data-selected-mode в карточке
+    // Это влияет только на будущие добавления босса, не на уже добавленные в порядке атаки
     const card = document.querySelector(`.boss-card[data-boss-id="${bossId}"]`);
     if (card) {
         card.dataset.selectedMode = mode;
@@ -4105,35 +4106,8 @@ window.updateBossMode = function(bossId, mode) {
         }
     }
     
-    // Если босс уже выбран, обновляем его режим
-    // Но нужно проверить, не создает ли это дубликат с другой записью
-    const bossIndex = selectedBosses.findIndex(b => b.id === bossId);
-    if (bossIndex >= 0) {
-        const boss = selectedBosses[bossIndex];
-        const oldMode = boss.mode;
-        const oldComboMode = boss.comboMode;
-        
-        // Проверяем, есть ли другая запись с такой же комбинацией (id, новый mode, comboMode)
-        const duplicateIndex = selectedBosses.findIndex((b, idx) => 
-            idx !== bossIndex && 
-            b.id === bossId && 
-            b.mode === mode && 
-            b.comboMode === oldComboMode
-        );
-        
-        if (duplicateIndex >= 0) {
-            // Объединяем с существующей записью
-            const duplicateBoss = selectedBosses[duplicateIndex];
-            duplicateBoss.weaponsCount = (duplicateBoss.weaponsCount || 1) + (boss.weaponsCount || 1);
-            // Удаляем текущую запись
-            selectedBosses.splice(bossIndex, 1);
-        } else {
-            // Просто обновляем режим
-            boss.mode = mode;
-        }
-        
-        updateOrderCarousel();
-    }
+    // НЕ обновляем уже добавленные боссы в порядке атаки
+    // Изменение режима в карточке влияет только на будущие добавления
 }
 
 // Обновление режима комбо для босса
@@ -4145,17 +4119,14 @@ window.updateBossComboMode = function(bossId, comboMode) {
     }
     
     // Обновляем data-selected-combo-mode в карточке
+    // Это влияет только на будущие добавления босса, не на уже добавленные в порядке атаки
     const card = document.querySelector(`.boss-card[data-boss-id="${bossId}"]`);
     if (card) {
         card.dataset.selectedComboMode = comboMode || '';
     }
     
-    // Если босс уже выбран, обновляем его режим комбо
-    const bossIndex = selectedBosses.findIndex(b => b.id === bossId);
-    if (bossIndex >= 0) {
-        selectedBosses[bossIndex].comboMode = comboMode || null;
-        updateOrderCarousel();
-    }
+    // НЕ обновляем уже добавленные боссы в порядке атаки
+    // Изменение режима комбо в карточке влияет только на будущие добавления
 }
 
 // Добавление босса в очередь атаки (каждый клик добавляет один экземпляр)
