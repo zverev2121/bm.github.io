@@ -70,6 +70,25 @@ window.switchTab = function switchTab(tabName) {
     const selectedTab = document.getElementById(`tab-${tabName}`);
     if (selectedTab) {
         selectedTab.style.display = 'block';
+        
+        // Если переключились на вкладку "Атака боссов", убеждаемся, что список боссов загружен
+        if (tabName === 'boss-attack') {
+            // Убеждаемся, что секция выбора боссов видна
+            const bossSelectSection = document.getElementById('boss-select-section');
+            if (bossSelectSection) {
+                bossSelectSection.style.display = 'block';
+            }
+            const bossListContainer = document.getElementById('boss-list-container');
+            if (bossListContainer) {
+                bossListContainer.style.display = 'block';
+            }
+            
+            // Если список боссов еще не загружен, загружаем его
+            if (!window.bossCategoriesData || Object.keys(window.bossCategoriesData).length === 0) {
+                console.log('📋 Переключились на вкладку атаки боссов, загружаем список...');
+                loadBossList();
+            }
+        }
     }
     
     // Добавляем активный класс к выбранной кнопке
@@ -1360,6 +1379,23 @@ async function loadBossInfo() {
                             </div>
                         `;
                         updateStatus(true);
+                        
+                        // Убеждаемся, что секция выбора боссов всегда видна, даже когда есть активный бой
+                        const bossSelectSection = document.getElementById('boss-select-section');
+                        if (bossSelectSection) {
+                            bossSelectSection.style.display = 'block';
+                        }
+                        const bossListContainer = document.getElementById('boss-list-container');
+                        if (bossListContainer) {
+                            bossListContainer.style.display = 'block';
+                        }
+                        
+                        // Если список боссов еще не загружен, загружаем его
+                        if (!window.bossCategoriesData || Object.keys(window.bossCategoriesData).length === 0) {
+                            console.log('📋 Список боссов не загружен, загружаем...');
+                            loadBossList();
+                        }
+                        
                         return;
                     }
                 }
@@ -1474,9 +1510,35 @@ async function loadBossInfo() {
                 </div>
             `;
             updateStatus(true);
+            
+            // Убеждаемся, что секция выбора боссов всегда видна, даже когда есть активный бой
+            const bossSelectSection = document.getElementById('boss-select-section');
+            if (bossSelectSection) {
+                bossSelectSection.style.display = 'block';
+            }
+            const bossListContainer = document.getElementById('boss-list-container');
+            if (bossListContainer) {
+                bossListContainer.style.display = 'block';
+            }
+            
+            // Если список боссов еще не загружен, загружаем его
+            if (!window.bossCategoriesData || Object.keys(window.bossCategoriesData).length === 0) {
+                console.log('📋 Список боссов не загружен, загружаем...');
+                loadBossList();
+            }
         } else {
             bossInfo.innerHTML = '<p>Информация о боссе недоступна</p>';
             updateStatus(false);
+            
+            // Убеждаемся, что секция выбора боссов видна даже когда нет активного боя
+            const bossSelectSection = document.getElementById('boss-select-section');
+            if (bossSelectSection) {
+                bossSelectSection.style.display = 'block';
+            }
+            const bossListContainer = document.getElementById('boss-list-container');
+            if (bossListContainer) {
+                bossListContainer.style.display = 'block';
+            }
         }
     } catch (error) {
         console.error('Ошибка загрузки информации о боссе:', error);
@@ -3721,6 +3783,8 @@ function getBossImageUrlFallback(bossId, bossData) {
 function renderBossList(categoriesData) {
     const container = document.getElementById('boss-list-container');
     
+    console.log('🎨 renderBossList вызван с данными:', categoriesData);
+    
     // Сохраняем данные боссов для использования
     window.allBosses = [];
     
@@ -3729,11 +3793,20 @@ function renderBossList(categoriesData) {
     
     // Обрабатываем каждую категорию и сохраняем данные
     categoriesData.forEach((categoryData, categoryIndex) => {
-        if (!categoryData.success || !categoryData.bosses) return;
+        console.log(`📦 Обработка категории ${categoryIndex}:`, categoryData);
+        console.log(`   success: ${categoryData.success}, bosses: ${categoryData.bosses ? categoryData.bosses.length : 'нет'}`);
+        
+        if (!categoryData.success || !categoryData.bosses) {
+            console.warn(`⚠️ Категория ${categoryIndex} пропущена: success=${categoryData.success}, bosses=${!!categoryData.bosses}`);
+            return;
+        }
         
         const categoryId = categoryData.bosses[0]?.boss?.categoryId || categoryIndex + 1;
+        console.log(`✅ Категория ${categoryIndex} сохранена с ID ${categoryId}, боссов: ${categoryData.bosses.length}`);
         window.bossCategoriesData[categoryId] = categoryData;
     });
+    
+    console.log('📊 Сохраненные категории:', Object.keys(window.bossCategoriesData));
     
     // Создаем сегментированный переключатель и одну карусель
     let html = `
@@ -3760,7 +3833,11 @@ function renderBossList(categoriesData) {
     const defaultCategoryId = 1;
     const defaultCategoryData = window.bossCategoriesData[defaultCategoryId];
     
+    console.log(`🎯 Рендеринг категории ${defaultCategoryId}:`, defaultCategoryData);
+    console.log(`   Есть данные: ${!!defaultCategoryData}, есть боссы: ${!!(defaultCategoryData && defaultCategoryData.bosses)}`);
+    
     if (defaultCategoryData && defaultCategoryData.bosses) {
+        console.log(`   Количество боссов: ${defaultCategoryData.bosses.length}`);
         defaultCategoryData.bosses.forEach((bossData) => {
             const boss = bossData.boss;
             const bossId = boss.id;
@@ -3889,6 +3966,13 @@ function renderBossList(categoriesData) {
                 </div>
             `;
         });
+    } else {
+        console.warn(`⚠️ Нет данных для категории ${defaultCategoryId} или нет боссов`);
+        html += `
+            <div style="padding: 20px; text-align: center; color: var(--tg-theme-hint-color, #999);">
+                Нет боссов в категории ${defaultCategoryId}
+            </div>
+        `;
     }
     
     html += `
