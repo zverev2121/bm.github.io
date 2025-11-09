@@ -5440,36 +5440,66 @@ function displayComboBossSelection() {
         return;
     }
     
+    // Используем такой же стиль карусели, как в обычной атаке
+    carousel.style.display = 'flex';
+    carousel.style.flexDirection = 'row';
+    carousel.style.flexWrap = 'nowrap';
+    carousel.style.gap = '12px';
+    carousel.style.padding = '10px';
+    carousel.style.overflowX = 'auto';
+    carousel.style.overflowY = 'hidden';
+    carousel.style.minHeight = '200px';
+    carousel.style.width = '100%';
+    
     let html = '';
     availableBosses.forEach(({boss, combos}) => {
-        combos.forEach((combo, comboIndex) => {
-            const modeName = combo.mode ? (BATTLE_MODE_INFO[combo.mode]?.name || combo.mode) : 'не указан';
-            const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : 'не указан';
-            const cardId = `combo-boss-${boss.id}-${comboIndex}`;
-            
-            html += `
-                <div class="boss-card-combo" 
-                     id="${cardId}"
-                     data-boss-id="${boss.id}"
-                     data-combo-index="${comboIndex}"
-                     style="border: 2px solid #3390ec; background: linear-gradient(135deg, #2d3d5a 0%, #1e2a3a 100%); border-radius: 12px; padding: 10px; min-width: 150px; cursor: pointer;"
-                     onclick="selectComboBoss(${boss.id}, ${comboIndex})">
-                    <div class="boss-image" style="width: 100px; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; overflow: hidden;">
-                        <img src="${getBossImageUrl(boss.id, boss)}" 
-                             alt="${boss.name}" 
-                             style="max-width: 100%; max-height: 100%; object-fit: contain;"
-                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                        <span style="font-size: 40px; display: none;">👹</span>
-                    </div>
-                    <div style="text-align: center; color: #ffffff;">
-                        <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">${boss.name}</div>
-                        <div style="font-size: 11px; color: #ffd700; margin-bottom: 4px;">Режим: ${modeName}</div>
-                        <div style="font-size: 11px; color: #4CAF50; margin-bottom: 4px;">Комбо: ${comboModeName}</div>
-                        <div style="font-size: 10px; color: #ff6b6b; margin-bottom: 4px;">Ударов: ${combo.weapons.length}</div>
-                    </div>
+        // Для каждого босса показываем карточку с выбором комбо
+        const bossData = window.allBosses.find(b => b.id === boss.id);
+        const baseHp = bossData ? bossData.baseHp : 0;
+        
+        // Формируем селектор комбо для этого босса
+        let comboSelectorHtml = '';
+        if (combos.length > 0) {
+            comboSelectorHtml = `
+                <div class="combo-selector" style="margin-top: 6px;">
+                    <select id="combo-select-${boss.id}" 
+                            class="combo-select form-control" 
+                            style="width: 100%; padding: 4px 6px; font-size: 11px; background: rgba(0,0,0,0.5); color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer;"
+                            onchange="selectComboBossFromSelector(${boss.id})"
+                            onclick="event.stopPropagation();">
+                        ${combos.map((combo, comboIndex) => {
+                            const modeName = combo.mode ? (BATTLE_MODE_INFO[combo.mode]?.name || combo.mode) : 'не указан';
+                            const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : 'не указан';
+                            return `<option value="${comboIndex}">${comboModeName || modeName} (${combo.weapons.length} ударов)</option>`;
+                        }).join('')}
+                    </select>
                 </div>
             `;
-        });
+        }
+        
+        html += `
+            <div class="boss-card" 
+                 data-boss-id="${boss.id}"
+                 data-boss-name="${boss.name.replace(/'/g, "\\'")}"
+                 style="border: 2px solid #3390ec; background: linear-gradient(135deg, #2d3d5a 0%, #1e2a3a 100%); border-radius: 12px; padding: 10px; margin-right: 12px; min-width: 140px; cursor: pointer; transition: transform 0.2s;"
+                 onclick="selectComboBossFromCard(${boss.id})">
+                <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden; flex-shrink: 0;">
+                    <img src="${getBossImageUrl(boss.id, bossData)}" 
+                         alt="${boss.name}" 
+                         data-fallback="${getBossImageUrlFallback(boss.id, bossData)}"
+                         style="max-width: 100%; max-height: 100%; object-fit: contain;"
+                         onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
+                         onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
+                    <span style="font-size: 40px; display: none;">👹</span>
+                </div>
+                <div class="boss-info-card" style="text-align: center; color: #ffffff;">
+                    <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${boss.name}</div>
+                    <div style="font-size: 12px; color: #e0e0e0; margin-bottom: 4px;">HP: ${baseHp.toLocaleString()}</div>
+                    ${comboSelectorHtml}
+                    <div style="font-size: 10px; color: #4CAF50; margin-top: 4px;">Комбо: ${combos.length}</div>
+                </div>
+            </div>
+        `;
     });
     
     carousel.innerHTML = html;
@@ -5477,15 +5507,33 @@ function displayComboBossSelection() {
     startBtn.style.display = 'none';
 }
 
-// Выбор босса и комбо
-window.selectComboBoss = function(bossId, comboIndex) {
+// Выбор босса и комбо из селектора
+window.selectComboBossFromSelector = function(bossId) {
+    const selector = document.getElementById(`combo-select-${bossId}`);
+    if (!selector) return;
+    
+    const comboIndex = parseInt(selector.value);
+    selectComboBoss(bossId, comboIndex);
+}
+
+// Выбор босса и комбо из карточки
+window.selectComboBossFromCard = function(bossId) {
+    const selector = document.getElementById(`combo-select-${bossId}`);
+    if (selector) {
+        const comboIndex = parseInt(selector.value);
+        selectComboBoss(bossId, comboIndex);
+    }
+}
+
+// Выбор босса и комбо (основная функция)
+function selectComboBoss(bossId, comboIndex) {
     // Убираем выделение со всех карточек
-    document.querySelectorAll('.boss-card-combo').forEach(card => {
+    document.querySelectorAll('#combo-boss-carousel .boss-card').forEach(card => {
         card.style.border = '2px solid #3390ec';
     });
     
     // Выделяем выбранную карточку
-    const selectedCard = document.querySelector(`[data-boss-id="${bossId}"][data-combo-index="${comboIndex}"]`);
+    const selectedCard = document.querySelector(`#combo-boss-carousel .boss-card[data-boss-id="${bossId}"]`);
     if (selectedCard) {
         selectedCard.style.border = '3px solid #4CAF50';
     }
