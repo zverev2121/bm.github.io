@@ -3804,7 +3804,7 @@ function renderBossList(categoriesData) {
                      data-base-hp="${baseHp}"
                      style="${cardStyle} border-radius: 12px; padding: 10px; margin-right: 12px; min-width: 140px; cursor: pointer; transition: transform 0.2s;"
                      onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}')">
-                    <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden; flex-shrink: 0;">
+                    <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px auto; overflow: hidden; flex-shrink: 0;">
                         <img src="${getBossImageUrl(bossId, boss)}" 
                              alt="${bossName}" 
                              data-fallback="${getBossImageUrlFallback(bossId, boss)}"
