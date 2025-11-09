@@ -5241,17 +5241,60 @@ let currentComboBossId = null;
 let currentComboMode = null;
 let currentComboComboMode = null;
 
+// Очистка RTF-разметки из текста
+function cleanRtfText(text) {
+    let cleaned = text;
+    
+    // Сначала обрабатываем Unicode escape-последовательности \uXXXX
+    // В RTF \u1084 означает Unicode символ с кодом 1084
+    cleaned = cleaned.replace(/\\u(\d+)/g, function(match, code) {
+        const charCode = parseInt(code, 10);
+        // Преобразуем Unicode код в символ
+        try {
+            return String.fromCharCode(charCode);
+        } catch (e) {
+            return '';
+        }
+    });
+    
+    // Удаляем RTF-команды (начинаются с \ и буквы)
+    // Но не трогаем уже обработанные \u последовательности
+    cleaned = cleaned.replace(/\\[a-z]+\d*\s*/gi, '');
+    
+    // Удаляем RTF-группы в фигурных скобках, которые содержат только команды
+    cleaned = cleaned.replace(/\{[^}]*\\[^}]*\}/g, '');
+    
+    // Удаляем оставшиеся фигурные скобки (RTF-группы)
+    cleaned = cleaned.replace(/[{}]/g, '');
+    
+    // Удаляем множественные пробелы и переносы строк
+    cleaned = cleaned.replace(/\s+/g, ' ');
+    
+    // Удаляем пробелы в начале и конце
+    cleaned = cleaned.trim();
+    
+    return cleaned;
+}
+
 // Обработка загрузки файла с комбо
 async function handleComboFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
     
     try {
-        const text = await file.text();
+        let text = await file.text();
+        
+        // Проверяем, является ли файл RTF (содержит RTF-разметку)
+        if (text.includes('\\u') || text.includes('\\uc0') || text.includes('\\expnd') || text.includes('\\kerning')) {
+            console.log('Обнаружена RTF-разметка, очищаем...');
+            text = cleanRtfText(text);
+            console.log('Очищенный текст:', text);
+        }
+        
         loadedCombos = parseComboFile(text);
         
         if (loadedCombos.length === 0) {
-            tg.showAlert('Не удалось распарсить комбо из файла. Проверьте формат.');
+            tg.showAlert('Не удалось распарсить комбо из файла. Проверьте формат.\n\nУбедитесь, что файл сохранен как обычный текстовый файл (.txt), а не RTF или другой формат.');
             return;
         }
         
