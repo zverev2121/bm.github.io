@@ -5413,15 +5413,57 @@ function displayComboBossSelection() {
     const selectContainer = document.getElementById('combo-boss-select');
     const startBtn = document.getElementById('start-combo-btn');
     
-    if (!carousel || !window.allBosses) return;
+    if (!carousel) return;
     
     // Находим уникальных боссов из загруженных комбо
     const uniqueBossNames = [...new Set(loadedCombos.map(c => c.bossName))];
     
+    // Собираем всех боссов из всех категорий
+    let allBossesFromCategories = [];
+    if (window.bossCategoriesData) {
+        // Проходим по всем категориям
+        for (const categoryId in window.bossCategoriesData) {
+            const categoryData = window.bossCategoriesData[categoryId];
+            if (categoryData && categoryData.bosses) {
+                categoryData.bosses.forEach((bossData) => {
+                    const boss = bossData.boss;
+                    if (boss) {
+                        // Получаем доступные режимы боя
+                        const availableModes = getAvailableBattleModes(boss);
+                        
+                        // Получаем доступные режимы комбо
+                        if (!bossData.combos) {
+                            bossData.combos = {};
+                        }
+                        const availableComboModes = getAvailableComboModes(bossData);
+                        
+                        // Добавляем босса в список
+                        allBossesFromCategories.push({
+                            id: boss.id,
+                            name: boss.title,
+                            categoryId: boss.categoryId || parseInt(categoryId),
+                            baseHp: boss.baseHp,
+                            battleModes: boss.battleModes || {},
+                            combos: bossData.combos || {},
+                            imageUrl: boss.imageUrl || boss.image || '',
+                            availableModes: availableModes,
+                            availableComboModes: availableComboModes
+                        });
+                    }
+                });
+            }
+        }
+    }
+    
+    // Если не нашли в категориях, используем window.allBosses
+    if (allBossesFromCategories.length === 0 && window.allBosses) {
+        allBossesFromCategories = window.allBosses;
+    }
+    
     // Находим соответствующих боссов в списке
     const availableBosses = [];
     for (const bossName of uniqueBossNames) {
-        const boss = window.allBosses.find(b => 
+        const boss = allBossesFromCategories.find(b => 
             b.name.toLowerCase().includes(bossName) || 
             bossName.includes(b.name.toLowerCase())
         );
@@ -5454,28 +5496,77 @@ function displayComboBossSelection() {
     let html = '';
     availableBosses.forEach(({boss, combos}) => {
         // Для каждого босса показываем карточку с выбором комбо
-        const bossData = window.allBosses.find(b => b.id === boss.id);
-        const baseHp = bossData ? bossData.baseHp : 0;
+        // Используем данные из boss, так как они уже содержат всю необходимую информацию
+        const baseHp = boss.baseHp || 0;
         
-        // Формируем селектор комбо для этого босса
-        let comboSelectorHtml = '';
-        if (combos.length > 0) {
-            comboSelectorHtml = `
-                <div class="combo-selector" style="margin-top: 6px;">
-                    <select id="combo-select-${boss.id}" 
-                            class="combo-select form-control" 
+        // Получаем доступные режимы атаки из БД
+        const availableModes = boss.availableModes || getAvailableBattleModes(boss) || [];
+        const defaultMode = availableModes.find(m => m.key === 'pacansky') ? 'pacansky' : (availableModes.length > 0 ? availableModes[0].key : null);
+        
+        // Получаем доступные режимы комбо из БД
+        const availableComboModes = boss.availableComboModes || getAvailableComboModes(boss) || [];
+        const defaultComboMode = availableComboModes.find(m => m.key === 'pacansky') ? 'pacansky' : (availableComboModes.length > 0 ? availableComboModes[0].key : null);
+        
+        // Формируем селектор режима атаки
+        let modeSelectorHtml = '';
+        if (availableModes.length > 0) {
+            modeSelectorHtml = `
+                <div class="boss-mode-selector" style="margin-top: 6px;">
+                    <select id="combo-boss-mode-${boss.id}" 
+                            class="boss-mode-select form-control" 
                             style="width: 100%; padding: 4px 6px; font-size: 11px; background: rgba(0,0,0,0.5); color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer;"
                             onchange="selectComboBossFromSelector(${boss.id})"
                             onclick="event.stopPropagation();">
-                        ${combos.map((combo, comboIndex) => {
-                            const modeName = combo.mode ? (BATTLE_MODE_INFO[combo.mode]?.name || combo.mode) : 'не указан';
-                            const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : 'не указан';
-                            return `<option value="${comboIndex}">${comboModeName || modeName} (${combo.weapons.length} ударов)</option>`;
-                        }).join('')}
+                        ${availableModes.map(mode => 
+                            `<option value="${mode.key}" ${mode.key === defaultMode ? 'selected' : ''}>${mode.name} ${mode.multiplier}</option>`
+                        ).join('')}
                     </select>
                 </div>
             `;
         }
+        
+        // Формируем селектор режима комбо
+        let comboModeSelectorHtml = '';
+        if (availableComboModes.length > 0) {
+            comboModeSelectorHtml = `
+                <div class="boss-combo-mode-selector" style="margin-top: 4px;">
+                    <select id="combo-boss-combo-mode-${boss.id}" 
+                            class="boss-combo-mode-select form-control" 
+                            style="width: 100%; padding: 4px 6px; font-size: 10px; background: rgba(0,0,0,0.5); color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer;"
+                            onchange="selectComboBossFromSelector(${boss.id})"
+                            onclick="event.stopPropagation();">
+                        ${availableComboModes.map(mode => 
+                            `<option value="${mode.key}" ${mode.key === defaultComboMode ? 'selected' : ''}>Комбо: ${mode.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+            `;
+        }
+        
+        // Формируем селектор загруженных комбо (если есть несколько)
+        let loadedComboSelectorHtml = '';
+        if (combos.length > 1) {
+            loadedComboSelectorHtml = `
+                <div class="loaded-combo-selector" style="margin-top: 4px;">
+                    <select id="combo-select-${boss.id}" 
+                            class="combo-select form-control" 
+                            style="width: 100%; padding: 4px 6px; font-size: 10px; background: rgba(0,0,0,0.5); color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer;"
+                            onchange="selectComboBossFromSelector(${boss.id})"
+                            onclick="event.stopPropagation();">
+                        ${combos.map((combo, comboIndex) => {
+                            const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : 'не указан';
+                            return `<option value="${comboIndex}">${comboModeName} (${combo.weapons.length} ударов)</option>`;
+                        }).join('')}
+                    </select>
+                </div>
+            `;
+        } else if (combos.length === 1) {
+            // Если комбо одно, просто сохраняем индекс
+            loadedComboSelectorHtml = `<input type="hidden" id="combo-select-${boss.id}" value="0">`;
+        }
+        
+        // Вычисляем HP с учетом режима по умолчанию
+        const currentHp = defaultMode ? calculateBossHp(baseHp, defaultMode) : baseHp;
         
         html += `
             <div class="boss-card" 
@@ -5484,9 +5575,9 @@ function displayComboBossSelection() {
                  style="border: 2px solid #3390ec; background: linear-gradient(135deg, #2d3d5a 0%, #1e2a3a 100%); border-radius: 12px; padding: 10px; margin-right: 12px; min-width: 140px; cursor: pointer; transition: transform 0.2s;"
                  onclick="selectComboBossFromCard(${boss.id})">
                 <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden; flex-shrink: 0;">
-                    <img src="${getBossImageUrl(boss.id, bossData)}" 
+                    <img src="${getBossImageUrl(boss.id, boss)}" 
                          alt="${boss.name}" 
-                         data-fallback="${getBossImageUrlFallback(boss.id, bossData)}"
+                         data-fallback="${getBossImageUrlFallback(boss.id, boss)}"
                          style="max-width: 100%; max-height: 100%; object-fit: contain;"
                          onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
                          onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
@@ -5494,8 +5585,10 @@ function displayComboBossSelection() {
                 </div>
                 <div class="boss-info-card" style="text-align: center; color: #ffffff;">
                     <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${boss.name}</div>
-                    <div style="font-size: 12px; color: #e0e0e0; margin-bottom: 4px;">HP: ${baseHp.toLocaleString()}</div>
-                    ${comboSelectorHtml}
+                    <div class="boss-hp" data-base-hp="${baseHp}" style="font-size: 12px; color: #e0e0e0; margin-bottom: 4px;">HP: ${currentHp.toLocaleString()}</div>
+                    ${modeSelectorHtml}
+                    ${comboModeSelectorHtml}
+                    ${loadedComboSelectorHtml}
                     <div style="font-size: 10px; color: #4CAF50; margin-top: 4px;">Комбо: ${combos.length}</div>
                 </div>
             </div>
@@ -5509,24 +5602,16 @@ function displayComboBossSelection() {
 
 // Выбор босса и комбо из селектора
 window.selectComboBossFromSelector = function(bossId) {
-    const selector = document.getElementById(`combo-select-${bossId}`);
-    if (!selector) return;
-    
-    const comboIndex = parseInt(selector.value);
-    selectComboBoss(bossId, comboIndex);
+    selectComboBoss(bossId);
 }
 
 // Выбор босса и комбо из карточки
 window.selectComboBossFromCard = function(bossId) {
-    const selector = document.getElementById(`combo-select-${bossId}`);
-    if (selector) {
-        const comboIndex = parseInt(selector.value);
-        selectComboBoss(bossId, comboIndex);
-    }
+    selectComboBoss(bossId);
 }
 
 // Выбор босса и комбо (основная функция)
-function selectComboBoss(bossId, comboIndex) {
+function selectComboBoss(bossId) {
     // Убираем выделение со всех карточек
     document.querySelectorAll('#combo-boss-carousel .boss-card').forEach(card => {
         card.style.border = '2px solid #3390ec';
@@ -5538,9 +5623,50 @@ function selectComboBoss(bossId, comboIndex) {
         selectedCard.style.border = '3px solid #4CAF50';
     }
     
-    // Находим комбо
-    const boss = window.allBosses.find(b => b.id === bossId);
+    // Находим босса - ищем во всех категориях
+    let boss = null;
+    if (window.bossCategoriesData) {
+        for (const categoryId in window.bossCategoriesData) {
+            const categoryData = window.bossCategoriesData[categoryId];
+            if (categoryData && categoryData.bosses) {
+                const bossData = categoryData.bosses.find(bd => bd.boss && bd.boss.id === bossId);
+                if (bossData && bossData.boss) {
+                    const b = bossData.boss;
+                    boss = {
+                        id: b.id,
+                        name: b.title,
+                        categoryId: b.categoryId || parseInt(categoryId),
+                        baseHp: b.baseHp,
+                        battleModes: b.battleModes || {},
+                        combos: bossData.combos || {},
+                        imageUrl: b.imageUrl || b.image || '',
+                        availableModes: getAvailableBattleModes(b),
+                        availableComboModes: getAvailableComboModes(bossData)
+                    };
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Если не нашли в категориях, ищем в window.allBosses
+    if (!boss && window.allBosses) {
+        boss = window.allBosses.find(b => b.id === bossId);
+    }
+    
     if (!boss) return;
+    
+    // Получаем выбранный режим атаки из селектора
+    const modeSelector = document.getElementById(`combo-boss-mode-${bossId}`);
+    const selectedMode = modeSelector ? modeSelector.value : null;
+    
+    // Получаем выбранный режим комбо из селектора
+    const comboModeSelector = document.getElementById(`combo-boss-combo-mode-${bossId}`);
+    const selectedComboMode = comboModeSelector ? comboModeSelector.value : null;
+    
+    // Получаем индекс загруженного комбо (если есть несколько)
+    const comboSelector = document.getElementById(`combo-select-${bossId}`);
+    const comboIndex = comboSelector ? parseInt(comboSelector.value) : 0;
     
     // Находим все комбо для этого босса
     const combosForBoss = loadedCombos.filter(c => 
@@ -5549,17 +5675,36 @@ function selectComboBoss(bossId, comboIndex) {
     );
     
     // Выбираем комбо по индексу
-    const combo = combosForBoss[comboIndex];
+    let combo = combosForBoss[comboIndex];
+    
+    // Если комбо не найдено, берем первое
+    if (!combo && combosForBoss.length > 0) {
+        combo = combosForBoss[0];
+    }
     
     if (!combo) return;
+    
+    // Используем выбранные режимы из селекторов, или из комбо, или по умолчанию
+    const finalMode = selectedMode || combo.mode || 'normal';
+    const finalComboMode = selectedComboMode || combo.comboMode || null;
     
     selectedCombo = {
         bossId,
         bossName: boss.name,
-        mode: combo.mode,
-        comboMode: combo.comboMode,
+        mode: finalMode,
+        comboMode: finalComboMode,
         weapons: combo.weapons
     };
+    
+    // Обновляем HP в карточке при изменении режима
+    if (modeSelector && selectedCard) {
+        const baseHp = parseInt(selectedCard.querySelector('.boss-hp')?.dataset.baseHp) || boss.baseHp || 0;
+        const newHp = calculateBossHp(baseHp, finalMode);
+        const hpElement = selectedCard.querySelector('.boss-hp');
+        if (hpElement) {
+            hpElement.textContent = `HP: ${newHp.toLocaleString()}`;
+        }
+    }
     
     document.getElementById('start-combo-btn').style.display = 'block';
 }
