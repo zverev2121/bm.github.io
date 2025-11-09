@@ -14,6 +14,15 @@ const APP_VERSION = '2.0.0';
 if (tg) {
     tg.ready();
     tg.expand();
+    // Отключаем вертикальные свайпы для предотвращения сворачивания при скролле
+    // Используем метод disableVerticalSwipes (Bot API 7.7+)
+    if (tg.disableVerticalSwipes) {
+        tg.disableVerticalSwipes();
+    }
+    // Также устанавливаем поле isVerticalSwipesEnabled напрямую (если доступно)
+    if (tg.isVerticalSwipesEnabled !== undefined) {
+        tg.isVerticalSwipesEnabled = false;
+    }
     // Отключаем подтверждение закрытия, чтобы не блокировать скролл
     if (tg.enableClosingConfirmation) {
         tg.enableClosingConfirmation(false);
@@ -437,64 +446,10 @@ async function toggleSettings() {
     }
 }
 
-// Предотвращение сворачивания приложения при скролле
-function preventSwipeClose() {
-    let touchStartY = 0;
-    let touchStartScrollTop = 0;
-    let isScrolling = false;
-    
-    document.addEventListener('touchstart', function(e) {
-        touchStartY = e.touches[0].clientY;
-        const scrollableElement = document.scrollingElement || document.documentElement;
-        touchStartScrollTop = scrollableElement.scrollTop;
-        isScrolling = false;
-    }, { passive: true });
-    
-    document.addEventListener('touchmove', function(e) {
-        if (!e.touches || !e.touches[0]) return;
-        
-        const currentY = e.touches[0].clientY;
-        const deltaY = currentY - touchStartY;
-        const scrollableElement = document.scrollingElement || document.documentElement;
-        const currentScrollTop = scrollableElement.scrollTop;
-        const scrollHeight = scrollableElement.scrollHeight;
-        const clientHeight = scrollableElement.clientHeight;
-        const canScroll = scrollHeight > clientHeight;
-        
-        // Если контент не скроллится, не мешаем
-        if (!canScroll) return;
-        
-        // Проверяем, что это движение вверх (палец движется вниз)
-        if (deltaY > 0) {
-            // Если мы не в самом верху страницы, предотвращаем сворачивание
-            if (currentScrollTop > 0) {
-                isScrolling = true;
-                // Предотвращаем сворачивание
-                e.preventDefault();
-                return false;
-            }
-            // Если мы в самом верху, но начали скролл не с самого верха,
-            // значит пользователь скроллит, а не сворачивает
-            else if (touchStartScrollTop > 0) {
-                isScrolling = true;
-                e.preventDefault();
-                return false;
-            }
-        }
-    }, { passive: false });
-    
-    document.addEventListener('touchend', function() {
-        isScrolling = false;
-    }, { passive: true });
-}
-
 // Инициализация
 document.addEventListener('DOMContentLoaded', async () => {
     // Инициализация: показываем вкладку "Основное" по умолчанию
     switchTab('main');
-    
-    // Предотвращаем закрытие при скролле
-    preventSwipeClose();
     
     // Добавляем обработчики событий для кнопок таббара
     const tabButtons = document.querySelectorAll('.tab-button');
@@ -2196,7 +2151,8 @@ async function loadMasterInfo() {
         // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
         let response = await fetch(`${GAME_API_URL}/player/masters/${masterId}/enter`, {
             method: 'POST',
-            headers: await getApiHeaders()
+            headers: await getApiHeaders(),
+            body: JSON.stringify({})
         });
         
         // Если получили 401/403, пытаемся обновить токен через initData из БД
@@ -2211,7 +2167,8 @@ async function loadMasterInfo() {
                     // Повторяем запрос с новым токеном
                     response = await fetch(`${GAME_API_URL}/player/masters/${masterId}/enter`, {
                         method: 'POST',
-                        headers: await getApiHeaders()
+                        headers: await getApiHeaders(),
+                        body: JSON.stringify({})
                     });
                 }
             }
@@ -2344,7 +2301,8 @@ async function startMasterWalk() {
             // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
             let response = await fetch(`${GAME_API_URL}/player/masters/${masterId}/work`, {
                 method: 'POST',
-                headers: await getApiHeaders()
+                headers: await getApiHeaders(),
+                body: JSON.stringify({})
             });
             
             // Если получили 401/403, пытаемся обновить токен через initData из БД
@@ -2359,7 +2317,8 @@ async function startMasterWalk() {
                         // Повторяем запрос с новым токеном
                         response = await fetch(`${GAME_API_URL}/player/masters/${masterId}/work`, {
                             method: 'POST',
-                            headers: await getApiHeaders()
+                            headers: await getApiHeaders(),
+                            body: JSON.stringify({})
                         });
                     }
                 }
