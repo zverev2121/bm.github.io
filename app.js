@@ -3332,6 +3332,30 @@ function getAvailableBattleModes(bossData) {
     return availableModes;
 }
 
+// Информация о режимах комбо
+const COMBO_MODE_INFO = {
+    'pacansky': { name: 'Пацанский', key: 'pacansky' },
+    'blotnoy': { name: 'Блатной', key: 'blotnoy' },
+    'avtoritetny': { name: 'Авторитетный', key: 'avtoritetny' }
+};
+
+// Получение доступных режимов комбо для босса
+function getAvailableComboModes(bossData) {
+    const combos = bossData?.combos || {};
+    const availableModes = [];
+    
+    for (const [modeKey, comboInfo] of Object.entries(combos)) {
+        if (comboInfo && COMBO_MODE_INFO[modeKey]) {
+            availableModes.push({
+                key: modeKey,
+                name: COMBO_MODE_INFO[modeKey].name
+            });
+        }
+    }
+    
+    return availableModes;
+}
+
 // Флаг для отслеживания процесса взаимодействия с игроками
 let isBicepsProcessing = false;
 
@@ -3756,6 +3780,9 @@ function renderBossList(categoriesData) {
             // Получаем доступные режимы боя
             const availableModes = getAvailableBattleModes(boss);
             
+            // Получаем доступные режимы комбо
+            const availableComboModes = getAvailableComboModes(bossData);
+            
             // Сохраняем босса
             window.allBosses.push({
                 id: bossId,
@@ -3763,8 +3790,10 @@ function renderBossList(categoriesData) {
                 categoryId: defaultCategoryId,
                 baseHp: baseHp,
                 battleModes: boss.battleModes || {},
+                combos: bossData.combos || {},
                 imageUrl: boss.imageUrl || boss.image || '',
-                availableModes: availableModes
+                availableModes: availableModes,
+                availableComboModes: availableComboModes
             });
             
             // Определяем стиль карточки (зеленый если можно атаковать)
@@ -3775,9 +3804,13 @@ function renderBossList(categoriesData) {
             // Проверяем, выбран ли этот босс и какой режим выбран
             const selectedBoss = selectedBosses.find(b => b.id === bossId);
             const selectedMode = selectedBoss ? selectedBoss.mode : null;
+            const selectedComboMode = selectedBoss ? selectedBoss.comboMode : null;
             // По умолчанию выбираем "pacansky", если он доступен
             const defaultMode = availableModes.find(m => m.key === 'pacansky') ? 'pacansky' : (availableModes.length > 0 ? availableModes[0].key : null);
             const currentMode = selectedMode || defaultMode;
+            // По умолчанию выбираем первый доступный режим комбо
+            const defaultComboMode = availableComboModes.length > 0 ? availableComboModes[0].key : null;
+            const currentComboMode = selectedComboMode || defaultComboMode;
             
             // Вычисляем HP с учетом множителя режима
             const currentHp = currentMode ? calculateBossHp(baseHp, currentMode) : baseHp;
@@ -3794,6 +3827,25 @@ function renderBossList(categoriesData) {
                                 onclick="event.stopPropagation();">
                             ${availableModes.map(mode => 
                                 `<option value="${mode.key}" ${mode.key === currentMode ? 'selected' : ''}>${mode.name} ${mode.multiplier}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
+                `;
+            }
+            
+            // Формируем селектор режимов комбо
+            let comboModeSelectorHtml = '';
+            if (availableComboModes.length > 0) {
+                comboModeSelectorHtml = `
+                    <div class="boss-combo-mode-selector" style="margin-top: 4px;">
+                        <select id="boss-combo-mode-${bossId}" 
+                                class="boss-combo-mode-select form-control" 
+                                style="width: 100%; padding: 4px 6px; font-size: 10px; background: rgba(0,0,0,0.5); color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer;"
+                                onchange="updateBossComboMode(${bossId}, this.value)"
+                                onclick="event.stopPropagation();">
+                            <option value="">Без комбо</option>
+                            ${availableComboModes.map(mode => 
+                                `<option value="${mode.key}" ${mode.key === currentComboMode ? 'selected' : ''}>Комбо: ${mode.name}</option>`
                             ).join('')}
                         </select>
                     </div>
@@ -3824,6 +3876,7 @@ function renderBossList(categoriesData) {
                             🔑 ${keysInfo.hasRequirements ? `${keysInfo.required}/${keysInfo.available}` : keysCount}
                         </div>
                         ${modeSelectorHtml}
+                        ${comboModeSelectorHtml}
                         ${canAttack ? '<div class="available-indicator" style="font-size: 10px; color: #28a745; margin-top: 6px;">✓ Доступен</div>' : ''}
                     </div>
                 </div>
@@ -3910,6 +3963,9 @@ window.switchBossCategory = function(categoryId) {
         // Получаем доступные режимы боя
         const availableModes = getAvailableBattleModes(boss);
         
+        // Получаем доступные режимы комбо
+        const availableComboModes = getAvailableComboModes(bossData);
+        
         // Сохраняем босса в allBosses
         window.allBosses.push({
             id: bossId,
@@ -3917,8 +3973,10 @@ window.switchBossCategory = function(categoryId) {
             categoryId: categoryId,
             baseHp: baseHp,
             battleModes: boss.battleModes || {},
+            combos: bossData.combos || {},
             imageUrl: boss.imageUrl || boss.image || '',
-            availableModes: availableModes
+            availableModes: availableModes,
+            availableComboModes: availableComboModes
         });
         
         // Определяем стиль карточки
@@ -3929,8 +3987,11 @@ window.switchBossCategory = function(categoryId) {
         // Проверяем, выбран ли этот босс и какой режим выбран
         const selectedBoss = selectedBosses.find(b => b.id === bossId);
         const selectedMode = selectedBoss ? selectedBoss.mode : null;
+        const selectedComboMode = selectedBoss ? selectedBoss.comboMode : null;
         const defaultMode = availableModes.find(m => m.key === 'pacansky') ? 'pacansky' : (availableModes.length > 0 ? availableModes[0].key : null);
         const currentMode = selectedMode || defaultMode;
+        const defaultComboMode = availableComboModes.length > 0 ? availableComboModes[0].key : null;
+        const currentComboMode = selectedComboMode || defaultComboMode;
         
         // Вычисляем HP с учетом множителя режима
         const currentHp = currentMode ? calculateBossHp(baseHp, currentMode) : baseHp;
@@ -3947,6 +4008,25 @@ window.switchBossCategory = function(categoryId) {
                             onclick="event.stopPropagation();">
                         ${availableModes.map(mode => 
                             `<option value="${mode.key}" ${mode.key === currentMode ? 'selected' : ''}>${mode.name} ${mode.multiplier}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+            `;
+        }
+        
+        // Формируем селектор режимов комбо
+        let comboModeSelectorHtml = '';
+        if (availableComboModes.length > 0) {
+            comboModeSelectorHtml = `
+                <div class="boss-combo-mode-selector" style="margin-top: 4px;">
+                    <select id="boss-combo-mode-${bossId}" 
+                            class="boss-combo-mode-select form-control" 
+                            style="width: 100%; padding: 4px 6px; font-size: 10px; background: rgba(0,0,0,0.5); color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer;"
+                            onchange="updateBossComboMode(${bossId}, this.value)"
+                            onclick="event.stopPropagation();">
+                        <option value="">Без комбо</option>
+                        ${availableComboModes.map(mode => 
+                            `<option value="${mode.key}" ${mode.key === currentComboMode ? 'selected' : ''}>Комбо: ${mode.name}</option>`
                         ).join('')}
                     </select>
                 </div>
@@ -3977,6 +4057,7 @@ window.switchBossCategory = function(categoryId) {
                         🔑 ${keysInfo.hasRequirements ? `${keysInfo.required}/${keysInfo.available}` : keysCount}
                     </div>
                     ${modeSelectorHtml}
+                    ${comboModeSelectorHtml}
                     ${canAttack ? '<div class="available-indicator" style="font-size: 10px; color: #28a745; margin-top: 6px;">✓ Доступен</div>' : ''}
                 </div>
             </div>
@@ -4025,9 +4106,54 @@ window.updateBossMode = function(bossId, mode) {
     }
     
     // Если босс уже выбран, обновляем его режим
+    // Но нужно проверить, не создает ли это дубликат с другой записью
     const bossIndex = selectedBosses.findIndex(b => b.id === bossId);
     if (bossIndex >= 0) {
-        selectedBosses[bossIndex].mode = mode;
+        const boss = selectedBosses[bossIndex];
+        const oldMode = boss.mode;
+        const oldComboMode = boss.comboMode;
+        
+        // Проверяем, есть ли другая запись с такой же комбинацией (id, новый mode, comboMode)
+        const duplicateIndex = selectedBosses.findIndex((b, idx) => 
+            idx !== bossIndex && 
+            b.id === bossId && 
+            b.mode === mode && 
+            b.comboMode === oldComboMode
+        );
+        
+        if (duplicateIndex >= 0) {
+            // Объединяем с существующей записью
+            const duplicateBoss = selectedBosses[duplicateIndex];
+            duplicateBoss.weaponsCount = (duplicateBoss.weaponsCount || 1) + (boss.weaponsCount || 1);
+            // Удаляем текущую запись
+            selectedBosses.splice(bossIndex, 1);
+        } else {
+            // Просто обновляем режим
+            boss.mode = mode;
+        }
+        
+        updateOrderCarousel();
+    }
+}
+
+// Обновление режима комбо для босса
+window.updateBossComboMode = function(bossId, comboMode) {
+    const bossData = window.allBosses.find(b => b.id === bossId);
+    if (!bossData) {
+        console.warn(`Босс ${bossId} не найден`);
+        return;
+    }
+    
+    // Обновляем data-selected-combo-mode в карточке
+    const card = document.querySelector(`.boss-card[data-boss-id="${bossId}"]`);
+    if (card) {
+        card.dataset.selectedComboMode = comboMode || '';
+    }
+    
+    // Если босс уже выбран, обновляем его режим комбо
+    const bossIndex = selectedBosses.findIndex(b => b.id === bossId);
+    if (bossIndex >= 0) {
+        selectedBosses[bossIndex].comboMode = comboMode || null;
         updateOrderCarousel();
     }
 }
@@ -4043,6 +4169,7 @@ window.toggleBossSelection = function(bossId, bossName, mode = null) {
     // Всегда берем режим из селектора на карточке
     const card = document.querySelector(`.boss-card[data-boss-id="${bossId}"]`);
     let selectedMode = null;
+    let selectedComboMode = null;
     
     if (card) {
         // Пытаемся получить режим из селектора
@@ -4052,6 +4179,14 @@ window.toggleBossSelection = function(bossId, bossName, mode = null) {
         } else if (card.dataset.selectedMode) {
             // Если селектора нет, берем из data-атрибута
             selectedMode = card.dataset.selectedMode;
+        }
+        
+        // Пытаемся получить режим комбо из селектора
+        const comboSelector = card.querySelector(`#boss-combo-mode-${bossId}`);
+        if (comboSelector) {
+            selectedComboMode = comboSelector.value || null;
+        } else if (card.dataset.selectedComboMode) {
+            selectedComboMode = card.dataset.selectedComboMode || null;
         }
     }
     
@@ -4072,9 +4207,9 @@ window.toggleBossSelection = function(bossId, bossName, mode = null) {
         return;
     }
     
-    // Проверяем, есть ли уже такой же босс с таким же режимом в конце списка
+    // Проверяем, есть ли уже такой же босс с таким же режимом и режимом комбо в конце списка
     const lastBoss = selectedBosses.length > 0 ? selectedBosses[selectedBosses.length - 1] : null;
-    if (lastBoss && lastBoss.id === bossId && lastBoss.mode === selectedMode) {
+    if (lastBoss && lastBoss.id === bossId && lastBoss.mode === selectedMode && lastBoss.comboMode === selectedComboMode) {
         // Если последний босс такой же - увеличиваем количество оружий
         lastBoss.weaponsCount = (lastBoss.weaponsCount || 1) + 1;
         console.log(`🔫 Увеличено количество оружий для ${bossName}: ${lastBoss.weaponsCount}`);
@@ -4084,6 +4219,7 @@ window.toggleBossSelection = function(bossId, bossName, mode = null) {
             id: bossId,
             name: bossName,
             mode: selectedMode,
+            comboMode: selectedComboMode,
             quantity: 1,
             weaponsCount: 1, // Количество оружий для этого босса (по умолчанию 1)
             weaponsUsed: 0   // Количество использованных оружий
@@ -4118,10 +4254,32 @@ function updateOrderCarousel() {
         const bossData = window.allBosses.find(b => b.id === boss.id);
         const modeName = boss.mode ? (BATTLE_MODE_INFO[boss.mode]?.name || boss.mode) : 'Не выбран';
         const modeMultiplier = boss.mode ? (BATTLE_MODE_INFO[boss.mode]?.multiplier || '') : '';
+        const comboModeName = boss.comboMode ? (COMBO_MODE_INFO[boss.comboMode]?.name || boss.comboMode) : null;
+        
+        // Получаем доступные режимы комбо для этого босса
+        const availableComboModes = bossData ? (bossData.availableComboModes || getAvailableComboModes(bossData)) : [];
         
         // Вычисляем HP с учетом множителя режима
         const baseHp = bossData ? bossData.baseHp : 0;
         const currentHp = boss.mode ? calculateBossHp(baseHp, boss.mode) : baseHp;
+        
+        // Формируем селектор режимов комбо для порядка атаки
+        let comboModeSelectorHtml = '';
+        if (availableComboModes.length > 0) {
+            comboModeSelectorHtml = `
+                <div style="margin-top: 4px;">
+                    <select id="order-combo-mode-${index}" 
+                            style="width: 100%; padding: 3px 5px; font-size: 9px; background: rgba(0,0,0,0.5); color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer;"
+                            onchange="updateBossComboModeInOrder(${index}, this.value)"
+                            onclick="event.stopPropagation();">
+                        <option value="">Без комбо</option>
+                        ${availableComboModes.map(mode => 
+                            `<option value="${mode.key}" ${mode.key === boss.comboMode ? 'selected' : ''}>Комбо: ${mode.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+            `;
+        }
         
         html += `
             <div class="boss-card-order" 
@@ -4140,7 +4298,9 @@ function updateOrderCarousel() {
                 <div class="boss-info-card" style="text-align: center; color: #ffffff;">
                     <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${boss.name}</div>
                     <div style="font-size: 11px; color: #e0e0e0; margin-bottom: 4px;">HP: ${currentHp.toLocaleString()}</div>
-                    <div style="font-size: 11px; color: #ffd700; margin-bottom: 4px; font-weight: 600;">${modeName} ${modeMultiplier}</div>
+                    <div style="font-size: 11px; color: #ffd700; margin-bottom: 4px; font-weight: 600;">Режим: ${modeName} ${modeMultiplier}</div>
+                    ${comboModeName ? `<div style="font-size: 10px; color: #ff9800; margin-bottom: 4px; font-weight: 600;">Комбо: ${comboModeName}</div>` : '<div style="font-size: 10px; color: #888; margin-bottom: 4px;">Комбо: нет</div>'}
+                    ${comboModeSelectorHtml}
                     <div style="font-size: 10px; color: #ff6b6b; margin-bottom: 8px; font-weight: 600;">Атак: ${boss.weaponsCount || 1}</div>
                 </div>
                 <div style="display: flex; gap: 5px; margin-top: 8px; justify-content: center;">
@@ -4177,6 +4337,61 @@ window.removeBossFromOrder = function(index) {
         selectedBosses.splice(index, 1);
         updateOrderCarousel();
     }
+}
+
+// Обновление режима комбо для босса в порядке атаки
+window.updateBossComboModeInOrder = function(index, comboMode) {
+    if (index < 0 || index >= selectedBosses.length) return;
+    
+    const boss = selectedBosses[index];
+    const newComboMode = comboMode || null;
+    
+    // Если режим комбо не изменился, ничего не делаем
+    if (boss.comboMode === newComboMode) {
+        return;
+    }
+    
+    // Проверяем, есть ли перед текущей записью такая же комбинация (id, mode, новый comboMode)
+    // Если есть, объединяем с ней
+    let merged = false;
+    for (let i = 0; i < index; i++) {
+        const prevBoss = selectedBosses[i];
+        if (prevBoss.id === boss.id && 
+            prevBoss.mode === boss.mode && 
+            prevBoss.comboMode === newComboMode) {
+            // Объединяем: увеличиваем количество оружий у предыдущей записи
+            prevBoss.weaponsCount = (prevBoss.weaponsCount || 1) + (boss.weaponsCount || 1);
+            // Удаляем текущую запись
+            selectedBosses.splice(index, 1);
+            merged = true;
+            break;
+        }
+    }
+    
+    // Если не объединили, проверяем следующую запись
+    if (!merged) {
+        // Проверяем, есть ли после текущей записи такая же комбинация
+        for (let i = index + 1; i < selectedBosses.length; i++) {
+            const nextBoss = selectedBosses[i];
+            if (nextBoss.id === boss.id && 
+                nextBoss.mode === boss.mode && 
+                nextBoss.comboMode === newComboMode) {
+                // Объединяем: увеличиваем количество оружий у следующей записи
+                nextBoss.weaponsCount = (nextBoss.weaponsCount || 1) + (boss.weaponsCount || 1);
+                // Удаляем текущую запись
+                selectedBosses.splice(index, 1);
+                merged = true;
+                break;
+            }
+        }
+    }
+    
+    // Если не объединили ни с кем, просто обновляем режим комбо
+    if (!merged) {
+        boss.comboMode = newComboMode;
+    }
+    
+    updateOrderCarousel();
 }
 
 
@@ -4243,7 +4458,7 @@ async function attackNextBoss() {
             body: JSON.stringify({
                 bossId: boss.id,
                 mode: mode,
-                comboMode: null
+                comboMode: boss.comboMode || null
             })
         });
         
