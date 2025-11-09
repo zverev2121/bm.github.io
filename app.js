@@ -438,18 +438,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Инициализация: показываем вкладку "Основное" по умолчанию
     switchTab('main');
     
-    // Добавляем обработчики событий для кнопок таббара (для лучшей совместимости с Telegram)
+    // Добавляем обработчики событий для кнопок таббара
     const tabButtons = document.querySelectorAll('.tab-button');
     tabButtons.forEach(button => {
         button.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            const tabName = this.id.replace('tab-btn-', '');
-            switchTab(tabName);
-        });
-        button.addEventListener('touchend', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
             const tabName = this.id.replace('tab-btn-', '');
             switchTab(tabName);
         });
