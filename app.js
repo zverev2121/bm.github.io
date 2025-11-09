@@ -6211,9 +6211,27 @@ async function attackBossForCombo() {
         }
     }
     
+    // Обработка таймаутов (504 Gateway Timeout или 999 Internal Error)
+    if (response.status === 504 || response.status === 999) {
+        const errorText = await response.text();
+        let errorData;
+        try {
+            errorData = JSON.parse(errorText);
+        } catch {
+            errorData = { message: 'Таймаут на стороне сервера' };
+        }
+        const errorMessage = errorData.message || errorData.error || 'Таймаут на стороне сервера';
+        throw new Error(`Таймаут при старте атаки: ${errorMessage}. Попробуйте повторить комбо.`);
+    }
+    
     const data = await response.json();
     
     if (!response.ok || !data.success) {
+        // Проверяем, это таймаут в сообщении об ошибке?
+        const errorText = data.message || data.error || '';
+        if (errorText.toLowerCase().includes('таймаут') || errorText.toLowerCase().includes('timeout')) {
+            throw new Error(`Таймаут при старте атаки: ${errorText}. Попробуйте повторить комбо.`);
+        }
         throw new Error(data.message || data.error || 'Ошибка атаки босса');
     }
     
@@ -6240,7 +6258,7 @@ async function executeComboWeapons() {
         // Выполняем удар
         let success = false;
         let attempts = 0;
-        const maxAttempts = 3;
+        const maxAttempts = 7;  // Увеличено с 3 до 7 для лучшей обработки таймаутов
         
         while (!success && attempts < maxAttempts && isComboAttacking) {
             attempts++;
@@ -6274,6 +6292,25 @@ async function executeComboWeapons() {
                     }
                 }
                 
+                // Обработка таймаутов (504 Gateway Timeout или 999 Internal Error)
+                if (response.status === 504 || response.status === 999) {
+                    const errorText = await response.text();
+                    let errorData;
+                    try {
+                        errorData = JSON.parse(errorText);
+                    } catch {
+                        errorData = { message: 'Таймаут на стороне сервера' };
+                    }
+                    
+                    const errorMessage = errorData.message || errorData.error || 'Таймаут на стороне сервера';
+                    updateComboStatus(`⏱️ Таймаут при ударе ${i + 1}. Повторяем попытку ${attempts}/${maxAttempts}...`);
+                    console.warn(`Таймаут при ударе ${i + 1}, попытка ${attempts}/${maxAttempts}: ${errorMessage}`);
+                    
+                    // Ждем перед повторной попыткой (увеличиваем задержку при повторных попытках)
+                    await new Promise(resolve => setTimeout(resolve, 2000 * attempts));
+                    continue; // Повторяем попытку
+                }
+                
                 const data = await response.json();
                 
                 if (!response.ok || !data.success) {
@@ -6290,6 +6327,16 @@ async function executeComboWeapons() {
                             await new Promise(resolve => setTimeout(resolve, 1000));
                             continue;
                         }
+                    }
+                    
+                    // Проверяем, это таймаут в сообщении об ошибке?
+                    const errorText = data.message || data.error || '';
+                    if (errorText.toLowerCase().includes('таймаут') || errorText.toLowerCase().includes('timeout')) {
+                        updateComboStatus(`⏱️ Таймаут при ударе ${i + 1}. Повторяем попытку ${attempts}/${maxAttempts}...`);
+                        console.warn(`Таймаут при ударе ${i + 1}, попытка ${attempts}/${maxAttempts}: ${errorText}`);
+                        // Ждем перед повторной попыткой
+                        await new Promise(resolve => setTimeout(resolve, 2000 * attempts));
+                        continue; // Повторяем попытку
                     }
                     
                     throw new Error(data.message || data.error || 'Ошибка использования оружия');
@@ -6336,10 +6383,26 @@ async function executeComboWeapons() {
                 
             } catch (error) {
                 console.error(`Ошибка удара ${i + 1}:`, error);
+                
+                // Проверяем, это таймаут?
+                const errorMessage = error.message || error.toString();
+                const isTimeout = errorMessage.toLowerCase().includes('таймаут') || 
+                                 errorMessage.toLowerCase().includes('timeout') ||
+                                 errorMessage.toLowerCase().includes('504') ||
+                                 errorMessage.toLowerCase().includes('999');
+                
+                if (isTimeout) {
+                    updateComboStatus(`⏱️ Таймаут при ударе ${i + 1}. Повторяем попытку ${attempts}/${maxAttempts}...`);
+                    console.warn(`Таймаут при ударе ${i + 1}, попытка ${attempts}/${maxAttempts}: ${errorMessage}`);
+                }
+                
                 if (attempts >= maxAttempts) {
                     throw error;
                 }
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Увеличиваем задержку при повторных попытках (особенно для таймаутов)
+                const delay = isTimeout ? 2000 * attempts : 1000;
+                await new Promise(resolve => setTimeout(resolve, delay));
             }
         }
         
