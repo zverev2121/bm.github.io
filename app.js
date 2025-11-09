@@ -3716,7 +3716,7 @@ function renderBossList(categoriesData) {
             window.allBosses.push({
                 id: bossId,
                 name: bossName,
-                categoryId: categoryId,
+                categoryId: defaultCategoryId,
                 baseHp: baseHp,
                 battleModes: boss.battleModes || {},
                 imageUrl: boss.imageUrl || boss.image || '',
@@ -3841,6 +3841,10 @@ window.switchBossCategory = function(categoryId) {
     
     let html = '';
     
+    // Обновляем window.allBosses для текущей категории
+    // Удаляем боссов этой категории из allBosses
+    window.allBosses = window.allBosses.filter(b => b.categoryId !== categoryId);
+    
     categoryData.bosses.forEach((bossData) => {
         const boss = bossData.boss;
         const bossId = boss.id;
@@ -3861,6 +3865,17 @@ window.switchBossCategory = function(categoryId) {
         
         // Получаем доступные режимы боя
         const availableModes = getAvailableBattleModes(boss);
+        
+        // Сохраняем босса в allBosses
+        window.allBosses.push({
+            id: bossId,
+            name: bossName,
+            categoryId: categoryId,
+            baseHp: baseHp,
+            battleModes: boss.battleModes || {},
+            imageUrl: boss.imageUrl || boss.image || '',
+            availableModes: availableModes
+        });
         
         // Определяем стиль карточки
         const cardStyle = canAttack 
