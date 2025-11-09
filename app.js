@@ -3389,6 +3389,7 @@ window.manualAuth = function() {
 
 // Глобальные переменные для автоматической атаки боссов
 let bossAttackInterval = null;
+let bossDataUpdateInterval = null;  // Интервал для обновления данных боссов во время автоатаки
 let currentBossIndex = 0;
 let selectedBosses = [];
 let isAttacking = false;
@@ -3406,7 +3407,7 @@ const BOSS_ATTACK_RULES = {
     8: { requiredKeys: { 7: 1 } }, // Хирург - 1 ключ с Дяди Миши
     9: { requiredKeys: {} }, // Палыч - без ключей
     10: { requiredKeys: { 9: 3 } }, // Циплоп - 3 ключа с Палыча
-    11: { requiredKeys: { 10: 3 } }, // Раиса - 3 ключа с Циплопа
+    11: { requiredKeys: { 10: 1 } }, // Раиса - 1 ключ с Циплопа
     12: { requiredKeys: { 11: 3 } }, // Бес - 3 ключа с Раисы
     13: { requiredKeys: { 12: 3 } }, // Паленов - 3 ключа с Беса
     14: { requiredKeys: { 13: 1 } }, // Блезница - 1 ключ с Паленова
@@ -4695,6 +4696,9 @@ window.startBossAutoAttack = async function() {
         bossListContainer.style.display = 'block';
     }
     
+    // Запускаем периодическое обновление данных боссов (каждые 10 секунд)
+    startBossDataUpdate();
+    
     attackNextBoss();
 }
 
@@ -4877,7 +4881,7 @@ async function attackNextBoss() {
 }
 
 // Проверка статуса боя через bootstrap
-async function checkBossBattleStatus(bossId, mode, sessionId) {
+async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
     if (!isAttacking) return;
     
     // Получаем режим из selectedBosses, если не передан
@@ -4890,6 +4894,8 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
             return;
         }
     }
+    
+    const maxRetries = 7;  // Максимум попыток при таймауте
     
     try {
         let token = await getAccessToken();
@@ -4920,11 +4926,53 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
             }
         }
         
+        // Обработка таймаутов (504 Gateway Timeout или 999 Internal Error)
+        if (response.status === 504 || response.status === 999) {
+            if (retryCount < maxRetries) {
+                const boss = selectedBosses[currentBossIndex];
+                const errorText = await response.text();
+                let errorData;
+                try {
+                    errorData = JSON.parse(errorText);
+                } catch {
+                    errorData = { message: 'Таймаут на стороне сервера' };
+                }
+                const errorMessage = errorData.message || errorData.error || 'Таймаут на стороне сервера';
+                
+                updateAttackStatus(`⏱️ Таймаут при проверке статуса ${boss?.name || 'босса'}. Повторяем попытку ${retryCount + 1}/${maxRetries}...`);
+                console.warn(`Таймаут при проверке статуса боя, попытка ${retryCount + 1}/${maxRetries}: ${errorMessage}`);
+                
+                // Ждем перед повторной попыткой (увеличиваем задержку при повторных попытках)
+                await new Promise(resolve => setTimeout(resolve, 2000 * (retryCount + 1)));
+                
+                // Повторяем попытку
+                return checkBossBattleStatus(bossId, mode, sessionId, retryCount + 1);
+            } else {
+                throw new Error(`Таймаут при проверке статуса после ${maxRetries} попыток`);
+            }
+        }
+        
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
         const data = await response.json();
+        
+        // Проверяем, это таймаут в сообщении об ошибке?
+        if (data && !data.success) {
+            const errorText = data.message || data.error || '';
+            if ((errorText.toLowerCase().includes('таймаут') || errorText.toLowerCase().includes('timeout')) && retryCount < maxRetries) {
+                const boss = selectedBosses[currentBossIndex];
+                updateAttackStatus(`⏱️ Таймаут при проверке статуса ${boss?.name || 'босса'}. Повторяем попытку ${retryCount + 1}/${maxRetries}...`);
+                console.warn(`Таймаут при проверке статуса боя, попытка ${retryCount + 1}/${maxRetries}: ${errorText}`);
+                
+                // Ждем перед повторной попыткой
+                await new Promise(resolve => setTimeout(resolve, 2000 * (retryCount + 1)));
+                
+                // Повторяем попытку
+                return checkBossBattleStatus(bossId, mode, sessionId, retryCount + 1);
+            }
+        }
         
         // Обновляем ключи из bootstrap
         if (data.success) {
@@ -5036,19 +5084,53 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
     } catch (error) {
         console.error('Ошибка проверки статуса боя:', error);
         const boss = selectedBosses[currentBossIndex];
-        updateAttackStatus(`❌ Ошибка проверки статуса ${boss.name}: ${error.message}`);
         
-        // Удаляем текущего босса и переходим к следующему
-        if (currentBossIndex < selectedBosses.length) {
-            selectedBosses.splice(currentBossIndex, 1);
-            updateOrderCarousel();
+        // Проверяем, это таймаут?
+        const errorMessage = error.message || error.toString();
+        const isTimeout = errorMessage.toLowerCase().includes('таймаут') || 
+                         errorMessage.toLowerCase().includes('timeout') ||
+                         errorMessage.toLowerCase().includes('504') ||
+                         errorMessage.toLowerCase().includes('999');
+        
+        // Если это таймаут и еще есть попытки, повторяем
+        if (isTimeout && retryCount < maxRetries) {
+            updateAttackStatus(`⏱️ Таймаут при проверке статуса ${boss?.name || 'босса'}. Повторяем попытку ${retryCount + 1}/${maxRetries}...`);
+            console.warn(`Таймаут при проверке статуса боя, попытка ${retryCount + 1}/${maxRetries}: ${errorMessage}`);
+            
+            // Ждем перед повторной попыткой
+            await new Promise(resolve => setTimeout(resolve, 2000 * (retryCount + 1)));
+            
+            // Повторяем попытку
+            return checkBossBattleStatus(bossId, mode, sessionId, retryCount + 1);
         }
-        if (currentBossIndex >= selectedBosses.length) {
-            currentBossIndex = 0;
+        
+        // Если это не таймаут или попытки исчерпаны, обрабатываем как обычную ошибку
+        updateAttackStatus(`❌ Ошибка проверки статуса ${boss?.name || 'босса'}: ${error.message}`);
+        
+        // Удаляем текущего босса и переходим к следующему только если это не таймаут
+        // При таймауте продолжаем проверку статуса
+        if (!isTimeout) {
+            if (currentBossIndex < selectedBosses.length) {
+                selectedBosses.splice(currentBossIndex, 1);
+                updateOrderCarousel();
+            }
+            if (currentBossIndex >= selectedBosses.length) {
+                currentBossIndex = 0;
+            }
+            setTimeout(() => {
+                attackNextBoss();
+            }, 2000);
+        } else {
+            // При таймауте после всех попыток продолжаем проверку через 5 секунд
+            const boss = selectedBosses[currentBossIndex];
+            const weaponsUsed = boss ? (boss.weaponsUsed || 0) : 0;
+            const weaponsCount = boss ? (boss.weaponsCount || 1) : 1;
+            updateAttackStatus(`⚠️ Таймаут после ${maxRetries} попыток. Повторная проверка через 5 секунд... (Атака ${weaponsUsed + 1}/${weaponsCount})`);
+            
+            bossAttackInterval = setTimeout(() => {
+                checkBossBattleStatus(bossId, mode, sessionId, 0);  // Сбрасываем счетчик попыток
+            }, 5000);
         }
-        setTimeout(() => {
-            attackNextBoss();
-        }, 2000);
     }
 }
 
@@ -5061,6 +5143,9 @@ window.stopBossAutoAttack = function() {
         bossAttackInterval = null;
     }
     
+    // Останавливаем обновление данных боссов
+    stopBossDataUpdate();
+    
     document.getElementById('start-boss-attack-btn').style.display = 'block';
     document.getElementById('stop-boss-attack-btn').style.display = 'none';
     updateAttackStatus('Атака остановлена');
@@ -5072,6 +5157,53 @@ function updateAttackStatus(message) {
     if (statusContent) {
         const timestamp = new Date().toLocaleTimeString();
         statusContent.innerHTML = `<p><strong>[${timestamp}]</strong> ${message}</p>`;
+    }
+}
+
+// Запуск периодического обновления данных боссов во время автоатаки
+function startBossDataUpdate() {
+    // Останавливаем предыдущий интервал, если он был
+    stopBossDataUpdate();
+    
+    // Обновляем данные сразу при старте
+    updateBossDataDuringAttack();
+    
+    // Затем обновляем каждые 10 секунд
+    bossDataUpdateInterval = setInterval(() => {
+        if (isAttacking) {
+            updateBossDataDuringAttack();
+        } else {
+            stopBossDataUpdate();
+        }
+    }, 10000);  // 10 секунд
+}
+
+// Остановка периодического обновления данных боссов
+function stopBossDataUpdate() {
+    if (bossDataUpdateInterval) {
+        clearInterval(bossDataUpdateInterval);
+        bossDataUpdateInterval = null;
+    }
+}
+
+// Обновление данных боссов во время автоатаки
+async function updateBossDataDuringAttack() {
+    if (!isAttacking) return;
+    
+    try {
+        // Обновляем ключи из bootstrap
+        await updateBossKeys();
+        
+        // Обновляем карточки боссов
+        const cards = document.querySelectorAll('.boss-card');
+        if (cards.length > 0) {
+            updateBossCards();
+        }
+        
+        console.log('✅ Данные боссов обновлены во время автоатаки');
+    } catch (error) {
+        console.warn('⚠️ Ошибка обновления данных боссов во время автоатаки:', error);
+        // Не прерываем автоатаку из-за ошибки обновления данных
     }
 }
 
