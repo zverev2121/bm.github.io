@@ -1541,6 +1541,24 @@ async function updateBossKeys() {
                 console.warn('⚠️ Ключи не найдены в ответе bootstrap при обновлении');
                 console.warn('Структура ответа:', JSON.stringify(bootstrapData, null, 2));
             }
+            
+            // Проверяем, есть ли награда для сбора
+            if (bootstrapData.success && bootstrapData.hasReward === true) {
+                console.log('💰 Обнаружена награда в bootstrap, собираем...');
+                try {
+                    const rewardData = await collectBossRewards();
+                    const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
+                    const rewardMessageText = formatRewardMessage(rewardData, 'text');
+                    
+                    // Показываем модальное окно с наградой
+                    showCustomModal(rewardMessageText);
+                    
+                    // Обновляем информацию о боссе, чтобы показать, что награда собрана
+                    loadBossInfo();
+                } catch (error) {
+                    console.error('❌ Ошибка сбора награды из updateBossKeys:', error);
+                }
+            }
         } else {
             console.error(`❌ Ошибка загрузки bootstrap: HTTP ${bootstrapResponse.status}`);
             const errorText = await bootstrapResponse.text();
@@ -3069,6 +3087,24 @@ window.loadBossList = async function loadBossList() {
             } else {
                 console.warn('⚠️ Ключи не найдены в ответе bootstrap');
                 console.warn('Структура ответа:', JSON.stringify(bootstrapData, null, 2));
+            }
+            
+            // Проверяем, есть ли награда для сбора
+            if (bootstrapData.success && bootstrapData.hasReward === true) {
+                console.log('💰 Обнаружена награда в bootstrap (loadBossList), собираем...');
+                try {
+                    const rewardData = await collectBossRewards();
+                    const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
+                    const rewardMessageText = formatRewardMessage(rewardData, 'text');
+                    
+                    // Показываем модальное окно с наградой
+                    showCustomModal(rewardMessageText);
+                    
+                    // Обновляем информацию о боссе, чтобы показать, что награда собрана
+                    loadBossInfo();
+                } catch (error) {
+                    console.error('❌ Ошибка сбора награды из loadBossList:', error);
+                }
             }
         } else {
             console.error('❌ Ошибка загрузки bootstrap:', bootstrapResponse.status);
