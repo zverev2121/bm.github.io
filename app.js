@@ -1334,7 +1334,7 @@ async function loadBossInfo() {
                             const currentBoss = window.allBosses.find(b => b.name === session.title);
                             if (currentBoss) {
                                 bossImageHtml = `
-                                    <div class="boss-image" style="width: 100px; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; overflow: hidden; margin: 0 auto 12px auto;">
+                                    <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; overflow: hidden; margin: 0 auto 12px auto;">
                                         <img src="${getBossImageUrl(currentBoss.id, currentBoss)}" 
                                              alt="${session.title}" 
                                              data-fallback="${getBossImageUrlFallback(currentBoss.id, currentBoss)}"
@@ -3804,7 +3804,7 @@ function renderBossList(categoriesData) {
                      data-base-hp="${baseHp}"
                      style="${cardStyle} border-radius: 12px; padding: 10px; margin-right: 12px; min-width: 140px; cursor: pointer; transition: transform 0.2s;"
                      onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}')">
-                    <div class="boss-image" style="width: 100px; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden; flex-shrink: 0;">
+                    <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden; flex-shrink: 0;">
                         <img src="${getBossImageUrl(bossId, boss)}" 
                              alt="${bossName}" 
                              data-fallback="${getBossImageUrlFallback(bossId, boss)}"
@@ -3957,7 +3957,7 @@ window.switchBossCategory = function(categoryId) {
                  data-base-hp="${baseHp}"
                  style="${cardStyle} border-radius: 12px; padding: 10px; margin-right: 12px; min-width: 140px; cursor: pointer; transition: transform 0.2s;"
                  onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}')">
-                <div class="boss-image" style="width: 100px; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden; flex-shrink: 0;">
+                <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden; flex-shrink: 0;">
                     <img src="${getBossImageUrl(bossId, boss)}" 
                          alt="${bossName}" 
                          data-fallback="${getBossImageUrlFallback(bossId, boss)}"
@@ -4124,7 +4124,7 @@ function updateOrderCarousel() {
                  data-boss-id="${boss.id}"
                  style="border: 2px solid #3390ec; background: linear-gradient(135deg, #2d3d5a 0%, #1e2a3a 100%); border-radius: 12px; padding: 10px; margin-right: 12px; min-width: 130px; position: relative;">
                 <div style="position: absolute; top: 5px; right: 5px; background: #3390ec; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">${index + 1}</div>
-                <div class="boss-image" style="width: 100px; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden; flex-shrink: 0;">
+                <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden; flex-shrink: 0;">
                     <img src="${getBossImageUrl(boss.id, bossData)}" 
                          alt="${boss.name}" 
                          data-fallback="${getBossImageUrlFallback(boss.id, bossData)}"
