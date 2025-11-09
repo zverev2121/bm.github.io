@@ -2150,9 +2150,12 @@ async function loadMasterInfo() {
     try {
         // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
         // ВАЖНО: /enter эндпоинт использует GET метод
+        const headers = await getApiHeaders();
+        // Убираем Content-Type для GET запросов
+        delete headers['Content-Type'];
         let response = await fetch(`${GAME_API_URL}/player/masters/${masterId}/enter`, {
             method: 'GET',
-            headers: await getApiHeaders()
+            headers: headers
         });
         
         // Если получили 401/403, пытаемся обновить токен через initData из БД
@@ -2165,9 +2168,11 @@ async function loadMasterInfo() {
                     // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
                     // Используем getApiHeaders() для получения актуального токена
                     // Повторяем запрос с новым токеном
+                    const retryHeaders = await getApiHeaders();
+                    delete retryHeaders['Content-Type'];
                     response = await fetch(`${GAME_API_URL}/player/masters/${masterId}/enter`, {
                         method: 'GET',
-                        headers: await getApiHeaders()
+                        headers: retryHeaders
                     });
                 }
             }
@@ -3644,24 +3649,44 @@ function renderBossList(categoriesData) {
     // Сохраняем данные боссов для использования
     window.allBosses = [];
     
-    let html = '';
+    // Сохраняем данные категорий для переключения
+    window.bossCategoriesData = {};
     
-    // Обрабатываем каждую категорию
+    // Обрабатываем каждую категорию и сохраняем данные
     categoriesData.forEach((categoryData, categoryIndex) => {
         if (!categoryData.success || !categoryData.bosses) return;
         
         const categoryId = categoryData.bosses[0]?.boss?.categoryId || categoryIndex + 1;
-        const categoryName = CATEGORY_NAMES[categoryId] || `Категория ${categoryId}`;
-        
-        // Создаем карусель для категории
-        html += `
-            <div class="boss-category-section" style="margin-bottom: 30px;">
-                <h3 class="category-title" style="margin-bottom: 15px; color: var(--tg-theme-text-color, #000000); font-size: 18px; font-weight: 600;">${categoryName}</h3>
-                <div class="boss-carousel-container" data-category-id="${categoryId}">
-                    <div class="boss-carousel" id="carousel-category-${categoryId}">
-        `;
-        
-        categoryData.bosses.forEach((bossData) => {
+        window.bossCategoriesData[categoryId] = categoryData;
+    });
+    
+    // Создаем сегментированный переключатель и одну карусель
+    let html = `
+        <div class="boss-category-section" style="margin-bottom: 20px;">
+            <div class="category-switcher" style="display: flex; gap: 8px; margin-bottom: 15px; background: rgba(0,0,0,0.1); padding: 4px; border-radius: 8px;">
+                <button class="category-switch-btn active" 
+                        data-category="1" 
+                        onclick="switchBossCategory(1)"
+                        style="flex: 1; padding: 10px; border: none; border-radius: 6px; background: #3390ec; color: white; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                    Беспредельщики
+                </button>
+                <button class="category-switch-btn" 
+                        data-category="2" 
+                        onclick="switchBossCategory(2)"
+                        style="flex: 1; padding: 10px; border: none; border-radius: 6px; background: rgba(255,255,255,0.1); color: var(--tg-theme-text-color, #000000); font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                    Вертухаи
+                </button>
+            </div>
+            <div class="boss-carousel-container" data-category-id="unified">
+                <div class="boss-carousel" id="carousel-unified">
+    `;
+    
+    // Рендерим первую категорию по умолчанию
+    const defaultCategoryId = 1;
+    const defaultCategoryData = window.bossCategoriesData[defaultCategoryId];
+    
+    if (defaultCategoryData && defaultCategoryData.bosses) {
+        defaultCategoryData.bosses.forEach((bossData) => {
             const boss = bossData.boss;
             const bossId = boss.id;
             const bossName = boss.title;
@@ -3760,13 +3785,13 @@ function renderBossList(categoriesData) {
                 </div>
             `;
         });
-        
-        html += `
-                    </div>
+    }
+    
+    html += `
                 </div>
             </div>
-        `;
-    });
+        </div>
+    `;
     
     // Карусель для порядка атаки
     html += `
@@ -3786,6 +3811,123 @@ function renderBossList(categoriesData) {
     
     // Инициализируем карусели
     initializeCarousels();
+}
+
+// Переключение категории боссов
+window.switchBossCategory = function(categoryId) {
+    // Обновляем активную кнопку
+    document.querySelectorAll('.category-switch-btn').forEach(btn => {
+        const btnCategoryId = parseInt(btn.dataset.category);
+        if (btnCategoryId === categoryId) {
+            btn.classList.add('active');
+            btn.style.background = '#3390ec';
+            btn.style.color = 'white';
+        } else {
+            btn.classList.remove('active');
+            btn.style.background = 'rgba(255,255,255,0.1)';
+            btn.style.color = 'var(--tg-theme-text-color, #000000)';
+        }
+    });
+    
+    // Получаем данные категории
+    const categoryData = window.bossCategoriesData[categoryId];
+    if (!categoryData || !categoryData.bosses) {
+        console.error(`Категория ${categoryId} не найдена`);
+        return;
+    }
+    
+    const carousel = document.getElementById('carousel-unified');
+    if (!carousel) return;
+    
+    let html = '';
+    
+    categoryData.bosses.forEach((bossData) => {
+        const boss = bossData.boss;
+        const bossId = boss.id;
+        const bossName = boss.title;
+        const baseHp = boss.baseHp;
+        
+        // Получаем количество ключей у босса
+        let keysCount = 0;
+        if (bossKeys[bossId] !== undefined) {
+            keysCount = parseInt(bossKeys[bossId]) || 0;
+        } else if (bossKeys[String(bossId)] !== undefined) {
+            keysCount = parseInt(bossKeys[String(bossId)]) || 0;
+        }
+        
+        // Получаем информацию о требуемых ключах
+        const keysInfo = getBossKeysInfo(bossId);
+        const canAttack = canAttackBoss(bossId);
+        
+        // Получаем доступные режимы боя
+        const availableModes = getAvailableBattleModes(boss);
+        
+        // Определяем стиль карточки
+        const cardStyle = canAttack 
+            ? 'border: 2px solid #28a745; background: linear-gradient(135deg, #2d5a2d 0%, #1e3a1e 100%);' 
+            : 'border: 2px solid #555; background: linear-gradient(135deg, #2d2d2d 0%, #1e1e1e 100%);';
+        
+        // Проверяем, выбран ли этот босс и какой режим выбран
+        const selectedBoss = selectedBosses.find(b => b.id === bossId);
+        const selectedMode = selectedBoss ? selectedBoss.mode : null;
+        const defaultMode = availableModes.find(m => m.key === 'pacansky') ? 'pacansky' : (availableModes.length > 0 ? availableModes[0].key : null);
+        const currentMode = selectedMode || defaultMode;
+        
+        // Вычисляем HP с учетом множителя режима
+        const currentHp = currentMode ? calculateBossHp(baseHp, currentMode) : baseHp;
+        
+        // Формируем селектор режимов
+        let modeSelectorHtml = '';
+        if (availableModes.length > 0) {
+            modeSelectorHtml = `
+                <div class="boss-mode-selector" style="margin-top: 6px;">
+                    <select id="boss-mode-${bossId}" 
+                            class="boss-mode-select form-control" 
+                            style="width: 100%; padding: 4px 6px; font-size: 11px; background: rgba(0,0,0,0.5); color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer;"
+                            onchange="updateBossMode(${bossId}, this.value)"
+                            onclick="event.stopPropagation();">
+                        ${availableModes.map(mode => 
+                            `<option value="${mode.key}" ${mode.key === currentMode ? 'selected' : ''}>${mode.name} ${mode.multiplier}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+            `;
+        }
+        
+        html += `
+            <div class="boss-card" 
+                 data-boss-id="${bossId}" 
+                 data-boss-name="${bossName.replace(/'/g, "\\'")}"
+                 data-selected-mode="${currentMode || ''}"
+                 data-base-hp="${baseHp}"
+                 style="${cardStyle} border-radius: 12px; padding: 10px; margin-right: 12px; min-width: 140px; cursor: pointer; transition: transform 0.2s;"
+                 onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}')">
+                <div class="boss-image" style="width: 100%; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden;">
+                    <img src="${getBossImageUrl(bossId, boss)}" 
+                         alt="${bossName}" 
+                         data-fallback="${getBossImageUrlFallback(bossId, boss)}"
+                         style="max-width: 100%; max-height: 100%; object-fit: contain;"
+                         onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
+                         onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
+                    <span style="font-size: 40px; display: none;">👹</span>
+                </div>
+                <div class="boss-info-card" style="text-align: center; color: #ffffff;">
+                    <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bossName}</div>
+                    <div class="boss-hp" data-base-hp="${baseHp}" style="font-size: 12px; color: #e0e0e0; margin-bottom: 4px;">HP: ${currentHp.toLocaleString()}</div>
+                    <div class="boss-keys" style="font-size: 12px; color: #ffd700; margin-bottom: 6px;">
+                        🔑 ${keysInfo.hasRequirements ? `${keysInfo.required}/${keysInfo.available}` : keysCount}
+                    </div>
+                    ${modeSelectorHtml}
+                    ${canAttack ? '<div class="available-indicator" style="font-size: 10px; color: #28a745; margin-top: 6px;">✓ Доступен</div>' : ''}
+                </div>
+            </div>
+        `;
+    });
+    
+    carousel.innerHTML = html;
+    
+    // Обновляем карточки боссов
+    updateBossCards();
 }
 
 
@@ -3940,7 +4082,7 @@ function updateOrderCarousel() {
                     <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${boss.name}</div>
                     <div style="font-size: 11px; color: #e0e0e0; margin-bottom: 4px;">HP: ${currentHp.toLocaleString()}</div>
                     <div style="font-size: 11px; color: #ffd700; margin-bottom: 4px; font-weight: 600;">${modeName} ${modeMultiplier}</div>
-                    <div style="font-size: 10px; color: #ff6b6b; margin-bottom: 8px; font-weight: 600;">🔫 Оружий: ${boss.weaponsCount || 1}</div>
+                    <div style="font-size: 10px; color: #ff6b6b; margin-bottom: 8px; font-weight: 600;">Атак: ${boss.weaponsCount || 1}</div>
                 </div>
                 <div style="display: flex; gap: 5px; margin-top: 8px; justify-content: center;">
                     <button onclick="moveBossInOrder(${index}, -1); event.stopPropagation();" 
@@ -4023,7 +4165,7 @@ async function attackNextBoss() {
     const weaponsCount = boss.weaponsCount || 1;
     const weaponsUsed = boss.weaponsUsed || 0;
     const currentWeapon = weaponsUsed + 1;
-    updateAttackStatus(`Атака на ${boss.name} (${modeName}) - Оружие ${currentWeapon}/${weaponsCount} (${currentBossIndex + 1}/${selectedBosses.length})...`);
+    updateAttackStatus(`Атака на ${boss.name} (${modeName}) - Атака ${currentWeapon}/${weaponsCount} (${currentBossIndex + 1}/${selectedBosses.length})...`);
     
     try {
         let token = await getAccessToken();
@@ -4075,7 +4217,7 @@ async function attackNextBoss() {
             // НЕ переходим к следующему боссу, остаемся на текущем индексе
             const weaponsUsed = boss.weaponsUsed || 0;
             const weaponsCount = boss.weaponsCount || 1;
-            updateAttackStatus(`⚔️ Бой с ${boss.name} уже активен. Проверка статуса через bootstrap... (Оружие ${weaponsUsed + 1}/${weaponsCount})`);
+            updateAttackStatus(`⚔️ Бой с ${boss.name} уже активен. Проверка статуса через bootstrap... (Атака ${weaponsUsed + 1}/${weaponsCount})`);
             
             bossAttackInterval = setTimeout(() => {
                 // Проверяем статус через bootstrap вместо повторной атаки
@@ -4135,7 +4277,7 @@ async function attackNextBoss() {
                 // Если бой уже завершен сразу после start-attack, проверяем награду через bootstrap
                 const weaponsUsed = boss.weaponsUsed || 0;
                 const weaponsCount = boss.weaponsCount || 1;
-                updateAttackStatus(`⚔️ Бой с ${boss.name} завершен. Проверка награды через bootstrap... (Оружие ${weaponsUsed + 1}/${weaponsCount})`);
+                updateAttackStatus(`⚔️ Бой с ${boss.name} завершен. Проверка награды через bootstrap... (Атака ${weaponsUsed + 1}/${weaponsCount})`);
                 
                 // Проверяем статус через bootstrap сразу
                 bossAttackInterval = setTimeout(() => {
@@ -4146,7 +4288,7 @@ async function attackNextBoss() {
                 // НЕ переходим к следующему боссу, остаемся на текущем
                 const weaponsUsed = boss.weaponsUsed || 0;
                 const weaponsCount = boss.weaponsCount || 1;
-                updateAttackStatus(`⚔️ Бой с ${boss.name} начат. Проверка статуса через bootstrap... (Оружие ${weaponsUsed + 1}/${weaponsCount})`);
+                updateAttackStatus(`⚔️ Бой с ${boss.name} начат. Проверка статуса через bootstrap... (Атака ${weaponsUsed + 1}/${weaponsCount})`);
                 
                 // Проверяем статус через bootstrap через 5 секунд
                 bossAttackInterval = setTimeout(() => {
@@ -4267,18 +4409,18 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
                     const weaponsCount = boss.weaponsCount || 1;
                     const weaponsUsed = boss.weaponsUsed || 0;
                     
-                    console.log(`🔫 Оружие ${weaponsUsed}/${weaponsCount} использовано для ${boss.name}`);
+                    console.log(`Атака ${weaponsUsed}/${weaponsCount} завершена для ${boss.name}`);
                     
-                    // Если еще есть оружия, начинаем следующую атаку
+                    // Если еще есть атаки, начинаем следующую
                     if (weaponsUsed < weaponsCount) {
-                        updateAttackStatus(`🔫 Оружие ${weaponsUsed}/${weaponsCount} завершено. Начинаем атаку оружием ${weaponsUsed + 1}/${weaponsCount}...`);
+                        updateAttackStatus(`Атака ${weaponsUsed}/${weaponsCount} завершена. Начинаем атаку ${weaponsUsed + 1}/${weaponsCount}...`);
                         // Небольшая задержка перед следующей атакой
                         setTimeout(() => {
                             attackNextBoss();
                         }, 1000);
                     } else {
-                        // Все оружия использованы - удаляем босса и переходим к следующему
-                        updateAttackStatus(`✅ Все оружия (${weaponsCount}) использованы для ${boss.name}. Переход к следующему боссу...`);
+                        // Все атаки использованы - удаляем босса и переходим к следующему
+                        updateAttackStatus(`✅ Все атаки (${weaponsCount}) завершены для ${boss.name}. Переход к следующему боссу...`);
                         if (currentBossIndex < selectedBosses.length) {
                             selectedBosses.splice(currentBossIndex, 1);
                             updateOrderCarousel();
@@ -4306,7 +4448,7 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
             } catch (error) {
                 console.error('Ошибка сбора награды:', error);
                 updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
-                // При ошибке сбора награды все равно переходим к следующему оружию или боссу
+                // При ошибке сбора награды все равно переходим к следующей атаке или боссу
                 if (boss) {
                     boss.weaponsUsed = (boss.weaponsUsed || 0) + 1;
                     const weaponsCount = boss.weaponsCount || 1;
@@ -4338,7 +4480,7 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
             // Награда еще не готова - проверяем снова через 5 секунд
             const weaponsUsed = boss ? (boss.weaponsUsed || 0) : 0;
             const weaponsCount = boss ? (boss.weaponsCount || 1) : 1;
-            updateAttackStatus(`⚔️ Бой с ${boss.name} продолжается... (Оружие ${weaponsUsed + 1}/${weaponsCount})`);
+            updateAttackStatus(`⚔️ Бой с ${boss.name} продолжается... (Атака ${weaponsUsed + 1}/${weaponsCount})`);
             
             bossAttackInterval = setTimeout(() => {
                 checkBossBattleStatus(bossId, mode, sessionId);
