@@ -220,7 +220,17 @@
         <!-- Кнопка настроек внизу экрана -->
         <div class="settings-button-container">
             <button class="btn btn-secondary" onclick="toggleSettings()" id="settings-toggle-btn">⚙️ Настройки</button>
+            <button class="btn btn-secondary" onclick="toggleDebugLogs()" id="debug-logs-btn" style="margin-left: 10px;">🐛 Логи</button>
         </div>
+    </div>
+    
+    <!-- Панель отладки (логи) -->
+    <div id="debug-logs-panel" style="display: none; position: fixed; bottom: 60px; left: 0; right: 0; background: rgba(0,0,0,0.95); color: #fff; padding: 10px; max-height: 300px; overflow-y: auto; z-index: 10000; font-size: 11px; font-family: monospace; border-top: 2px solid #3390ec;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <strong>🐛 Логи отладки</strong>
+            <button onclick="clearDebugLogs()" style="background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Очистить</button>
+        </div>
+        <div id="debug-logs-content" style="max-height: 250px; overflow-y: auto;"></div>
     </div>
     
     <!-- Таббар внизу экрана (вне контейнера для правильного позиционирования) -->

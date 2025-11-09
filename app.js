@@ -7,6 +7,85 @@ if (window.Telegram && window.Telegram.WebApp) {
     console.error('Telegram WebApp не доступен! Убедитесь, что Mini App открыт через Telegram');
 }
 
+// Перехватываем console.log для отображения в панели отладки
+const debugLogs = [];
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+const originalConsoleWarn = console.warn;
+
+function addDebugLog(type, ...args) {
+    const timestamp = new Date().toLocaleTimeString();
+    const message = args.map(arg => {
+        if (typeof arg === 'object') {
+            try {
+                return JSON.stringify(arg, null, 2);
+            } catch {
+                return String(arg);
+            }
+        }
+        return String(arg);
+    }).join(' ');
+    
+    debugLogs.push({ type, timestamp, message });
+    
+    // Ограничиваем количество логов (последние 100)
+    if (debugLogs.length > 100) {
+        debugLogs.shift();
+    }
+    
+    // Обновляем панель, если она видна
+    updateDebugLogsPanel();
+}
+
+console.log = function(...args) {
+    originalConsoleLog.apply(console, args);
+    addDebugLog('log', ...args);
+};
+
+console.error = function(...args) {
+    originalConsoleError.apply(console, args);
+    addDebugLog('error', ...args);
+};
+
+console.warn = function(...args) {
+    originalConsoleWarn.apply(console, args);
+    addDebugLog('warn', ...args);
+};
+
+function updateDebugLogsPanel() {
+    const panel = document.getElementById('debug-logs-content');
+    if (!panel) return;
+    
+    const visible = document.getElementById('debug-logs-panel')?.style.display !== 'none';
+    if (!visible) return;
+    
+    panel.innerHTML = debugLogs.slice(-50).map(log => {
+        const color = log.type === 'error' ? '#ff4444' : log.type === 'warn' ? '#ffaa00' : '#00ff00';
+        return `<div style="color: ${color}; margin-bottom: 4px; word-break: break-word;">
+            <span style="color: #888;">[${log.timestamp}]</span> ${log.message}
+        </div>`;
+    }).join('');
+    
+    // Прокручиваем вниз
+    panel.scrollTop = panel.scrollHeight;
+}
+
+window.toggleDebugLogs = function() {
+    const panel = document.getElementById('debug-logs-panel');
+    if (panel) {
+        const isVisible = panel.style.display !== 'none';
+        panel.style.display = isVisible ? 'none' : 'block';
+        if (!isVisible) {
+            updateDebugLogsPanel();
+        }
+    }
+};
+
+window.clearDebugLogs = function() {
+    debugLogs.length = 0;
+    updateDebugLogsPanel();
+};
+
 // Версия Mini App (для проверки обновлений)
 const APP_VERSION = '2.0.0';
 
@@ -3396,10 +3475,15 @@ function getAvailableBattleModes(bossData) {
 
 // Информация о режимах комбо
 const COMBO_MODE_INFO = {
-    'pacansky': { name: 'пац', key: 'pacansky' },
-    'blotnoy': { name: 'Блат', key: 'blotnoy' },
-    'avtoritetny': { name: 'Авто', key: 'avtoritetny' }
+    'pacansky': { name: 'пац', key: 'pacansky', color: '#28a745' }, // зеленый
+    'blotnoy': { name: 'Блат', key: 'blotnoy', color: '#ffc107' }, // желтый
+    'avtoritetny': { name: 'Авто', key: 'avtoritetny', color: '#dc3545' } // красный
 };
+
+// Получение цвета для режима комбо
+function getComboModeColor(comboModeKey) {
+    return COMBO_MODE_INFO[comboModeKey]?.color || '#888';
+}
 
 // Получение доступных режимов комбо для босса
 function getAvailableComboModes(bossData) {
@@ -3652,6 +3736,9 @@ window.loadBossList = async function loadBossList() {
                 if (response.ok) {
                     const data = await response.json();
                     console.log(`✅ Категория ${categoryId} загружена:`, data.success, data.bosses?.length || 0, 'боссов');
+                    if (data.success && data.bosses && data.bosses.length > 0) {
+                        console.log(`   📋 Первый босс: ${data.bosses[0].boss?.title || 'N/A'} (ID: ${data.bosses[0].boss?.id || 'N/A'})`);
+                    }
                     return data;
                 } else {
                     const errorText = await response.text();
@@ -3929,8 +4016,8 @@ function renderBossList(categoriesData) {
             // По умолчанию выбираем "pacansky", если он доступен
             const defaultMode = availableModes.find(m => m.key === 'pacansky') ? 'pacansky' : (availableModes.length > 0 ? availableModes[0].key : null);
             const currentMode = selectedMode || defaultMode;
-            // По умолчанию выбираем первый доступный режим комбо
-            const defaultComboMode = availableComboModes.length > 0 ? availableComboModes[0].key : null;
+            // По умолчанию выбираем "pacansky" для комбо, если он доступен
+            const defaultComboMode = availableComboModes.find(m => m.key === 'pacansky') ? 'pacansky' : (availableComboModes.length > 0 ? availableComboModes[0].key : null);
             const currentComboMode = selectedComboMode || defaultComboMode;
             
             // Вычисляем HP с учетом множителя режима
@@ -3954,6 +4041,18 @@ function renderBossList(categoriesData) {
                 `;
             }
             
+            // Формируем отображение текущего режима комбо
+            let currentComboModeDisplay = '';
+            if (currentComboMode && COMBO_MODE_INFO[currentComboMode]) {
+                const comboColor = getComboModeColor(currentComboMode);
+                const comboName = COMBO_MODE_INFO[currentComboMode].name;
+                currentComboModeDisplay = `
+                    <div class="boss-combo-mode-display" id="boss-combo-mode-display-${bossId}" style="font-size: 11px; color: ${comboColor}; margin-top: 4px; margin-bottom: 4px; font-weight: 600;">
+                        Комбо: ${comboName}
+                    </div>
+                `;
+            }
+            
             // Формируем селектор режимов комбо
             let comboModeSelectorHtml = '';
             if (availableComboModes.length > 0) {
@@ -3964,7 +4063,6 @@ function renderBossList(categoriesData) {
                                 style="width: 100%; padding: 4px 6px; font-size: 10px; background: rgba(0,0,0,0.5); color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer;"
                                 onchange="updateBossComboMode(${bossId}, this.value)"
                                 onclick="event.stopPropagation();">
-                            <option value="">Без комбо</option>
                             ${availableComboModes.map(mode => 
                                 `<option value="${mode.key}" ${mode.key === currentComboMode ? 'selected' : ''}>Комбо: ${mode.name}</option>`
                             ).join('')}
@@ -3982,11 +4080,11 @@ function renderBossList(categoriesData) {
                      style="${cardStyle} border-radius: 12px; padding: 10px; margin-right: 12px; min-width: 140px; cursor: pointer; transition: transform 0.2s;"
                      onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}')">
                     <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px auto; overflow: hidden; flex-shrink: 0;">
-                        <img src="${getBossImageUrl(bossId, boss)}" 
+                        <img src="${boss.imageUrl || boss.image || `images/${bossId}.png`}" 
                              alt="${bossName}" 
-                             data-fallback="${getBossImageUrlFallback(bossId, boss)}"
+                             data-fallback="${boss.imageUrl || boss.image || ''}"
                              style="max-width: 100%; max-height: 100%; object-fit: contain;"
-                             onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
+                             onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else if(this.src !== 'images/${bossId}.png') { this.src = 'images/${bossId}.png'; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
                              onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
                         <span style="font-size: 40px; display: none;">👹</span>
                     </div>
@@ -3997,6 +4095,7 @@ function renderBossList(categoriesData) {
                             🔑 ${keysInfo.hasRequirements ? `${keysInfo.required}/${keysInfo.available}` : keysCount}
                         </div>
                         ${modeSelectorHtml}
+                        ${currentComboModeDisplay}
                         ${comboModeSelectorHtml}
                         ${canAttack ? '<div class="available-indicator" style="font-size: 10px; color: #28a745; margin-top: 6px;">✓ Доступен</div>' : ''}
                     </div>
@@ -4040,6 +4139,7 @@ function renderBossList(categoriesData) {
     
     console.log('📝 HTML вставлен в контейнер, длина:', html.length);
     console.log('📝 HTML содержит карусель:', html.includes('carousel-unified'));
+    console.log('📝 HTML содержит карточки боссов:', html.includes('boss-card'));
     
     // Небольшая задержка для того, чтобы DOM обновился
     setTimeout(() => {
@@ -4049,9 +4149,14 @@ function renderBossList(categoriesData) {
         if (carouselContainer) {
             carouselContainer.style.display = 'block';
             carouselContainer.style.width = '100%';
+            carouselContainer.style.visibility = 'visible';
+            carouselContainer.style.opacity = '1';
             console.log('✅ Контейнер карусели настроен');
         } else {
             console.error('❌ Контейнер карусели не найден!');
+            console.error('   Попытка найти через другой селектор...');
+            const altContainer = document.querySelector('.boss-carousel-container');
+            console.error('   Альтернативный контейнер:', !!altContainer);
         }
         
         // Убеждаемся, что карусель видна и правильно стилизована
@@ -4067,8 +4172,17 @@ function renderBossList(categoriesData) {
             carousel.style.overflowY = 'hidden';
             carousel.style.minHeight = '200px';
             carousel.style.width = '100%';
+            carousel.style.visibility = 'visible';
+            carousel.style.opacity = '1';
             console.log('✅ Карусель настроена, содержимое:', carousel.innerHTML.length, 'символов');
-            console.log('✅ Количество карточек боссов:', carousel.querySelectorAll('.boss-card').length);
+            const bossCards = carousel.querySelectorAll('.boss-card');
+            console.log('✅ Количество карточек боссов:', bossCards.length);
+            if (bossCards.length === 0) {
+                console.error('❌ Карточки боссов не найдены в карусели!');
+                console.error('   Содержимое карусели:', carousel.innerHTML.substring(0, 500));
+            } else {
+                console.log('✅ Первая карточка:', bossCards[0].textContent?.substring(0, 50));
+            }
         } else {
             console.error('❌ Карусель не найдена!');
         }
@@ -4186,6 +4300,18 @@ window.switchBossCategory = function(categoryId) {
             `;
         }
         
+        // Формируем отображение текущего режима комбо
+        let currentComboModeDisplay = '';
+        if (currentComboMode && COMBO_MODE_INFO[currentComboMode]) {
+            const comboColor = getComboModeColor(currentComboMode);
+            const comboName = COMBO_MODE_INFO[currentComboMode].name;
+            currentComboModeDisplay = `
+                <div class="boss-combo-mode-display" id="boss-combo-mode-display-${bossId}" style="font-size: 11px; color: ${comboColor}; margin-top: 4px; margin-bottom: 4px; font-weight: 600;">
+                    Комбо: ${comboName}
+                </div>
+            `;
+        }
+        
         // Формируем селектор режимов комбо
         let comboModeSelectorHtml = '';
         if (availableComboModes.length > 0) {
@@ -4196,7 +4322,6 @@ window.switchBossCategory = function(categoryId) {
                             style="width: 100%; padding: 4px 6px; font-size: 10px; background: rgba(0,0,0,0.5); color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer;"
                             onchange="updateBossComboMode(${bossId}, this.value)"
                             onclick="event.stopPropagation();">
-                        <option value="">Без комбо</option>
                         ${availableComboModes.map(mode => 
                             `<option value="${mode.key}" ${mode.key === currentComboMode ? 'selected' : ''}>Комбо: ${mode.name}</option>`
                         ).join('')}
@@ -4214,11 +4339,11 @@ window.switchBossCategory = function(categoryId) {
                  style="${cardStyle} border-radius: 12px; padding: 10px; margin-right: 12px; min-width: 140px; cursor: pointer; transition: transform 0.2s;"
                  onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}')">
                 <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden; flex-shrink: 0;">
-                    <img src="${getBossImageUrl(bossId, boss)}" 
+                    <img src="${boss.imageUrl || boss.image || `images/${bossId}.png`}" 
                          alt="${bossName}" 
-                         data-fallback="${getBossImageUrlFallback(bossId, boss)}"
+                         data-fallback="${boss.imageUrl || boss.image || ''}"
                          style="max-width: 100%; max-height: 100%; object-fit: contain;"
-                         onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
+                         onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else if(this.src !== 'images/${bossId}.png') { this.src = 'images/${bossId}.png'; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
                          onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
                     <span style="font-size: 40px; display: none;">👹</span>
                 </div>
@@ -4229,6 +4354,7 @@ window.switchBossCategory = function(categoryId) {
                         🔑 ${keysInfo.hasRequirements ? `${keysInfo.required}/${keysInfo.available}` : keysCount}
                     </div>
                     ${modeSelectorHtml}
+                    ${currentComboModeDisplay}
                     ${comboModeSelectorHtml}
                     ${canAttack ? '<div class="available-indicator" style="font-size: 10px; color: #28a745; margin-top: 6px;">✓ Доступен</div>' : ''}
                 </div>
@@ -4307,11 +4433,45 @@ window.updateBossComboMode = function(bossId, comboMode) {
         return;
     }
     
+    // Если режим комбо не указан или пустая строка, устанавливаем по умолчанию "pacansky"
+    if (!comboMode) {
+        const availableComboModes = bossData.availableComboModes || getAvailableComboModes(bossData);
+        const pacanskyComboMode = availableComboModes.find(m => m.key === 'pacansky');
+        comboMode = pacanskyComboMode ? pacanskyComboMode.key : (availableComboModes.length > 0 ? availableComboModes[0].key : null);
+    }
+    
     // Обновляем data-selected-combo-mode в карточке
     // Это влияет только на будущие добавления босса, не на уже добавленные в порядке атаки
     const card = document.querySelector(`.boss-card[data-boss-id="${bossId}"]`);
     if (card) {
         card.dataset.selectedComboMode = comboMode || '';
+        
+        // Обновляем отображение режима комбо в карточке
+        const comboModeDisplay = card.querySelector(`#boss-combo-mode-display-${bossId}`);
+        if (comboModeDisplay) {
+            if (comboMode && COMBO_MODE_INFO[comboMode]) {
+                const comboColor = getComboModeColor(comboMode);
+                const comboName = COMBO_MODE_INFO[comboMode].name;
+                comboModeDisplay.textContent = `Комбо: ${comboName}`;
+                comboModeDisplay.style.color = comboColor;
+                comboModeDisplay.style.display = 'block';
+            } else {
+                comboModeDisplay.style.display = 'none';
+            }
+        } else if (comboMode && COMBO_MODE_INFO[comboMode]) {
+            // Если элемент отображения не существует, создаем его
+            const comboColor = getComboModeColor(comboMode);
+            const comboName = COMBO_MODE_INFO[comboMode].name;
+            const comboModeSelector = card.querySelector(`#boss-combo-mode-${bossId}`);
+            if (comboModeSelector && comboModeSelector.parentElement) {
+                const displayElement = document.createElement('div');
+                displayElement.id = `boss-combo-mode-display-${bossId}`;
+                displayElement.className = 'boss-combo-mode-display';
+                displayElement.style.cssText = 'font-size: 11px; color: ' + comboColor + '; margin-top: 4px; margin-bottom: 4px; font-weight: 600;';
+                displayElement.textContent = `Комбо: ${comboName}`;
+                comboModeSelector.parentElement.insertBefore(displayElement, comboModeSelector);
+            }
+        }
     }
     
     // НЕ обновляем уже добавленные боссы в порядке атаки
@@ -4360,6 +4520,13 @@ window.toggleBossSelection = function(bossId, bossName, mode = null) {
             const pacanskyMode = availableModes.find(m => m.key === 'pacansky');
             selectedMode = pacanskyMode ? pacanskyMode.key : (availableModes.length > 0 ? availableModes[0].key : null);
         }
+    }
+    
+    // Если режим комбо не найден, устанавливаем по умолчанию "pacansky"
+    if (!selectedComboMode) {
+        const availableComboModes = bossData.availableComboModes || getAvailableComboModes(bossData);
+        const pacanskyComboMode = availableComboModes.find(m => m.key === 'pacansky');
+        selectedComboMode = pacanskyComboMode ? pacanskyComboMode.key : (availableComboModes.length > 0 ? availableComboModes[0].key : null);
     }
     
     if (!selectedMode) {
@@ -4415,6 +4582,7 @@ function updateOrderCarousel() {
         const modeName = boss.mode ? (BATTLE_MODE_INFO[boss.mode]?.name || boss.mode) : 'Не выбран';
         const modeMultiplier = boss.mode ? (BATTLE_MODE_INFO[boss.mode]?.multiplier || '') : '';
         const comboModeName = boss.comboMode ? (COMBO_MODE_INFO[boss.comboMode]?.name || boss.comboMode) : null;
+        const comboModeColor = boss.comboMode ? getComboModeColor(boss.comboMode) : '#888';
         
         // Получаем доступные режимы комбо для этого босса
         const availableComboModes = bossData ? (bossData.availableComboModes || getAvailableComboModes(bossData)) : [];
@@ -4422,24 +4590,6 @@ function updateOrderCarousel() {
         // Вычисляем HP с учетом множителя режима
         const baseHp = bossData ? bossData.baseHp : 0;
         const currentHp = boss.mode ? calculateBossHp(baseHp, boss.mode) : baseHp;
-        
-        // Формируем селектор режимов комбо для порядка атаки
-        let comboModeSelectorHtml = '';
-        if (availableComboModes.length > 0) {
-            comboModeSelectorHtml = `
-                <div style="margin-top: 4px;">
-                    <select id="order-combo-mode-${index}" 
-                            style="width: 100%; padding: 3px 5px; font-size: 9px; background: rgba(0,0,0,0.5); color: #ffffff; border: 1px solid #555; border-radius: 4px; cursor: pointer;"
-                            onchange="updateBossComboModeInOrder(${index}, this.value)"
-                            onclick="event.stopPropagation();">
-                        <option value="">Без комбо</option>
-                        ${availableComboModes.map(mode => 
-                            `<option value="${mode.key}" ${mode.key === boss.comboMode ? 'selected' : ''}>Комбо: ${mode.name}</option>`
-                        ).join('')}
-                    </select>
-                </div>
-            `;
-        }
         
         html += `
             <div class="boss-card-order" 
@@ -4459,8 +4609,7 @@ function updateOrderCarousel() {
                     <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${boss.name}</div>
                     <div style="font-size: 11px; color: #e0e0e0; margin-bottom: 4px;">HP: ${currentHp.toLocaleString()}</div>
                     <div style="font-size: 11px; color: #ffd700; margin-bottom: 4px; font-weight: 600;">Режим: ${modeName} ${modeMultiplier}</div>
-                    ${comboModeName ? `<div style="font-size: 10px; color: #ff9800; margin-bottom: 4px; font-weight: 600;">Комбо: ${comboModeName}</div>` : '<div style="font-size: 10px; color: #888; margin-bottom: 4px;">Комбо: нет</div>'}
-                    ${comboModeSelectorHtml}
+                    ${comboModeName ? `<div style="font-size: 10px; color: ${comboModeColor}; margin-bottom: 4px; font-weight: 600;">Комбо: ${comboModeName}</div>` : '<div style="font-size: 10px; color: #888; margin-bottom: 4px;">Комбо: нет</div>'}
                     <div style="font-size: 10px; color: #ff6b6b; margin-bottom: 8px; font-weight: 600;">Атак: ${boss.weaponsCount || 1}</div>
                 </div>
                 <div style="display: flex; gap: 5px; margin-top: 8px; justify-content: center;">
@@ -4504,7 +4653,16 @@ window.updateBossComboModeInOrder = function(index, comboMode) {
     if (index < 0 || index >= selectedBosses.length) return;
     
     const boss = selectedBosses[index];
-    const newComboMode = comboMode || null;
+    // Если режим комбо не указан или пустая строка, устанавливаем по умолчанию "pacansky"
+    let newComboMode = comboMode || null;
+    if (!newComboMode) {
+        const bossData = window.allBosses.find(b => b.id === boss.id);
+        if (bossData) {
+            const availableComboModes = bossData.availableComboModes || getAvailableComboModes(bossData);
+            const pacanskyComboMode = availableComboModes.find(m => m.key === 'pacansky');
+            newComboMode = pacanskyComboMode ? pacanskyComboMode.key : (availableComboModes.length > 0 ? availableComboModes[0].key : null);
+        }
+    }
     
     // Если режим комбо не изменился, ничего не делаем
     if (boss.comboMode === newComboMode) {
