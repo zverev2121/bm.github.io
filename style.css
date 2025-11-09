@@ -597,6 +597,12 @@ header h1 {
     display: none !important;
 }
 
+/* Защита от закрытия при скролле на вкладке "Атака боссов" */
+#tab-boss-attack {
+    touch-action: pan-y !important;
+    -webkit-overflow-scrolling: touch;
+}
+
 /* Карусели боссов */
 .boss-carousel-container {
     width: 100%;

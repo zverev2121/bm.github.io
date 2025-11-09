@@ -3454,8 +3454,10 @@ function preventBossAttackTabClose() {
     
     let touchStartY = 0;
     let touchStartX = 0;
-    let isVerticalScroll = false;
     let touchStartedInBossTab = false;
+    let touchStartTime = 0;
+    let lastTouchY = 0;
+    let lastTouchX = 0;
     
     // Функция для проверки, активна ли вкладка "Атака боссов"
     function isBossAttackTabActive() {
@@ -3465,7 +3467,14 @@ function preventBossAttackTabClose() {
         return style.display !== 'none';
     }
     
+    // Функция для проверки, находится ли элемент внутри вкладки "Атака боссов"
+    function isElementInBossTab(element) {
+        if (!element) return false;
+        return bossAttackTab.contains(element);
+    }
+    
     // Обработчик на уровне документа для предотвращения закрытия страницы
+    // Используем capture phase для более раннего перехвата событий
     const handleTouchStart = (e) => {
         // Проверяем, активна ли вкладка "Атака боссов"
         if (!isBossAttackTabActive()) {
@@ -3473,15 +3482,7 @@ function preventBossAttackTabClose() {
             return;
         }
         
-        // Проверяем, что событие произошло внутри вкладки "Атака боссов"
         const target = e.target;
-        const isInBossTab = bossAttackTab.contains(target) || 
-                           target.closest('.boss-carousel') && bossAttackTab.contains(target.closest('.boss-carousel'));
-        
-        if (!isInBossTab) {
-            touchStartedInBossTab = false;
-            return;
-        }
         
         // Если это карусель, не мешаем нативному скроллу
         const isInCarousel = target.closest('.boss-carousel');
@@ -3490,19 +3491,22 @@ function preventBossAttackTabClose() {
             return; // Позволяем нативному скроллу карусели работать
         }
         
-        touchStartedInBossTab = true;
-        touchStartY = e.touches[0].pageY;
-        touchStartX = e.touches[0].pageX;
-        isVerticalScroll = false;
-    };
-    
-    const handleTouchMove = (e) => {
-        // Если тач не начался во вкладке "Атака боссов", не обрабатываем
-        if (!touchStartedInBossTab) {
+        // Проверяем, что событие произошло внутри вкладки "Атака боссов"
+        if (!isElementInBossTab(target)) {
+            touchStartedInBossTab = false;
             return;
         }
         
-        // Проверяем, активна ли вкладка "Атака боссов"
+        touchStartedInBossTab = true;
+        touchStartY = e.touches[0].pageY;
+        touchStartX = e.touches[0].pageX;
+        lastTouchY = touchStartY;
+        lastTouchX = touchStartX;
+        touchStartTime = Date.now();
+    };
+    
+    const handleTouchMove = (e) => {
+        // Если вкладка не активна, не обрабатываем
         if (!isBossAttackTabActive()) {
             touchStartedInBossTab = false;
             return;
@@ -3515,33 +3519,76 @@ function preventBossAttackTabClose() {
             return; // Позволяем нативному скроллу карусели работать
         }
         
-        const touch = e.touches[0];
-        const deltaY = touch.pageY - touchStartY;
-        const deltaX = Math.abs(touch.pageX - touchStartX);
-        
-        // Определяем, что это вертикальный скролл
-        if (Math.abs(deltaY) > deltaX && Math.abs(deltaY) > 5) {
-            isVerticalScroll = true;
+        // Дополнительная проверка: если событие происходит в области вкладки,
+        // но тач не начался во вкладке, все равно проверяем (для быстрого скролла)
+        if (!touchStartedInBossTab) {
+            // Проверяем, находится ли текущая позиция тача в области вкладки
+            if (e.touches && e.touches[0]) {
+                const touch = e.touches[0];
+                const elementAtPoint = document.elementFromPoint(touch.clientX, touch.clientY);
+                if (elementAtPoint && isElementInBossTab(elementAtPoint)) {
+                    // Если тач в области вкладки, начинаем отслеживать
+                    touchStartedInBossTab = true;
+                    touchStartY = touch.pageY;
+                    touchStartX = touch.pageX;
+                    lastTouchY = touchStartY;
+                    lastTouchX = touchStartX;
+                } else {
+                    return;
+                }
+            } else {
+                return;
+            }
         }
+        
+        if (!e.touches || !e.touches[0]) {
+            return;
+        }
+        
+        const touch = e.touches[0];
+        const currentY = touch.pageY;
+        const currentX = touch.pageX;
+        
+        // Используем как начальную позицию, так и последнюю позицию для более точного определения
+        const deltaYFromStart = currentY - touchStartY;
+        const deltaYFromLast = lastTouchY !== 0 ? currentY - lastTouchY : 0;
+        const deltaX = Math.abs(currentX - touchStartX);
+        const absDeltaY = Math.abs(deltaYFromStart);
+        
+        // Обновляем последнюю позицию
+        lastTouchY = currentY;
+        lastTouchX = currentX;
+        
+        // Быстро определяем вертикальный скролл (меньший порог для быстрого определения)
+        // При быстром скролле deltaY может быть большим, поэтому проверяем даже при малых значениях
+        // Также проверяем направление по последнему движению для более быстрого определения
+        const isVertical = absDeltaY > deltaX || (absDeltaY > 2 && deltaX < 10);
+        // Проверяем направление: используем последнее движение, если оно есть, иначе начальное
+        const isScrollingUp = deltaYFromStart > 0 || (deltaYFromLast > 0 && lastTouchY !== 0);
         
         // Если пользователь скроллит вверх и это вертикальный скролл,
         // предотвращаем закрытие страницы Telegram
-        if (isVerticalScroll && deltaY > 0) {
+        // Блокируем даже при малом движении, чтобы предотвратить закрытие при быстром скролле
+        if (isVertical && isScrollingUp) {
             e.preventDefault();
             e.stopPropagation();
+            e.stopImmediatePropagation();
+            return false;
         }
     };
     
     const handleTouchEnd = (e) => {
         touchStartedInBossTab = false;
-        isVerticalScroll = false;
+        lastTouchY = 0;
+        lastTouchX = 0;
     };
     
-    // Добавляем обработчики на уровне документа для перехвата событий
-    document.addEventListener('touchstart', handleTouchStart, { passive: true });
-    document.addEventListener('touchmove', handleTouchMove, { passive: false });
-    document.addEventListener('touchend', handleTouchEnd, { passive: true });
-    document.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    // Добавляем обработчики на уровне документа с capture phase для более раннего перехвата
+    // Используем capture: true для перехвата событий до того, как они достигнут целевого элемента
+    document.addEventListener('touchstart', handleTouchStart, { passive: true, capture: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true, capture: true });
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: true, capture: true });
 }
 
 // Инициализация каруселей (нативный скролл)
@@ -3808,31 +3855,16 @@ async function attackNextBoss() {
             }
         }
         
-        // Парсим ответ
-        let data;
-        try {
-            // Клонируем response перед чтением, чтобы можно было прочитать его несколько раз
-            const responseClone = response.clone();
-            data = await response.json();
-        } catch (e) {
-            // Если ответ не JSON, пробуем получить текст
-            console.error('Ошибка парсинга ответа:', e);
-            const text = await response.text();
-            throw new Error(`Не удалось распарсить ответ: ${text}`);
-        }
+        const data = await response.json();
         
-        // Обработка 400 с "Session already active" - ВАЖНО: проверяем ДО других проверок
-        // НЕ удаляем босса из очереди, остаемся на том же боссе
+        // Обработка 400 с "Session already active"
         if (!response.ok && response.status === 400 && data.message === "Session already active") {
             // Бой еще продолжается, ждем 5 секунд и пробуем напасть снова на того же босса
             // НЕ переходим к следующему боссу, остаемся на текущем индексе
-            // НЕ удаляем босса из очереди
-            console.log(`🔄 Session already active для ${boss.name}, остаемся на том же боссе. Индекс: ${currentBossIndex}, Всего боссов: ${selectedBosses.length}`);
             updateAttackStatus(`⚔️ Бой с ${boss.name} еще продолжается, ждем 5 секунд и попробуем снова...`);
             
             bossAttackInterval = setTimeout(() => {
-                // Повторяем атаку на того же босса (не увеличиваем currentBossIndex, не удаляем босса)
-                console.log(`🔄 Повторная попытка атаки на ${boss.name}, индекс: ${currentBossIndex}`);
+                // Повторяем атаку на того же босса (не увеличиваем currentBossIndex)
                 attackNextBoss();
             }, 5000);
             return;
@@ -4027,30 +4059,12 @@ async function checkBossBattleStatus(bossId, mode, sessionId) {
             }
         }
         
-        // Парсим ответ
-        let data;
-        try {
-            // Клонируем response перед чтением, чтобы можно было прочитать его несколько раз
-            const responseClone = response.clone();
-            data = await response.json();
-        } catch (e) {
-            // Если ответ не JSON, пробуем получить текст
-            console.error('Ошибка парсинга ответа:', e);
-            const text = await response.text();
-            throw new Error(`Не удалось распарсить ответ: ${text}`);
-        }
+        const data = await response.json();
         
-        // Обработка 400 с "Session already active" - ВАЖНО: проверяем ДО других проверок
-        // НЕ удаляем босса из очереди, остаемся на том же боссе
+        // Обработка 400 с "Session already active"
         if (!response.ok && response.status === 400 && data.message === "Session already active") {
             // Бой еще продолжается, ждем 5 секунд и проверяем снова
-            // НЕ удаляем босса из очереди, остаемся на том же боссе
             const boss = selectedBosses[currentBossIndex];
-            if (!boss) {
-                // Если босс уже удален, останавливаем атаку
-                stopBossAutoAttack();
-                return;
-            }
             updateAttackStatus(`⚔️ Бой с ${boss.name} еще продолжается, ждем 5 секунд...`);
             
             bossAttackInterval = setTimeout(() => {
