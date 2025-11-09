@@ -1330,11 +1330,14 @@ async function loadBossInfo() {
                         const session = data.session;
                         const hpPercent = ((session.currentHp / session.maxHp) * 100).toFixed(1);
                         const modeDecoded = decodeMode(session.mode);
-                        const comboModeDecoded = decodeComboMode(session.comboMode);
+                        // Используем selectedComboType, если есть, иначе comboMode
+                        const comboModeKey = session.selectedComboType || session.comboMode;
+                        const comboModeDecoded = comboModeKey ? decodeComboMode(comboModeKey) : null;
                         
                         let comboText = '';
-                        if (comboModeDecoded) {
-                            comboText = `<br>Режим комбо: ${comboModeDecoded}`;
+                        if (comboModeDecoded && comboModeKey) {
+                            const comboColor = getComboModeColor(comboModeKey);
+                            comboText = `<br>Комбо: <span style="color: ${comboColor}; font-weight: 600;">${comboModeDecoded}</span>`;
                         }
                         
                         let timeInfo = '';
@@ -1347,22 +1350,46 @@ async function loadBossInfo() {
                             timeInfo += `<br>Окончание боя: <strong>${endTime}</strong>`;
                         }
                         
-                        // Ищем босса по title для получения картинки
+                        // Получаем иконку босса напрямую из session, без ожидания загрузки всех боссов
                         let bossImageHtml = '';
-                        if (session.title && window.allBosses && window.allBosses.length > 0) {
-                            const currentBoss = window.allBosses.find(b => b.name === session.title);
-                            if (currentBoss) {
-                                bossImageHtml = `
-                                    <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 12px; overflow: hidden; flex-shrink: 0;">
-                                        <img src="${getBossImageUrl(currentBoss.id, currentBoss)}" 
-                                             alt="${session.title}" 
-                                             data-fallback="${getBossImageUrlFallback(currentBoss.id, currentBoss)}"
-                                             style="max-width: 100%; max-height: 100%; object-fit: contain;"
-                                             onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
-                                             onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
-                                        <span style="font-size: 40px; display: none;">👹</span>
-                                    </div>
-                                `;
+                        const bossId = session.bossId || session.id || null;
+                        const imageUrl = session.imageUrl || session.image || null;
+                        
+                        if (bossId || imageUrl) {
+                            // Используем imageUrl из session, если есть, иначе используем локальный путь по ID
+                            const imgSrc = imageUrl || (bossId ? `images/${bossId}.png` : '');
+                            const fallbackSrc = imageUrl || '';
+                            const localImagePath = bossId ? `images/${bossId}.png` : '';
+                            
+                            bossImageHtml = `
+                                <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 12px; overflow: hidden; flex-shrink: 0;">
+                                    <img src="${imgSrc}" 
+                                         alt="${session.title || 'Босс'}" 
+                                         data-fallback="${fallbackSrc}"
+                                         data-local="${localImagePath}"
+                                         style="max-width: 100%; max-height: 100%; object-fit: contain;"
+                                         onerror="const img = this; if(img.dataset.fallback && img.dataset.fallback !== '' && img.src !== img.dataset.fallback) { img.src = img.dataset.fallback; } else if(img.dataset.local && img.dataset.local !== '' && img.src !== img.dataset.local) { img.src = img.dataset.local; } else { img.style.display='none'; if(img.nextElementSibling) img.nextElementSibling.style.display='flex'; }"
+                                         onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
+                                    <span style="font-size: 40px; display: none;">👹</span>
+                                </div>
+                            `;
+                        } else if (session.title) {
+                            // Если нет ID или imageUrl, пытаемся найти в window.allBosses (fallback)
+                            if (window.allBosses && window.allBosses.length > 0) {
+                                const currentBoss = window.allBosses.find(b => b.name === session.title);
+                                if (currentBoss) {
+                                    bossImageHtml = `
+                                        <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 12px; overflow: hidden; flex-shrink: 0;">
+                                            <img src="${getBossImageUrl(currentBoss.id, currentBoss)}" 
+                                                 alt="${session.title}" 
+                                                 data-fallback="${getBossImageUrlFallback(currentBoss.id, currentBoss)}"
+                                                 style="max-width: 100%; max-height: 100%; object-fit: contain;"
+                                                 onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
+                                                 onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
+                                            <span style="font-size: 40px; display: none;">👹</span>
+                                        </div>
+                                    `;
+                                }
                             }
                         }
                         
@@ -1462,11 +1489,14 @@ async function loadBossInfo() {
             const session = data.session;
             const hpPercent = ((session.currentHp / session.maxHp) * 100).toFixed(1);
             const modeDecoded = decodeMode(session.mode);
-            const comboModeDecoded = decodeComboMode(session.comboMode);
+            // Используем selectedComboType, если есть, иначе comboMode
+            const comboModeKey = session.selectedComboType || session.comboMode;
+            const comboModeDecoded = comboModeKey ? decodeComboMode(comboModeKey) : null;
             
             let comboText = '';
-            if (comboModeDecoded) {
-                comboText = `<br>Режим комбо: ${comboModeDecoded}`;
+            if (comboModeDecoded && comboModeKey) {
+                const comboColor = getComboModeColor(comboModeKey);
+                comboText = `<br>Комбо: <span style="color: ${comboColor}; font-weight: 600;">${comboModeDecoded}</span>`;
             }
             
             let timeInfo = '';
@@ -1479,22 +1509,46 @@ async function loadBossInfo() {
                 timeInfo += `<br>Окончание боя: <strong>${endTime}</strong>`;
             }
             
-            // Ищем босса по title для получения картинки
+            // Получаем иконку босса напрямую из session, без ожидания загрузки всех боссов
             let bossImageHtml = '';
-            if (session.title && window.allBosses && window.allBosses.length > 0) {
-                const currentBoss = window.allBosses.find(b => b.name === session.title);
-                if (currentBoss) {
-                    bossImageHtml = `
-                        <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 12px; overflow: hidden; flex-shrink: 0;">
-                            <img src="${getBossImageUrl(currentBoss.id, currentBoss)}" 
-                                 alt="${session.title}" 
-                                 data-fallback="${getBossImageUrlFallback(currentBoss.id, currentBoss)}"
-                                 style="max-width: 100%; max-height: 100%; object-fit: contain;"
-                                 onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
-                                 onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
-                            <span style="font-size: 40px; display: none;">👹</span>
-                        </div>
-                    `;
+            const bossId = session.bossId || session.id || null;
+            const imageUrl = session.imageUrl || session.image || null;
+            
+            if (bossId || imageUrl) {
+                // Используем imageUrl из session, если есть, иначе используем локальный путь по ID
+                const imgSrc = imageUrl || (bossId ? `images/${bossId}.png` : '');
+                const fallbackSrc = imageUrl || '';
+                const localImagePath = bossId ? `images/${bossId}.png` : '';
+                
+                bossImageHtml = `
+                    <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 12px; overflow: hidden; flex-shrink: 0;">
+                        <img src="${imgSrc}" 
+                             alt="${session.title || 'Босс'}" 
+                             data-fallback="${fallbackSrc}"
+                             data-local="${localImagePath}"
+                             style="max-width: 100%; max-height: 100%; object-fit: contain;"
+                             onerror="const img = this; if(img.dataset.fallback && img.dataset.fallback !== '' && img.src !== img.dataset.fallback) { img.src = img.dataset.fallback; } else if(img.dataset.local && img.dataset.local !== '' && img.src !== img.dataset.local) { img.src = img.dataset.local; } else { img.style.display='none'; if(img.nextElementSibling) img.nextElementSibling.style.display='flex'; }"
+                             onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
+                        <span style="font-size: 40px; display: none;">👹</span>
+                    </div>
+                `;
+            } else if (session.title) {
+                // Если нет ID или imageUrl, пытаемся найти в window.allBosses (fallback)
+                if (window.allBosses && window.allBosses.length > 0) {
+                    const currentBoss = window.allBosses.find(b => b.name === session.title);
+                    if (currentBoss) {
+                        bossImageHtml = `
+                            <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 12px; overflow: hidden; flex-shrink: 0;">
+                                <img src="${getBossImageUrl(currentBoss.id, currentBoss)}" 
+                                     alt="${session.title}" 
+                                     data-fallback="${getBossImageUrlFallback(currentBoss.id, currentBoss)}"
+                                     style="max-width: 100%; max-height: 100%; object-fit: contain;"
+                                     onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
+                                     onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
+                                <span style="font-size: 40px; display: none;">👹</span>
+                            </div>
+                        `;
+                    }
                 }
             }
             
@@ -3962,18 +4016,6 @@ function renderBossList(categoriesData) {
                 `;
             }
             
-            // Формируем отображение текущего режима комбо
-            let currentComboModeDisplay = '';
-            if (currentComboMode && COMBO_MODE_INFO[currentComboMode]) {
-                const comboColor = getComboModeColor(currentComboMode);
-                const comboName = COMBO_MODE_INFO[currentComboMode].name;
-                currentComboModeDisplay = `
-                    <div class="boss-combo-mode-display" id="boss-combo-mode-display-${bossId}" style="font-size: 11px; color: ${comboColor}; margin-top: 4px; margin-bottom: 4px; font-weight: 600;">
-                        Комбо: ${comboName}
-                    </div>
-                `;
-            }
-            
             // Формируем селектор режимов комбо
             let comboModeSelectorHtml = '';
             if (availableComboModes.length > 0) {
@@ -4016,7 +4058,6 @@ function renderBossList(categoriesData) {
                             🔑 ${keysInfo.hasRequirements ? `${keysInfo.required}/${keysInfo.available}` : keysCount}
                         </div>
                         ${modeSelectorHtml}
-                        ${currentComboModeDisplay}
                         ${comboModeSelectorHtml}
                         ${canAttack ? '<div class="available-indicator" style="font-size: 10px; color: #28a745; margin-top: 6px;">✓ Доступен</div>' : ''}
                     </div>
@@ -4221,18 +4262,6 @@ window.switchBossCategory = function(categoryId) {
             `;
         }
         
-        // Формируем отображение текущего режима комбо
-        let currentComboModeDisplay = '';
-        if (currentComboMode && COMBO_MODE_INFO[currentComboMode]) {
-            const comboColor = getComboModeColor(currentComboMode);
-            const comboName = COMBO_MODE_INFO[currentComboMode].name;
-            currentComboModeDisplay = `
-                <div class="boss-combo-mode-display" id="boss-combo-mode-display-${bossId}" style="font-size: 11px; color: ${comboColor}; margin-top: 4px; margin-bottom: 4px; font-weight: 600;">
-                    Комбо: ${comboName}
-                </div>
-            `;
-        }
-        
         // Формируем селектор режимов комбо
         let comboModeSelectorHtml = '';
         if (availableComboModes.length > 0) {
@@ -4275,7 +4304,6 @@ window.switchBossCategory = function(categoryId) {
                         🔑 ${keysInfo.hasRequirements ? `${keysInfo.required}/${keysInfo.available}` : keysCount}
                     </div>
                     ${modeSelectorHtml}
-                    ${currentComboModeDisplay}
                     ${comboModeSelectorHtml}
                     ${canAttack ? '<div class="available-indicator" style="font-size: 10px; color: #28a745; margin-top: 6px;">✓ Доступен</div>' : ''}
                 </div>
@@ -4366,33 +4394,6 @@ window.updateBossComboMode = function(bossId, comboMode) {
     const card = document.querySelector(`.boss-card[data-boss-id="${bossId}"]`);
     if (card) {
         card.dataset.selectedComboMode = comboMode || '';
-        
-        // Обновляем отображение режима комбо в карточке
-        const comboModeDisplay = card.querySelector(`#boss-combo-mode-display-${bossId}`);
-        if (comboModeDisplay) {
-            if (comboMode && COMBO_MODE_INFO[comboMode]) {
-                const comboColor = getComboModeColor(comboMode);
-                const comboName = COMBO_MODE_INFO[comboMode].name;
-                comboModeDisplay.textContent = `Комбо: ${comboName}`;
-                comboModeDisplay.style.color = comboColor;
-                comboModeDisplay.style.display = 'block';
-            } else {
-                comboModeDisplay.style.display = 'none';
-            }
-        } else if (comboMode && COMBO_MODE_INFO[comboMode]) {
-            // Если элемент отображения не существует, создаем его
-            const comboColor = getComboModeColor(comboMode);
-            const comboName = COMBO_MODE_INFO[comboMode].name;
-            const comboModeSelector = card.querySelector(`#boss-combo-mode-${bossId}`);
-            if (comboModeSelector && comboModeSelector.parentElement) {
-                const displayElement = document.createElement('div');
-                displayElement.id = `boss-combo-mode-display-${bossId}`;
-                displayElement.className = 'boss-combo-mode-display';
-                displayElement.style.cssText = 'font-size: 11px; color: ' + comboColor + '; margin-top: 4px; margin-bottom: 4px; font-weight: 600;';
-                displayElement.textContent = `Комбо: ${comboName}`;
-                comboModeSelector.parentElement.insertBefore(displayElement, comboModeSelector);
-            }
-        }
     }
     
     // НЕ обновляем уже добавленные боссы в порядке атаки
