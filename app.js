@@ -3456,8 +3456,17 @@ function canAttackBoss(bossId) {
     return true;
 }
 
+// Флаг для предотвращения множественных одновременных запросов
+let isBossListLoading = false;
+
 // Загрузка списка боссов (глобальная функция)
 window.loadBossList = async function loadBossList() {
+    // Предотвращаем множественные одновременные запросы
+    if (isBossListLoading) {
+        console.log('⏳ loadBossList уже выполняется, пропускаем...');
+        return;
+    }
+    
     const container = document.getElementById('boss-list-container');
     if (!container) {
         console.error('boss-list-container не найден!');
@@ -3471,7 +3480,15 @@ window.loadBossList = async function loadBossList() {
     }
     container.style.display = 'block';
     
+    // Если данные уже загружены, не показываем загрузку
+    if (window.bossCategoriesData && Object.keys(window.bossCategoriesData).length > 0) {
+        console.log('✅ Данные боссов уже загружены, пропускаем загрузку');
+        return;
+    }
+    
     container.innerHTML = '<p class="loading">Загрузка списка боссов...</p>';
+    
+    isBossListLoading = true;
     
     try {
         console.log('=== loadBossList: начало загрузки ===');
@@ -3683,6 +3700,7 @@ window.loadBossList = async function loadBossList() {
             // После рендеринга убеждаемся, что карточки обновлены с актуальными ключами
             setTimeout(() => {
                 updateBossCards();
+                isBossListLoading = false;
             }, 100);
         } else if (category1Data || category2Data) {
             // Если получили только одну категорию, отображаем что есть
@@ -3694,8 +3712,10 @@ window.loadBossList = async function loadBossList() {
             // После рендеринга убеждаемся, что карточки обновлены с актуальными ключами
             setTimeout(() => {
                 updateBossCards();
+                isBossListLoading = false;
             }, 100);
         } else {
+            isBossListLoading = false;
             const errorMsg = lastError?.message || 'Не удалось загрузить список боссов';
             console.error('Не удалось загрузить данные ни с одного эндпоинта');
             console.error('Последняя ошибка:', lastError);
