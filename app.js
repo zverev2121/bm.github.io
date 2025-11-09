@@ -2149,10 +2149,10 @@ async function loadMasterInfo() {
     
     try {
         // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
+        // ВАЖНО: /enter эндпоинт использует GET метод
         let response = await fetch(`${GAME_API_URL}/player/masters/${masterId}/enter`, {
-            method: 'POST',
-            headers: await getApiHeaders(),
-            body: JSON.stringify({})
+            method: 'GET',
+            headers: await getApiHeaders()
         });
         
         // Если получили 401/403, пытаемся обновить токен через initData из БД
@@ -2166,9 +2166,8 @@ async function loadMasterInfo() {
                     // Используем getApiHeaders() для получения актуального токена
                     // Повторяем запрос с новым токеном
                     response = await fetch(`${GAME_API_URL}/player/masters/${masterId}/enter`, {
-                        method: 'POST',
-                        headers: await getApiHeaders(),
-                        body: JSON.stringify({})
+                        method: 'GET',
+                        headers: await getApiHeaders()
                     });
                 }
             }
@@ -2299,10 +2298,12 @@ async function startMasterWalk() {
             
             // POST запрос для работы в мастерской
             // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
+            // ВАЖНО: Для /work эндпоинта НЕ отправляем body
+            const workHeaders = await getApiHeaders();
+            delete workHeaders['Content-Type'];
             let response = await fetch(`${GAME_API_URL}/player/masters/${masterId}/work`, {
                 method: 'POST',
-                headers: await getApiHeaders(),
-                body: JSON.stringify({})
+                headers: workHeaders
             });
             
             // Если получили 401/403, пытаемся обновить токен через initData из БД
@@ -2315,10 +2316,11 @@ async function startMasterWalk() {
                         // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
                         // Используем getApiHeaders() для получения актуального токена
                         // Повторяем запрос с новым токеном
+                        const retryWorkHeaders = await getApiHeaders();
+                        delete retryWorkHeaders['Content-Type'];
                         response = await fetch(`${GAME_API_URL}/player/masters/${masterId}/work`, {
                             method: 'POST',
-                            headers: await getApiHeaders(),
-                            body: JSON.stringify({})
+                            headers: retryWorkHeaders
                         });
                     }
                 }
