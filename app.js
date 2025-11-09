@@ -5206,27 +5206,77 @@ async function collectBossRewards() {
 
 // Маппинг русских названий оружий на API названия
 const WEAPON_MAPPING = {
+    // Финка
     'фин': 'knife',
     'финка': 'knife',
+    'заточка': 'knife',
+    
+    // Самопал
     'пал': 'gunshot',
     'палка': 'gunshot',
+    'паль': 'gunshot', // опечатка
+    'сапомал': 'gunshot',
+    'самопал': 'gunshot',
+    'шмальнуть из самопала': 'gunshot',
+    'шмальнуть из сапомала': 'gunshot',
+    
+    // Яд
     'яд': 'poison',
     'ядов': 'poison',
+    'подкинуть яда': 'poison',
+    'подкинуть яд': 'poison',
+    
+    // Грудь
     'грудь': 'punchchest',
+    'солнышко': 'punchchest',
+    'пыр': 'punchchest',
+    'удар в грудь': 'punchchest',
+    'пыр в солнышко': 'punchchest',
+    
+    // Колено в ухо
     'колено': 'kneeear',
     'ухо': 'kneeear',
+    'коленом': 'kneeear',
+    'коленом в ухо': 'kneeear',
+    
+    // Глаза
     'глаз': 'pokeeyes',
+    'глаза': 'pokeeyes',
+    'в глаз': 'pokeeyes',
+    'пальцы': 'pokeeyes',
+    'пальцем в глаз': 'pokeeyes',
+    'тычок в глаза': 'pokeeyes',
+    'тычок в глаз': 'pokeeyes',
+    
+    // Пах
     'пах': 'kickballs',
-    'блат': 'blotnoy', // режим комбо
-    'пац': 'pacansky',  // режим комбо
-    'авторитетный': 'avtoritetny', // режим комбо
-    'авторитетные': 'avtoritetny'  // режим комбо
+    'в пах': 'kickballs',
+    'удар в пах': 'kickballs',
+    
+    // Режимы комбо (не оружия)
+    'блат': 'blotnoy',
+    'пац': 'pacansky',
+    'авторитетный': 'avtoritetny',
+    'авторитетные': 'avtoritetny'
+};
+
+// Обратный маппинг: API названия -> русские названия для отображения
+const WEAPON_DISPLAY_NAMES = {
+    'knife': 'финка',
+    'gunshot': 'самопал',
+    'poison': 'яд',
+    'punchchest': 'грудь',
+    'kneeear': 'коленом в ухо',
+    'pokeeyes': 'в глаз',
+    'kickballs': 'удар в пах'
 };
 
 // Маппинг режимов комбо
 const COMBO_MODE_MAPPING = {
     'блат': 'blotnoy',
+    'блатной': 'blotnoy',
     'пац': 'pacansky',
+    'пацанский': 'pacansky',
     'авто': 'avtoritetny',
     'авторитетный': 'avtoritetny',
     'авторитетные': 'avtoritetny'
@@ -5240,6 +5290,7 @@ let currentComboWeaponIndex = 0;
 let currentComboBossId = null;
 let currentComboMode = null;
 let currentComboComboMode = null;
+let totalSpentRubles = 0; // Общая сумма потраченных рублей на восстановление
 
 // Очистка RTF-разметки из текста
 function cleanRtfText(text) {
@@ -5395,10 +5446,111 @@ function parseComboFile(text) {
             // Парсим оружия
             const weapons = [];
             for (let i = weaponsStartIndex; i < parts.length; i++) {
-                const weaponName = parts[i].toLowerCase();
+                let weaponName = parts[i].toLowerCase();
+                let skipNext = 0; // Сколько следующих слов пропустить
+                let foundWeapon = false;
+                
+                // Проверяем многословные названия, начиная с самых длинных
+                // "шмальнуть из самопала" (3 слова)
+                if (i + 2 < parts.length && weaponName === 'шмальнуть') {
+                    const nextWord = parts[i + 1].toLowerCase();
+                    const thirdWord = parts[i + 2].toLowerCase();
+                    if (nextWord === 'из' && (thirdWord === 'самопала' || thirdWord === 'сапомала')) {
+                        weaponName = 'шмальнуть из ' + thirdWord;
+                        skipNext = 2;
+                        foundWeapon = true;
+                    }
+                }
+                // "подкинуть яда" или "подкинуть яд" (2 слова)
+                else if (i + 1 < parts.length && weaponName === 'подкинуть') {
+                    const nextWord = parts[i + 1].toLowerCase();
+                    if (nextWord === 'яда' || nextWord === 'яд') {
+                        weaponName = 'подкинуть ' + nextWord;
+                        skipNext = 1;
+                        foundWeapon = true;
+                    }
+                }
+                // "коленом в ухо" (3 слова)
+                else if (i + 2 < parts.length && weaponName === 'коленом') {
+                    const nextWord = parts[i + 1].toLowerCase();
+                    const thirdWord = parts[i + 2].toLowerCase();
+                    if (nextWord === 'в' && thirdWord === 'ухо') {
+                        weaponName = 'коленом в ухо';
+                        skipNext = 2;
+                        foundWeapon = true;
+                    }
+                }
+                // "пальцем в глаз" (3 слова)
+                else if (i + 2 < parts.length && weaponName === 'пальцем') {
+                    const nextWord = parts[i + 1].toLowerCase();
+                    const thirdWord = parts[i + 2].toLowerCase();
+                    if (nextWord === 'в' && (thirdWord === 'глаз' || thirdWord === 'глаза')) {
+                        weaponName = 'пальцем в глаз';
+                        skipNext = 2;
+                        foundWeapon = true;
+                    }
+                }
+                // "тычок в глаза" или "тычок в глаз" (3 слова)
+                else if (i + 2 < parts.length && weaponName === 'тычок') {
+                    const nextWord = parts[i + 1].toLowerCase();
+                    const thirdWord = parts[i + 2].toLowerCase();
+                    if (nextWord === 'в' && (thirdWord === 'глаза' || thirdWord === 'глаз')) {
+                        weaponName = 'тычок в ' + thirdWord;
+                        skipNext = 2;
+                        foundWeapon = true;
+                    }
+                }
+                // "удар в пах" (3 слова)
+                else if (i + 2 < parts.length && weaponName === 'удар') {
+                    const nextWord = parts[i + 1].toLowerCase();
+                    const thirdWord = parts[i + 2].toLowerCase();
+                    if (nextWord === 'в' && thirdWord === 'пах') {
+                        weaponName = 'удар в пах';
+                        skipNext = 2;
+                        foundWeapon = true;
+                    } else if (nextWord === 'в' && thirdWord === 'грудь') {
+                        weaponName = 'удар в грудь';
+                        skipNext = 2;
+                        foundWeapon = true;
+                    }
+                }
+                // "пыр в солнышко" (3 слова)
+                else if (i + 2 < parts.length && weaponName === 'пыр') {
+                    const nextWord = parts[i + 1].toLowerCase();
+                    const thirdWord = parts[i + 2].toLowerCase();
+                    if (nextWord === 'в' && thirdWord === 'солнышко') {
+                        weaponName = 'пыр в солнышко';
+                        skipNext = 2;
+                        foundWeapon = true;
+                    }
+                }
+                // "в глаз", "в пах" (2 слова)
+                else if (i + 1 < parts.length && weaponName === 'в') {
+                    const nextWord = parts[i + 1].toLowerCase();
+                    if (nextWord === 'глаз' || nextWord === 'глаза') {
+                        weaponName = 'в глаз';
+                        skipNext = 1;
+                        foundWeapon = true;
+                    } else if (nextWord === 'пах') {
+                        weaponName = 'в пах';
+                        skipNext = 1;
+                        foundWeapon = true;
+                    }
+                }
+                
+                // Проверяем в маппинге
                 const apiWeapon = WEAPON_MAPPING[weaponName];
                 if (apiWeapon && ['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(apiWeapon)) {
                     weapons.push(apiWeapon);
+                    i += skipNext; // Пропускаем обработанные слова
+                } else if (!foundWeapon) {
+                    // Если не нашли многословное совпадение, пробуем одно слово
+                    const singleWordWeapon = WEAPON_MAPPING[weaponName];
+                    if (singleWordWeapon && ['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(singleWordWeapon)) {
+                        weapons.push(singleWordWeapon);
+                    } else {
+                        console.warn(`Неизвестное оружие: ${weaponName}`);
+                    }
                 } else {
                     console.warn(`Неизвестное оружие: ${weaponName}`);
                 }
@@ -5420,6 +5572,13 @@ function parseComboFile(text) {
     return combos;
 }
 
+// Подсчет максимальной стоимости комбо (все удары могут потребовать восстановления)
+function calculateComboCost(weaponsCount) {
+    // Каждый удар может потребовать восстановления за 3 рубля
+    // Максимальная стоимость = количество ударов * 3 рубля
+    return weaponsCount * 3;
+}
+
 // Отображение загруженных комбо
 function displayLoadedCombos() {
     const container = document.getElementById('combo-list-content');
@@ -5431,7 +5590,8 @@ function displayLoadedCombos() {
     loadedCombos.forEach((combo, index) => {
         const modeName = combo.mode ? (BATTLE_MODE_INFO[combo.mode]?.name || combo.mode) : 'не указан';
         const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : 'не указан';
-        html += `<li><strong>${combo.bossName}</strong> - Режим: ${modeName}, Комбо: ${comboModeName}, Ударов: ${combo.weapons.length}</li>`;
+        const maxCost = calculateComboCost(combo.weapons.length);
+        html += `<li><strong>${combo.bossName}</strong> - Режим: ${modeName}, Комбо: ${comboModeName}, Ударов: ${combo.weapons.length}, Макс. стоимость: ${maxCost} ₽</li>`;
     });
     html += '</ul>';
     
@@ -5638,6 +5798,7 @@ function displayComboBossSelection() {
                     ${modeSelectorHtml}
                     ${loadedComboSelectorHtml}
                     <div style="font-size: 10px; color: #4CAF50; margin-top: 4px;">Комбо: ${combos.length}</div>
+                    ${combos.length > 0 ? `<div class="combo-cost-display" style="font-size: 10px; color: #FFA500; margin-top: 2px;">Макс. стоимость: ${calculateComboCost(combos[0].weapons.length)} ₽</div>` : ''}
                 </div>
             </div>
         `;
@@ -5749,6 +5910,13 @@ function selectComboBoss(bossId) {
         if (hpElement) {
             hpElement.textContent = `HP: ${newHp.toLocaleString()}`;
         }
+        
+        // Обновляем стоимость комбо в карточке
+        const costElement = selectedCard.querySelector('.combo-cost-display');
+        if (costElement) {
+            const maxCost = calculateComboCost(combo.weapons.length);
+            costElement.textContent = `Макс. стоимость: ${maxCost} ₽`;
+        }
     }
     
     document.getElementById('start-combo-btn').style.display = 'block';
@@ -5764,8 +5932,9 @@ window.startComboAttack = async function() {
     const confirmed = await new Promise(resolve => {
         const modeName = selectedCombo.mode ? (BATTLE_MODE_INFO[selectedCombo.mode]?.name || selectedCombo.mode) : 'не указан';
         const comboModeName = selectedCombo.comboMode ? (COMBO_MODE_INFO[selectedCombo.comboMode]?.name || selectedCombo.comboMode) : 'не указан';
+        const maxCost = calculateComboCost(selectedCombo.weapons.length);
         tg.showConfirm(
-            `Начать комбо атаку на ${selectedCombo.bossName}?\n\nРежим: ${modeName}\nКомбо: ${comboModeName}\nУдаров: ${selectedCombo.weapons.length}`,
+            `Начать комбо атаку на ${selectedCombo.bossName}?\n\nРежим: ${modeName}\nКомбо: ${comboModeName}\nУдаров: ${selectedCombo.weapons.length}\nМакс. стоимость: ${maxCost} ₽`,
             resolve
         );
     });
@@ -5777,6 +5946,7 @@ window.startComboAttack = async function() {
     currentComboBossId = selectedCombo.bossId;
     currentComboMode = selectedCombo.mode;
     currentComboComboMode = selectedCombo.comboMode;
+    totalSpentRubles = 0; // Сбрасываем счетчик потраченных рублей
     
     document.getElementById('start-combo-btn').style.display = 'none';
     document.getElementById('stop-combo-btn').style.display = 'block';
@@ -5869,7 +6039,9 @@ async function executeComboWeapons() {
         const weapon = selectedCombo.weapons[i];
         currentComboWeaponIndex = i;
         
-        updateComboStatus(`Удар ${i + 1}/${selectedCombo.weapons.length}: ${weapon}...`);
+        // Переводим название оружия на русский для отображения
+        const weaponDisplayName = WEAPON_DISPLAY_NAMES[weapon] || weapon;
+        updateComboStatus(`Удар ${i + 1}/${selectedCombo.weapons.length}: ${weaponDisplayName}...`);
         
         // Выполняем удар
         let success = false;
@@ -5917,7 +6089,8 @@ async function executeComboWeapons() {
                         const weaponTypeMatch = data.message.match(/Перезарядка\s+(\w+)/i);
                         if (weaponTypeMatch) {
                             const weaponType = weaponTypeMatch[1].toLowerCase();
-                            updateComboStatus(`⚠️ Перезарядка ${weaponType}. Восстанавливаем...`);
+                            const weaponTypeDisplayName = WEAPON_DISPLAY_NAMES[weaponType] || weaponType;
+                            updateComboStatus(`⚠️ Перезарядка ${weaponTypeDisplayName}. Восстанавливаем...`);
                             await restoreWeaponCooldown(weaponType);
                             // Повторяем попытку
                             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -5939,7 +6112,9 @@ async function executeComboWeapons() {
                     if (revealedWeapons.length > i) {
                         const expectedWeapon = revealedWeapons[i];
                         if (expectedWeapon && expectedWeapon !== weapon) {
-                            updateComboStatus(`⚠️ Неправильный удар на позиции ${i + 1}! Ожидался ${expectedWeapon}, получен ${weapon}. Повторяем...`);
+                            const expectedDisplayName = WEAPON_DISPLAY_NAMES[expectedWeapon] || expectedWeapon;
+                            const weaponDisplayName = WEAPON_DISPLAY_NAMES[weapon] || weapon;
+                            updateComboStatus(`⚠️ Неправильный удар на позиции ${i + 1}! Ожидался ${expectedDisplayName}, получен ${weaponDisplayName}. Повторяем...`);
                             await new Promise(resolve => setTimeout(resolve, 1000));
                             continue;
                         }
@@ -6018,7 +6193,8 @@ async function restoreWeaponCooldown(weaponType) {
         restoreType = weaponType.charAt(0).toUpperCase() + weaponType.slice(1);
     }
     
-    updateComboStatus(`Восстановление перезарядки ${weaponType}...`);
+    const weaponTypeDisplayName = WEAPON_DISPLAY_NAMES[weaponType] || weaponType;
+    updateComboStatus(`Восстановление перезарядки ${weaponTypeDisplayName}...`);
     
     let response = await fetch(`${apiUrl}/boss/restore-free-hit`, {
         method: 'POST',
@@ -6051,7 +6227,9 @@ async function restoreWeaponCooldown(weaponType) {
         throw new Error(data.message || data.error || 'Ошибка восстановления перезарядки');
     }
     
-    updateComboStatus(`✅ Перезарядка восстановлена (потрачено ${data.spentRubles || 0} рублей)`);
+    const spentRubles = data.spentRubles || 0;
+    totalSpentRubles += spentRubles; // Добавляем к общей сумме
+    updateComboStatus(`✅ Перезарядка восстановлена (потрачено ${spentRubles} рублей, всего: ${totalSpentRubles} ₽)`);
 }
 
 // Отображение награды за комбо
@@ -6060,6 +6238,11 @@ function displayComboReward(data) {
     
     const reward = data.comboReward;
     let message = `💰 Награда за комбо получена!\n\n`;
+    
+    // Добавляем информацию о потраченных рублях
+    if (totalSpentRubles > 0) {
+        message += `💸 Потрачено на восстановление: ${totalSpentRubles} ₽\n\n`;
+    }
     
     if (reward.authority) {
         message += `Авторитет: ${reward.authority.toLocaleString()}\n`;
@@ -6113,9 +6296,16 @@ function displayComboReward(data) {
 // Остановка комбо атаки
 window.stopComboAttack = function() {
     isComboAttacking = false;
+    
+    // Показываем итоговую информацию о потраченных рублях
+    if (totalSpentRubles > 0) {
+        updateComboStatus(`Комбо атака остановлена. Потрачено на восстановление: ${totalSpentRubles} ₽`);
+    } else {
+        updateComboStatus('Комбо атака остановлена');
+    }
+    
     document.getElementById('start-combo-btn').style.display = 'block';
     document.getElementById('stop-combo-btn').style.display = 'none';
-    updateComboStatus('Комбо атака остановлена');
 }
 
 // Обновление статуса комбо
