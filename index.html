@@ -108,6 +108,22 @@
                     </button>
                 </section>
 
+                <!-- Раздел мастерских -->
+                <section class="card" id="master-section">
+                    <h2>🔨 Мастерские</h2>
+                    <div class="prison-select">
+                        <select id="master-select" onchange="loadMasterInfo()">
+                            <option value="">Выберите мастера...</option>
+                        </select>
+                    </div>
+                    <div class="prison-info" id="master-info">
+                        <p>Выберите мастера для просмотра информации</p>
+                    </div>
+                    <button class="btn btn-success" onclick="startMasterWalk()" id="master-walk-btn" disabled>
+                        🚀 Начать обучение
+                    </button>
+                </section>
+
                 <!-- Статистика -->
                 <section class="card" id="stats-section">
                     <h2>📊 Статистика</h2>

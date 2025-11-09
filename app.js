@@ -437,10 +437,64 @@ async function toggleSettings() {
     }
 }
 
+// Предотвращение сворачивания приложения при скролле
+function preventSwipeClose() {
+    let touchStartY = 0;
+    let touchStartScrollTop = 0;
+    let isScrolling = false;
+    
+    document.addEventListener('touchstart', function(e) {
+        touchStartY = e.touches[0].clientY;
+        const scrollableElement = document.scrollingElement || document.documentElement;
+        touchStartScrollTop = scrollableElement.scrollTop;
+        isScrolling = false;
+    }, { passive: true });
+    
+    document.addEventListener('touchmove', function(e) {
+        if (!e.touches || !e.touches[0]) return;
+        
+        const currentY = e.touches[0].clientY;
+        const deltaY = currentY - touchStartY;
+        const scrollableElement = document.scrollingElement || document.documentElement;
+        const currentScrollTop = scrollableElement.scrollTop;
+        const scrollHeight = scrollableElement.scrollHeight;
+        const clientHeight = scrollableElement.clientHeight;
+        const canScroll = scrollHeight > clientHeight;
+        
+        // Если контент не скроллится, не мешаем
+        if (!canScroll) return;
+        
+        // Проверяем, что это движение вверх (палец движется вниз)
+        if (deltaY > 0) {
+            // Если мы не в самом верху страницы, предотвращаем сворачивание
+            if (currentScrollTop > 0) {
+                isScrolling = true;
+                // Предотвращаем сворачивание
+                e.preventDefault();
+                return false;
+            }
+            // Если мы в самом верху, но начали скролл не с самого верха,
+            // значит пользователь скроллит, а не сворачивает
+            else if (touchStartScrollTop > 0) {
+                isScrolling = true;
+                e.preventDefault();
+                return false;
+            }
+        }
+    }, { passive: false });
+    
+    document.addEventListener('touchend', function() {
+        isScrolling = false;
+    }, { passive: true });
+}
+
 // Инициализация
 document.addEventListener('DOMContentLoaded', async () => {
     // Инициализация: показываем вкладку "Основное" по умолчанию
     switchTab('main');
+    
+    // Предотвращаем закрытие при скролле
+    preventSwipeClose();
     
     // Добавляем обработчики событий для кнопок таббара
     const tabButtons = document.querySelectorAll('.tab-button');
@@ -558,10 +612,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             loadBossInfo(),
             loadBossList(),
             loadPrisons(),  // Загружает тюрьмы и информацию об игроке параллельно
+            loadMasters(),  // Загружает мастеров
             loadStats()
         ]).then(results => {
             results.forEach((result, index) => {
-                const funcNames = ['loadBossInfo', 'loadBossList', 'loadPrisons', 'loadStats'];
+                const funcNames = ['loadBossInfo', 'loadBossList', 'loadPrisons', 'loadMasters', 'loadStats'];
                 if (result.status === 'rejected') {
                     console.error(`Ошибка в ${funcNames[index]}:`, result.reason);
                 }
@@ -586,6 +641,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Показываем все секции
             // Примечание: boss-section теперь на вкладке "Атака боссов", управляется через switchTab
             document.getElementById('prison-section').style.display = 'block';
+            document.getElementById('master-section').style.display = 'block';
             document.getElementById('stats-section').style.display = 'block';
             document.getElementById('biceps-section').style.display = 'block';
             
@@ -595,10 +651,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 loadBossInfo(),
                 loadBossList(),
                 loadPrisons(),  // Загружает тюрьмы и информацию об игроке параллельно
+                loadMasters(),  // Загружает мастеров
                 loadStats()
             ]).then(results => {
                 results.forEach((result, index) => {
-                    const funcNames = ['loadBossInfo', 'loadBossList', 'loadPrisons', 'loadStats'];
+                    const funcNames = ['loadBossInfo', 'loadBossList', 'loadPrisons', 'loadMasters', 'loadStats'];
                     if (result.status === 'rejected') {
                         console.error(`Ошибка в ${funcNames[index]}:`, result.reason);
                     }
@@ -2052,6 +2109,341 @@ async function startPrisonWalk() {
     } finally {
         btn.disabled = false;
         btn.textContent = '🚀 Начать прохождение';
+    }
+}
+
+// Загрузка списка мастеров
+async function loadMasters() {
+    const select = document.getElementById('master-select');
+    
+    let token = await getAccessToken();
+    if (!token) {
+        console.warn('Токен не доступен');
+        return;
+    }
+    
+    try {
+        console.log('Загрузка мастеров...');
+        // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
+        let response = await fetch(`${GAME_API_URL}/masters`, {
+            method: 'GET',
+            headers: await getApiHeaders()
+        });
+        
+        // Если получили 401/403, пытаемся обновить токен через initData из БД
+        if (response.status === 401 || response.status === 403) {
+            console.warn('Токен протух, пытаемся обновить через initData из БД...');
+            const currentInitData = await getCurrentInitData();
+            if (currentInitData && currentInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
+                    // Используем getApiHeaders() для получения актуального токена
+                    // Повторяем запрос с новым токеном
+                    response = await fetch(`${GAME_API_URL}/masters`, {
+                        method: 'GET',
+                        headers: await getApiHeaders()
+                    });
+                }
+            }
+        }
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const data = await response.json();
+        if (data.masters) {
+            // Очищаем селект, оставляя первый option
+            select.innerHTML = '<option value="">Выберите мастера...</option>';
+            
+            // Фильтруем только доступных мастеров
+            const availableMasters = data.masters.filter(master => data.access && data.access[master.id.toString()]);
+            
+            availableMasters.forEach(master => {
+                const option = document.createElement('option');
+                option.value = master.id;
+                option.textContent = `${master.name} - ${master.description}`;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки мастеров:', error);
+    }
+}
+
+// Загрузка информации о мастере
+async function loadMasterInfo() {
+    const masterId = document.getElementById('master-select').value;
+    const masterInfo = document.getElementById('master-info');
+    const walkBtn = document.getElementById('master-walk-btn');
+    
+    if (!masterId) {
+        masterInfo.innerHTML = '<p>Выберите мастера для просмотра информации</p>';
+        walkBtn.disabled = true;
+        return;
+    }
+    
+    let token = await getAccessToken();
+    if (!token) {
+        masterInfo.innerHTML = '<p class="error">❌ Требуется авторизация!</p>';
+        walkBtn.disabled = true;
+        return;
+    }
+    
+    masterInfo.innerHTML = '<p class="loading">Загрузка...</p>';
+    walkBtn.disabled = true;
+    
+    try {
+        // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
+        let response = await fetch(`${GAME_API_URL}/player/masters/${masterId}/enter`, {
+            method: 'POST',
+            headers: await getApiHeaders()
+        });
+        
+        // Если получили 401/403, пытаемся обновить токен через initData из БД
+        if (response.status === 401 || response.status === 403) {
+            console.warn('Токен протух, пытаемся обновить через initData из БД...');
+            const currentInitData = await getCurrentInitData();
+            if (currentInitData && currentInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
+                    // Используем getApiHeaders() для получения актуального токена
+                    // Повторяем запрос с новым токеном
+                    response = await fetch(`${GAME_API_URL}/player/masters/${masterId}/enter`, {
+                        method: 'POST',
+                        headers: await getApiHeaders()
+                    });
+                }
+            }
+        }
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            masterInfo.innerHTML = `<p class="error">❌ Ошибка: ${data.error || 'Неизвестная ошибка'}</p>`;
+            walkBtn.disabled = true;
+            return;
+        }
+        
+        const masterData = data.data || {};
+        const progress = masterData.progress || {};
+        const checkpoints = data.checkpoints || [];
+        const itemsCatalog = data.itemsCatalog || [];
+        const itemsOwned = masterData.itemsOwned || [];
+        
+        // Проверяем, все ли предметы куплены
+        const allItemsOwned = itemsOwned.every(owned => owned === true);
+        const canStartTraining = masterData.canStartTraining === true;
+        
+        let infoHTML = `
+            <div class="prison-details">
+                <h3>📊 Информация о мастерской</h3>
+                <div class="progress-info">
+                    <p>Текущий чекпоинт: <strong>${progress.currentCheckpoint || 0}</strong></p>
+                    <p>Кликов в чекпоинте: <strong>${progress.clicksInCheckpoint || 0} / ${checkpoints[progress.currentCheckpoint - 1]?.clicksRequired || 0}</strong></p>
+                    <p>Уровень: <strong>${progress.level || 0}</strong></p>
+                    <p>Интеллект: <strong>${progress.intellect || 0}</strong></p>
+                    <p>Все предметы куплены: <strong>${allItemsOwned ? '✅ Да' : '❌ Нет'}</strong></p>
+                    <p>Можно начать обучение: <strong>${canStartTraining ? '✅ Да' : '❌ Нет'}</strong></p>
+                </div>
+        `;
+        
+        if (checkpoints.length > 0) {
+            infoHTML += `
+                <div class="checkpoints-info" style="margin-top: 15px;">
+                    <h4>Чекпоинты:</h4>
+                    <div style="max-height: 200px; overflow-y: auto;">
+            `;
+            checkpoints.forEach((checkpoint, index) => {
+                const isCompleted = masterData.completed && masterData.completed[index];
+                const isCurrent = progress.currentCheckpoint === checkpoint.checkpointId;
+                infoHTML += `
+                    <div style="padding: 5px; border-bottom: 1px solid #ddd; ${isCurrent ? 'background-color: #e3f2fd;' : ''}">
+                        <strong>${checkpoint.title}</strong> ${isCompleted ? '✅' : ''} ${isCurrent ? '← Текущий' : ''}<br>
+                        Кликов: ${checkpoint.clicksRequired} | Энергия: ${checkpoint.energyCost} | 
+                        Награда: ${checkpoint.rewardCigarettes} сигарет, ${checkpoint.rewardRating} рейтинг, ${checkpoint.rewardAuthority} авторитет
+                    </div>
+                `;
+            });
+            infoHTML += `</div></div>`;
+        }
+        
+        infoHTML += `</div>`;
+        masterInfo.innerHTML = infoHTML;
+        
+        // Включаем кнопку только если можно начать обучение
+        walkBtn.disabled = !canStartTraining;
+    } catch (error) {
+        console.error('Ошибка загрузки информации о мастере:', error);
+        masterInfo.innerHTML = `<p class="error">❌ Ошибка: ${error.message}</p>`;
+        walkBtn.disabled = true;
+    }
+}
+
+// Начать прохождение мастерской
+async function startMasterWalk() {
+    const masterId = document.getElementById('master-select').value;
+    const btn = event.target;
+    
+    if (!masterId) {
+        tg.showAlert('Выберите мастера');
+        return;
+    }
+    
+    let token = await getAccessToken();
+    if (!token) {
+        tg.showAlert('❌ Требуется авторизация!\nОбновите страницу');
+        return;
+    }
+    
+    const confirmed = await new Promise(resolve => {
+        tg.showConfirm('Начать автоматическое обучение?', resolve);
+    });
+    
+    if (!confirmed) return;
+    
+    btn.disabled = true;
+    btn.textContent = '🚀 Обучение...';
+    
+    try {
+        // Выполняем клики до окончания энергии
+        let total_clicks = 0;
+        let total_cigarettes = 0;
+        let total_rating = 0;
+        let total_authority = 0;
+        let total_intellect = 0;
+        let current_energy = 50; // Начальная энергия (будет обновляться из ответа)
+        let last_error = null;
+        const max_iterations = 100; // Максимум итераций для безопасности
+        
+        // Обновляем информацию о прогрессе в интерфейсе
+        const masterInfo = document.getElementById('master-info');
+        
+        for (let i = 0; i < max_iterations; i++) {
+            // Показываем прогресс
+            masterInfo.innerHTML = `
+                <div class="prison-details">
+                    <h3>🚀 Обучение в мастерской...</h3>
+                    <div class="progress-info">
+                        <p>Кликов: <strong>${total_clicks}</strong></p>
+                        <p>Энергия: <strong>${current_energy}</strong></p>
+                        <p>Сигареты: <strong>+${total_cigarettes}</strong></p>
+                        <p>Рейтинг: <strong>+${total_rating}</strong></p>
+                        <p>Авторитет: <strong>+${total_authority}</strong></p>
+                        <p>Интеллект: <strong>+${total_intellect}</strong></p>
+                    </div>
+                </div>
+            `;
+            
+            // POST запрос для работы в мастерской
+            // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
+            let response = await fetch(`${GAME_API_URL}/player/masters/${masterId}/work`, {
+                method: 'POST',
+                headers: await getApiHeaders()
+            });
+            
+            // Если получили 401/403, пытаемся обновить токен через initData из БД
+            if (response.status === 401 || response.status === 403) {
+                console.warn('Токен протух, пытаемся обновить через initData из БД...');
+                const currentInitData = await getCurrentInitData();
+                if (currentInitData && currentInitData.trim()) {
+                    const newToken = await loginWithInitData();
+                    if (newToken) {
+                        // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
+                        // Используем getApiHeaders() для получения актуального токена
+                        // Повторяем запрос с новым токеном
+                        response = await fetch(`${GAME_API_URL}/player/masters/${masterId}/work`, {
+                            method: 'POST',
+                            headers: await getApiHeaders()
+                        });
+                    }
+                }
+            }
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+            
+            const data = await response.json();
+            
+            // Обрабатываем ошибку "Too many work requests"
+            if (!data.success && data.error) {
+                if (data.error.includes('Too many work requests') || data.error.includes('Cooldown')) {
+                    console.log('⚠️ Cooldown, ждем 1 секунду...');
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    continue; // Повторяем попытку
+                } else {
+                    last_error = data.error;
+                    break;
+                }
+            }
+            
+            if (!data.success) {
+                last_error = data.error || 'Неизвестная ошибка';
+                break;
+            }
+            
+            // Обновляем статистику
+            total_clicks++;
+            // Структура ответа может быть разной: либо data.rewardCigarettes, либо data.data.rewardCigarettes
+            const resultData = data.data || data;
+            total_cigarettes += resultData.rewardCigarettes || 0;
+            total_rating += resultData.rewardRating || 0;
+            total_authority += resultData.rewardAuthority || 0;
+            total_intellect += resultData.rewardIntellect || 0;
+            current_energy = resultData.energy || data.energy || current_energy;
+            
+            // Проверяем энергию
+            if (current_energy <= 0) {
+                console.log('Энергия закончилась');
+                break;
+            }
+            
+            // Задержка между кликами (1 секунда)
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        // Показываем результат
+        const message = `✅ Обучение завершено!\n\n` +
+            `📊 Статистика:\n` +
+            `• Кликов: ${total_clicks}\n` +
+            `• Сигареты: +${total_cigarettes}\n` +
+            `• Рейтинг: +${total_rating}\n` +
+            `• Авторитет: +${total_authority}\n` +
+            `• Интеллект: +${total_intellect}\n` +
+            `• Осталось энергии: ${current_energy}`;
+        
+        if (last_error) {
+            tg.showPopup({
+                title: '⚠️ Обучение прервано',
+                message: message + `\n\nОшибка: ${last_error}`,
+                buttons: [{ text: 'OK', type: 'ok' }]
+            });
+        } else {
+            tg.showPopup({
+                title: '✅ Обучение завершено',
+                message: message,
+                buttons: [{ text: 'OK', type: 'ok' }]
+            });
+        }
+        
+        // Обновляем информацию о мастере и статистику
+        await Promise.all([
+            loadMasterInfo(),
+            loadStats()
+        ]);
+    } catch (error) {
+        console.error('Ошибка обучения в мастерской:', error);
+        tg.showAlert(`❌ Ошибка: ${error.message}`);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 Начать обучение';
     }
 }
 
