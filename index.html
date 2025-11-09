@@ -214,6 +214,39 @@
                         </div>
                     </div>
                 </section>
+
+                <!-- Раздел комбо для боссов -->
+                <section class="card" id="boss-combo-section">
+                    <h2>🎯 Комбо атака</h2>
+                    <div class="boss-combo-controls">
+                        <div class="form-group">
+                            <label for="combo-file-input">📄 Загрузить файл с комбо:</label>
+                            <input type="file" id="combo-file-input" accept=".txt" style="margin-top: 5px;">
+                            <small class="form-hint">
+                                Загрузите txt файл с комбо. Формат: имя_босса режим удар1 удар2 ...; имя_босса2 режим удар1 удар2 ...<br>
+                                Пример: палыч пац фин глаз грудь ухо пах яд; махно блат пал пах фин
+                            </small>
+                        </div>
+                        <div id="combo-list-container" style="margin-top: 15px; display: none;">
+                            <h4>Загруженные комбо:</h4>
+                            <div id="combo-list-content"></div>
+                        </div>
+                        <div id="combo-boss-select" style="margin-top: 15px; display: none;">
+                            <h4>Выберите босса и режим:</h4>
+                            <div id="combo-boss-carousel" style="display: flex; overflow-x: auto; gap: 10px; padding: 10px 0;"></div>
+                        </div>
+                        <button class="btn btn-primary" onclick="startComboAttack()" id="start-combo-btn" style="margin-top: 15px; display: none;">
+                            ⚔️ Выполнить комбо
+                        </button>
+                        <button class="btn btn-danger" onclick="stopComboAttack()" id="stop-combo-btn" style="margin-top: 10px; display: none;">
+                            🛑 Остановить комбо
+                        </button>
+                        <div id="combo-status" style="margin-top: 15px; display: none;">
+                            <h4>Статус комбо:</h4>
+                            <div id="combo-status-content"></div>
+                        </div>
+                    </div>
+                </section>
             </div>
         </main>
         

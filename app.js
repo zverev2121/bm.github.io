@@ -496,6 +496,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Инициализируем селектор типа взаимодействия
     initInteractionTypeSelector();
     
+    // Инициализируем обработчик загрузки файла комбо
+    const comboFileInput = document.getElementById('combo-file-input');
+    if (comboFileInput) {
+        comboFileInput.addEventListener('change', handleComboFileUpload);
+    }
+    
     // Проверяем username из URL параметров и сохраняем его
     const urlParams = new URLSearchParams(window.location.search);
     const urlUsername = urlParams.get('username');
@@ -1330,6 +1336,9 @@ async function loadBossInfo() {
                         const session = data.session;
                         const hpPercent = ((session.currentHp / session.maxHp) * 100).toFixed(1);
                         const modeDecoded = decodeMode(session.mode);
+                        const modeColor = session.mode ? getModeColor(session.mode) : '#888';
+                        const modeText = modeDecoded ? `<span style="color: ${modeColor}; font-weight: 600;">${modeDecoded}</span>` : modeDecoded;
+                        
                         // Используем selectedComboType, если есть, иначе comboMode
                         const comboModeKey = session.selectedComboType || session.comboMode;
                         const comboModeDecoded = comboModeKey ? decodeComboMode(comboModeKey) : null;
@@ -1401,7 +1410,7 @@ async function loadBossInfo() {
                                 <div style="flex: 1;">
                                     <strong>${session.title || 'Босс'}</strong><br>
                                     HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
-                                    Режим: ${modeDecoded}${comboText}${timeInfo}
+                                    Режим: ${modeText}${comboText}${timeInfo}
                                 </div>
                             </div>
                         `;
@@ -1489,6 +1498,9 @@ async function loadBossInfo() {
             const session = data.session;
             const hpPercent = ((session.currentHp / session.maxHp) * 100).toFixed(1);
             const modeDecoded = decodeMode(session.mode);
+            const modeColor = session.mode ? getModeColor(session.mode) : '#888';
+            const modeText = modeDecoded ? `<span style="color: ${modeColor}; font-weight: 600;">${modeDecoded}</span>` : modeDecoded;
+            
             // Используем selectedComboType, если есть, иначе comboMode
             const comboModeKey = session.selectedComboType || session.comboMode;
             const comboModeDecoded = comboModeKey ? decodeComboMode(comboModeKey) : null;
@@ -3460,6 +3472,16 @@ function getComboModeColor(comboModeKey) {
     return COMBO_MODE_INFO[comboModeKey]?.color || '#888';
 }
 
+// Получение цвета для режима атаки
+function getModeColor(modeKey) {
+    const modeColorMap = {
+        'pacansky': '#28a745', // зеленый
+        'blotnoy': '#ffc107', // желтый
+        'avtoritetny': '#dc3545' // красный
+    };
+    return modeColorMap[modeKey?.toLowerCase()] || '#888';
+}
+
 // Получение доступных режимов комбо для босса
 function getAvailableComboModes(bossData) {
     const combos = bossData?.combos || {};
@@ -5177,6 +5199,633 @@ async function collectBossRewards() {
     } catch (error) {
         console.error('Ошибка сбора награды с босса:', error);
         throw error;
+    }
+}
+
+// ==================== КОМБО АТАКА ====================
+
+// Маппинг русских названий оружий на API названия
+const WEAPON_MAPPING = {
+    'фин': 'knife',
+    'финка': 'knife',
+    'пал': 'gunshot',
+    'палка': 'gunshot',
+    'яд': 'poison',
+    'ядов': 'poison',
+    'грудь': 'punchchest',
+    'колено': 'kneeear',
+    'ухо': 'kneeear',
+    'глаз': 'pokeeyes',
+    'пах': 'kickballs',
+    'блат': 'pacansky', // режим комбо
+    'пац': 'pacansky',  // режим комбо
+    'авторитетный': 'avtoritetny', // режим комбо
+    'авторитетные': 'avtoritetny'  // режим комбо
+};
+
+// Маппинг режимов комбо
+const COMBO_MODE_MAPPING = {
+    'блат': 'pacansky',
+    'пац': 'pacansky',
+    'авторитетный': 'avtoritetny',
+    'авторитетные': 'avtoritetny'
+};
+
+// Глобальные переменные для комбо
+let loadedCombos = []; // [{bossName, mode, comboMode, weapons: []}]
+let selectedCombo = null;
+let isComboAttacking = false;
+let currentComboWeaponIndex = 0;
+let currentComboBossId = null;
+let currentComboMode = null;
+let currentComboComboMode = null;
+
+// Обработка загрузки файла с комбо
+async function handleComboFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    try {
+        const text = await file.text();
+        loadedCombos = parseComboFile(text);
+        
+        if (loadedCombos.length === 0) {
+            tg.showAlert('Не удалось распарсить комбо из файла. Проверьте формат.');
+            return;
+        }
+        
+        // Показываем список загруженных комбо
+        displayLoadedCombos();
+        
+        // Показываем выбор боссов
+        displayComboBossSelection();
+        
+    } catch (error) {
+        console.error('Ошибка загрузки файла:', error);
+        tg.showAlert('Ошибка загрузки файла: ' + error.message);
+    }
+}
+
+// Парсинг файла с комбо
+function parseComboFile(text) {
+    const combos = [];
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+    
+    for (const line of lines) {
+        // Разделяем по точке с запятой
+        const comboStrings = line.split(';').map(s => s.trim()).filter(s => s);
+        
+        for (const comboString of comboStrings) {
+            const parts = comboString.split(/\s+/).filter(p => p);
+            if (parts.length < 3) continue; // минимум: имя_босса режим удар
+            
+            const bossName = parts[0].toLowerCase();
+            const modeOrCombo = parts[1].toLowerCase();
+            
+            // Определяем, это режим комбо или режим атаки
+            let comboMode = null;
+            let mode = null;
+            
+            if (COMBO_MODE_MAPPING[modeOrCombo]) {
+                comboMode = COMBO_MODE_MAPPING[modeOrCombo];
+            } else {
+                // Пытаемся найти режим атаки
+                const foundMode = Object.keys(BATTLE_MODE_INFO).find(key => 
+                    BATTLE_MODE_INFO[key].name.toLowerCase().includes(modeOrCombo) ||
+                    key.toLowerCase() === modeOrCombo
+                );
+                if (foundMode) {
+                    mode = foundMode;
+                } else {
+                    // Если не нашли, считаем это режимом комбо
+                    comboMode = COMBO_MODE_MAPPING[modeOrCombo] || modeOrCombo;
+                }
+            }
+            
+            // Парсим оружия
+            const weapons = [];
+            for (let i = 2; i < parts.length; i++) {
+                const weaponName = parts[i].toLowerCase();
+                const apiWeapon = WEAPON_MAPPING[weaponName];
+                if (apiWeapon && ['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(apiWeapon)) {
+                    weapons.push(apiWeapon);
+                } else {
+                    console.warn(`Неизвестное оружие: ${weaponName}`);
+                }
+            }
+            
+            if (weapons.length > 0) {
+                combos.push({
+                    bossName,
+                    mode: mode || 'normal', // по умолчанию normal
+                    comboMode,
+                    weapons
+                });
+            }
+        }
+    }
+    
+    return combos;
+}
+
+// Отображение загруженных комбо
+function displayLoadedCombos() {
+    const container = document.getElementById('combo-list-content');
+    const listContainer = document.getElementById('combo-list-container');
+    
+    if (!container || loadedCombos.length === 0) return;
+    
+    let html = '<ul style="text-align: left; padding-left: 20px;">';
+    loadedCombos.forEach((combo, index) => {
+        const modeName = combo.mode ? (BATTLE_MODE_INFO[combo.mode]?.name || combo.mode) : 'не указан';
+        const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : 'не указан';
+        html += `<li><strong>${combo.bossName}</strong> - Режим: ${modeName}, Комбо: ${comboModeName}, Ударов: ${combo.weapons.length}</li>`;
+    });
+    html += '</ul>';
+    
+    container.innerHTML = html;
+    listContainer.style.display = 'block';
+}
+
+// Отображение выбора боссов для комбо
+function displayComboBossSelection() {
+    const carousel = document.getElementById('combo-boss-carousel');
+    const selectContainer = document.getElementById('combo-boss-select');
+    const startBtn = document.getElementById('start-combo-btn');
+    
+    if (!carousel || !window.allBosses) return;
+    
+    // Находим уникальных боссов из загруженных комбо
+    const uniqueBossNames = [...new Set(loadedCombos.map(c => c.bossName))];
+    
+    // Находим соответствующих боссов в списке
+    const availableBosses = [];
+    for (const bossName of uniqueBossNames) {
+        const boss = window.allBosses.find(b => 
+            b.name.toLowerCase().includes(bossName) || 
+            bossName.includes(b.name.toLowerCase())
+        );
+        if (boss) {
+            // Находим комбо для этого босса
+            const combosForBoss = loadedCombos.filter(c => c.bossName === bossName);
+            availableBosses.push({
+                boss,
+                combos: combosForBoss
+            });
+        }
+    }
+    
+    if (availableBosses.length === 0) {
+        tg.showAlert('Не найдено соответствующих боссов для загруженных комбо');
+        return;
+    }
+    
+    let html = '';
+    availableBosses.forEach(({boss, combos}) => {
+        combos.forEach((combo, comboIndex) => {
+            const modeName = combo.mode ? (BATTLE_MODE_INFO[combo.mode]?.name || combo.mode) : 'не указан';
+            const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : 'не указан';
+            const cardId = `combo-boss-${boss.id}-${comboIndex}`;
+            
+            html += `
+                <div class="boss-card-combo" 
+                     id="${cardId}"
+                     data-boss-id="${boss.id}"
+                     data-combo-index="${comboIndex}"
+                     style="border: 2px solid #3390ec; background: linear-gradient(135deg, #2d3d5a 0%, #1e2a3a 100%); border-radius: 12px; padding: 10px; min-width: 150px; cursor: pointer;"
+                     onclick="selectComboBoss(${boss.id}, ${comboIndex})">
+                    <div class="boss-image" style="width: 100px; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; overflow: hidden;">
+                        <img src="${getBossImageUrl(boss.id, boss)}" 
+                             alt="${boss.name}" 
+                             style="max-width: 100%; max-height: 100%; object-fit: contain;"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <span style="font-size: 40px; display: none;">👹</span>
+                    </div>
+                    <div style="text-align: center; color: #ffffff;">
+                        <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">${boss.name}</div>
+                        <div style="font-size: 11px; color: #ffd700; margin-bottom: 4px;">Режим: ${modeName}</div>
+                        <div style="font-size: 11px; color: #4CAF50; margin-bottom: 4px;">Комбо: ${comboModeName}</div>
+                        <div style="font-size: 10px; color: #ff6b6b; margin-bottom: 4px;">Ударов: ${combo.weapons.length}</div>
+                    </div>
+                </div>
+            `;
+        });
+    });
+    
+    carousel.innerHTML = html;
+    selectContainer.style.display = 'block';
+    startBtn.style.display = 'none';
+}
+
+// Выбор босса и комбо
+window.selectComboBoss = function(bossId, comboIndex) {
+    // Убираем выделение со всех карточек
+    document.querySelectorAll('.boss-card-combo').forEach(card => {
+        card.style.border = '2px solid #3390ec';
+    });
+    
+    // Выделяем выбранную карточку
+    const selectedCard = document.querySelector(`[data-boss-id="${bossId}"][data-combo-index="${comboIndex}"]`);
+    if (selectedCard) {
+        selectedCard.style.border = '3px solid #4CAF50';
+    }
+    
+    // Находим комбо
+    const boss = window.allBosses.find(b => b.id === bossId);
+    if (!boss) return;
+    
+    // Находим все комбо для этого босса
+    const combosForBoss = loadedCombos.filter(c => 
+        c.bossName.toLowerCase().includes(boss.name.toLowerCase()) || 
+        boss.name.toLowerCase().includes(c.bossName.toLowerCase())
+    );
+    
+    // Выбираем комбо по индексу
+    const combo = combosForBoss[comboIndex];
+    
+    if (!combo) return;
+    
+    selectedCombo = {
+        bossId,
+        bossName: boss.name,
+        mode: combo.mode,
+        comboMode: combo.comboMode,
+        weapons: combo.weapons
+    };
+    
+    document.getElementById('start-combo-btn').style.display = 'block';
+}
+
+// Начало выполнения комбо
+window.startComboAttack = async function() {
+    if (!selectedCombo) {
+        tg.showAlert('Выберите босса и комбо');
+        return;
+    }
+    
+    const confirmed = await new Promise(resolve => {
+        const modeName = selectedCombo.mode ? (BATTLE_MODE_INFO[selectedCombo.mode]?.name || selectedCombo.mode) : 'не указан';
+        const comboModeName = selectedCombo.comboMode ? (COMBO_MODE_INFO[selectedCombo.comboMode]?.name || selectedCombo.comboMode) : 'не указан';
+        tg.showConfirm(
+            `Начать комбо атаку на ${selectedCombo.bossName}?\n\nРежим: ${modeName}\nКомбо: ${comboModeName}\nУдаров: ${selectedCombo.weapons.length}`,
+            resolve
+        );
+    });
+    
+    if (!confirmed) return;
+    
+    isComboAttacking = true;
+    currentComboWeaponIndex = 0;
+    currentComboBossId = selectedCombo.bossId;
+    currentComboMode = selectedCombo.mode;
+    currentComboComboMode = selectedCombo.comboMode;
+    
+    document.getElementById('start-combo-btn').style.display = 'none';
+    document.getElementById('stop-combo-btn').style.display = 'block';
+    document.getElementById('combo-status').style.display = 'block';
+    
+    updateComboStatus(`Начало комбо атаки на ${selectedCombo.bossName}...`);
+    
+    // Начинаем выполнение комбо
+    executeCombo();
+}
+
+// Выполнение комбо
+async function executeCombo() {
+    if (!isComboAttacking || !selectedCombo) {
+        stopComboAttack();
+        return;
+    }
+    
+    try {
+        // Если это первый удар, сначала атакуем босса
+        if (currentComboWeaponIndex === 0) {
+            await attackBossForCombo();
+        }
+        
+        // Выполняем все удары комбо
+        await executeComboWeapons();
+        
+    } catch (error) {
+        console.error('Ошибка выполнения комбо:', error);
+        updateComboStatus(`❌ Ошибка: ${error.message}`);
+        stopComboAttack();
+    }
+}
+
+// Атака босса для комбо
+async function attackBossForCombo() {
+    const apiUrl = API_SERVER_URL || GAME_API_URL;
+    
+    updateComboStatus(`Атака на ${selectedCombo.bossName}...`);
+    
+    // Используем start-attack с режимом и комбо режимом
+    let response = await fetch(`${apiUrl}/boss/start-attack`, {
+        method: 'POST',
+        headers: await getApiHeaders(),
+        body: JSON.stringify({
+            bossId: currentComboBossId,
+            mode: currentComboMode || 'normal',
+            comboMode: currentComboComboMode || null
+        })
+    });
+    
+    // Обработка 401/403
+    if (response.status === 401 || response.status === 403) {
+        const currentInitData = await getCurrentInitData();
+        if (currentInitData && currentInitData.trim()) {
+            const newToken = await loginWithInitData();
+            if (newToken) {
+                response = await fetch(`${apiUrl}/boss/start-attack`, {
+                    method: 'POST',
+                    headers: await getApiHeaders(),
+                    body: JSON.stringify({
+                        bossId: currentComboBossId,
+                        mode: currentComboMode || 'normal',
+                        comboMode: currentComboComboMode || null
+                    })
+                });
+            }
+        }
+    }
+    
+    const data = await response.json();
+    
+    if (!response.ok || !data.success) {
+        throw new Error(data.message || data.error || 'Ошибка атаки босса');
+    }
+    
+    updateComboStatus(`✅ Атака начата. Начинаем комбо...`);
+}
+
+// Выполнение ударов комбо
+async function executeComboWeapons() {
+    // Для use-weapon и restore-free-hit используем прямой URL к игровому API
+    const gameApiUrl = GAME_API_URL;
+    let comboProgress = null;
+    let revealedWeapons = [];
+    
+    for (let i = currentComboWeaponIndex; i < selectedCombo.weapons.length; i++) {
+        if (!isComboAttacking) break;
+        
+        const weapon = selectedCombo.weapons[i];
+        currentComboWeaponIndex = i;
+        
+        updateComboStatus(`Удар ${i + 1}/${selectedCombo.weapons.length}: ${weapon}...`);
+        
+        // Выполняем удар
+        let success = false;
+        let attempts = 0;
+        const maxAttempts = 3;
+        
+        while (!success && attempts < maxAttempts && isComboAttacking) {
+            attempts++;
+            
+            try {
+                // Используем прямой URL к игровому API для use-weapon
+                let response = await fetch(`${gameApiUrl}/boss/use-weapon`, {
+                    method: 'POST',
+                    headers: await getApiHeaders(),
+                    body: JSON.stringify({
+                        weapon: weapon,
+                        count: 1
+                    })
+                });
+                
+                // Обработка 401/403
+                if (response.status === 401 || response.status === 403) {
+                    const currentInitData = await getCurrentInitData();
+                    if (currentInitData && currentInitData.trim()) {
+                        const newToken = await loginWithInitData();
+                        if (newToken) {
+                            response = await fetch(`${gameApiUrl}/boss/use-weapon`, {
+                                method: 'POST',
+                                headers: await getApiHeaders(),
+                                body: JSON.stringify({
+                                    weapon: weapon,
+                                    count: 1
+                                })
+                            });
+                        }
+                    }
+                }
+                
+                const data = await response.json();
+                
+                if (!response.ok || !data.success) {
+                    // Проверяем, это ошибка перезарядки?
+                    if (data.message && data.message.includes('Перезарядка')) {
+                        // Извлекаем тип оружия из сообщения (например: "Перезарядка kneeear (осталось: 07:59:43)")
+                        const weaponTypeMatch = data.message.match(/Перезарядка\s+(\w+)/i);
+                        if (weaponTypeMatch) {
+                            const weaponType = weaponTypeMatch[1].toLowerCase();
+                            updateComboStatus(`⚠️ Перезарядка ${weaponType}. Восстанавливаем...`);
+                            await restoreWeaponCooldown(weaponType);
+                            // Повторяем попытку
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            continue;
+                        }
+                    }
+                    
+                    throw new Error(data.message || data.error || 'Ошибка использования оружия');
+                }
+                
+                // Проверяем прогресс комбо
+                if (data.combo) {
+                    comboProgress = data.combo;
+                    revealedWeapons = data.combo.revealed || [];
+                    
+                    // Проверяем, что удар правильный - сверяем с revealed массивом
+                    // revealed содержит правильную последовательность ударов
+                    // Если мы на позиции i, то revealed[i] должен совпадать с нашим ударом
+                    if (revealedWeapons.length > i) {
+                        const expectedWeapon = revealedWeapons[i];
+                        if (expectedWeapon && expectedWeapon !== weapon) {
+                            updateComboStatus(`⚠️ Неправильный удар на позиции ${i + 1}! Ожидался ${expectedWeapon}, получен ${weapon}. Повторяем...`);
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            continue;
+                        }
+                    }
+                    
+                    // Проверяем, завершено ли комбо
+                    if (data.comboReward) {
+                        // Комбо завершено, показываем награду
+                        displayComboReward(data);
+                        stopComboAttack();
+                        return;
+                    }
+                    
+                    // Проверяем, достигнут ли прогресс (если все удары сделаны, но награды еще нет)
+                    if (comboProgress.progress >= comboProgress.required) {
+                        // Если прогресс достигнут, но награды нет, продолжаем (возможно, награда придет в следующем ответе)
+                        updateComboStatus(`✅ Прогресс комбо: ${comboProgress.progress}/${comboProgress.required}`);
+                    }
+                }
+                
+                success = true;
+                
+                // Тайм-аут 1 секунда между ударами
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+            } catch (error) {
+                console.error(`Ошибка удара ${i + 1}:`, error);
+                if (attempts >= maxAttempts) {
+                    throw error;
+                }
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
+        
+        if (!success) {
+            throw new Error(`Не удалось выполнить удар ${i + 1} после ${maxAttempts} попыток`);
+        }
+    }
+    
+    // Если дошли до конца, но награды нет, проверяем еще раз
+    if (isComboAttacking && comboProgress && comboProgress.progress >= comboProgress.required) {
+        updateComboStatus(`✅ Комбо завершено! Проверяем награду...`);
+    } else {
+        updateComboStatus(`✅ Все удары выполнены!`);
+        stopComboAttack();
+    }
+}
+
+// Восстановление перезарядки оружия
+async function restoreWeaponCooldown(weaponType) {
+    // Для restore-free-hit используем прямой URL к игровому API
+    const gameApiUrl = GAME_API_URL;
+    
+    // Маппинг типов оружия для восстановления (из API названий в формат для восстановления)
+    const restoreWeaponMapping = {
+        'kneeear': 'KneeEar',
+        'KneeEar': 'KneeEar',
+        'kickballs': 'KickBalls',
+        'KickBalls': 'KickBalls',
+        'punchchest': 'PunchChest',
+        'PunchChest': 'PunchChest',
+        'pokeeyes': 'PokeEyes',
+        'PokeEyes': 'PokeEyes',
+        'knife': 'Knife',
+        'Knife': 'Knife',
+        'gunshot': 'Gunshot',
+        'Gunshot': 'Gunshot',
+        'poison': 'Poison',
+        'Poison': 'Poison'
+    };
+    
+    // Преобразуем weaponType в правильный формат (первая буква заглавная, остальные как есть)
+    let restoreType = restoreWeaponMapping[weaponType];
+    if (!restoreType) {
+        // Если не нашли в маппинге, пытаемся преобразовать вручную
+        restoreType = weaponType.charAt(0).toUpperCase() + weaponType.slice(1);
+    }
+    
+    updateComboStatus(`Восстановление перезарядки ${weaponType}...`);
+    
+    let response = await fetch(`${gameApiUrl}/boss/restore-free-hit`, {
+        method: 'POST',
+        headers: await getApiHeaders(),
+        body: JSON.stringify({
+            weaponType: restoreType
+        })
+    });
+    
+    // Обработка 401/403
+    if (response.status === 401 || response.status === 403) {
+        const currentInitData = await getCurrentInitData();
+        if (currentInitData && currentInitData.trim()) {
+            const newToken = await loginWithInitData();
+            if (newToken) {
+                response = await fetch(`${gameApiUrl}/boss/restore-free-hit`, {
+                    method: 'POST',
+                    headers: await getApiHeaders(),
+                    body: JSON.stringify({
+                        weaponType: restoreType
+                    })
+                });
+            }
+        }
+    }
+    
+    const data = await response.json();
+    
+    if (!response.ok || !data.success) {
+        throw new Error(data.message || data.error || 'Ошибка восстановления перезарядки');
+    }
+    
+    updateComboStatus(`✅ Перезарядка восстановлена (потрачено ${data.spentRubles || 0} рублей)`);
+}
+
+// Отображение награды за комбо
+function displayComboReward(data) {
+    if (!data.comboReward) return;
+    
+    const reward = data.comboReward;
+    let message = `💰 Награда за комбо получена!\n\n`;
+    
+    if (reward.authority) {
+        message += `Авторитет: ${reward.authority.toLocaleString()}\n`;
+    }
+    
+    if (reward.currencies && reward.currencies.length > 0) {
+        const currencyNames = {
+            'cigarettes': 'Сигареты',
+            'rubles': 'Рубли',
+            'money': 'Деньги',
+            'sugar': 'Сахар'
+        };
+        reward.currencies.forEach(c => {
+            const name = currencyNames[c.type] || c.type;
+            message += `${name}: ${c.amount.toLocaleString()}\n`;
+        });
+    }
+    
+    if (reward.weapons) {
+        const weaponNames = {
+            'knife': 'Финки',
+            'gunshot': 'Палки',
+            'poison': 'Яды'
+        };
+        Object.entries(reward.weapons).forEach(([weapon, count]) => {
+            const name = weaponNames[weapon] || weapon;
+            message += `${name}: ${count}\n`;
+        });
+    }
+    
+    if (reward.stash) {
+        message += `Скрытность: ${reward.stash.count}\n`;
+    }
+    
+    if (reward.tattoos && reward.tattoos.length > 0) {
+        message += `Татуировки: ${reward.tattoos.length}\n`;
+    }
+    
+    // Также показываем zshReward если есть
+    if (data.zshReward && data.zshReward.drops) {
+        message += `\nДропы:\n`;
+        data.zshReward.drops.forEach(drop => {
+            message += `${drop.name}: ${drop.qty}\n`;
+        });
+    }
+    
+    updateComboStatus(`✅ ${message.replace(/\n/g, '<br>')}`);
+    showCustomModal(message);
+}
+
+// Остановка комбо атаки
+window.stopComboAttack = function() {
+    isComboAttacking = false;
+    document.getElementById('start-combo-btn').style.display = 'block';
+    document.getElementById('stop-combo-btn').style.display = 'none';
+    updateComboStatus('Комбо атака остановлена');
+}
+
+// Обновление статуса комбо
+function updateComboStatus(message) {
+    const statusContent = document.getElementById('combo-status-content');
+    if (statusContent) {
+        const timestamp = new Date().toLocaleTimeString();
+        statusContent.innerHTML = `<p><strong>[${timestamp}]</strong> ${message}</p>`;
     }
 }
 
