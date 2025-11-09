@@ -5217,7 +5217,7 @@ const WEAPON_MAPPING = {
     'ухо': 'kneeear',
     'глаз': 'pokeeyes',
     'пах': 'kickballs',
-    'блат': 'pacansky', // режим комбо
+    'блат': 'blotnoy', // режим комбо
     'пац': 'pacansky',  // режим комбо
     'авторитетный': 'avtoritetny', // режим комбо
     'авторитетные': 'avtoritetny'  // режим комбо
@@ -5225,7 +5225,7 @@ const WEAPON_MAPPING = {
 
 // Маппинг режимов комбо
 const COMBO_MODE_MAPPING = {
-    'блат': 'pacansky',
+    'блат': 'blotnoy',
     'пац': 'pacansky',
     'авторитетный': 'avtoritetny',
     'авторитетные': 'avtoritetny'
@@ -5560,8 +5560,8 @@ async function attackBossForCombo() {
 
 // Выполнение ударов комбо
 async function executeComboWeapons() {
-    // Для use-weapon и restore-free-hit используем прямой URL к игровому API
-    const gameApiUrl = GAME_API_URL;
+    // Используем прокси если есть, иначе прямой URL к игровому API
+    const apiUrl = API_SERVER_URL || GAME_API_URL;
     let comboProgress = null;
     let revealedWeapons = [];
     
@@ -5582,8 +5582,8 @@ async function executeComboWeapons() {
             attempts++;
             
             try {
-                // Используем прямой URL к игровому API для use-weapon
-                let response = await fetch(`${gameApiUrl}/boss/use-weapon`, {
+                // Используем прокси для use-weapon
+                let response = await fetch(`${apiUrl}/boss/use-weapon`, {
                     method: 'POST',
                     headers: await getApiHeaders(),
                     body: JSON.stringify({
@@ -5598,7 +5598,7 @@ async function executeComboWeapons() {
                     if (currentInitData && currentInitData.trim()) {
                         const newToken = await loginWithInitData();
                         if (newToken) {
-                            response = await fetch(`${gameApiUrl}/boss/use-weapon`, {
+                            response = await fetch(`${apiUrl}/boss/use-weapon`, {
                                 method: 'POST',
                                 headers: await getApiHeaders(),
                                 body: JSON.stringify({
@@ -5692,8 +5692,8 @@ async function executeComboWeapons() {
 
 // Восстановление перезарядки оружия
 async function restoreWeaponCooldown(weaponType) {
-    // Для restore-free-hit используем прямой URL к игровому API
-    const gameApiUrl = GAME_API_URL;
+    // Используем прокси если есть, иначе прямой URL к игровому API
+    const apiUrl = API_SERVER_URL || GAME_API_URL;
     
     // Маппинг типов оружия для восстановления (из API названий в формат для восстановления)
     const restoreWeaponMapping = {
@@ -5722,7 +5722,7 @@ async function restoreWeaponCooldown(weaponType) {
     
     updateComboStatus(`Восстановление перезарядки ${weaponType}...`);
     
-    let response = await fetch(`${gameApiUrl}/boss/restore-free-hit`, {
+    let response = await fetch(`${apiUrl}/boss/restore-free-hit`, {
         method: 'POST',
         headers: await getApiHeaders(),
         body: JSON.stringify({
@@ -5736,7 +5736,7 @@ async function restoreWeaponCooldown(weaponType) {
         if (currentInitData && currentInitData.trim()) {
             const newToken = await loginWithInitData();
             if (newToken) {
-                response = await fetch(`${gameApiUrl}/boss/restore-free-hit`, {
+                response = await fetch(`${apiUrl}/boss/restore-free-hit`, {
                     method: 'POST',
                     headers: await getApiHeaders(),
                     body: JSON.stringify({
