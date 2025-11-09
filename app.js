@@ -5398,11 +5398,54 @@ function parseComboFile(text) {
     const combos = [];
     const lines = text.split('\n').map(l => l.trim()).filter(l => l);
     
-    for (const line of lines) {
-        // Разделяем по точке с запятой
-        const comboStrings = line.split(';').map(s => s.trim()).filter(s => s);
+    let currentBossName = null;
+    let currentComboMode = null;
+    let currentMode = null;
+    let currentWeapons = [];
+    
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+        const line = lines[lineIndex];
         
-        for (const comboString of comboStrings) {
+        // Проверяем, является ли строка нумерованным списком (начинается с цифры)
+        const parts = line.split(/\s+/).filter(p => p);
+        const isNumbered = parts.length > 0 && /^\d+$/.test(parts[0]);
+        
+        if (isNumbered) {
+            // Это нумерованный список оружий
+            if (currentBossName) {
+                // Парсим оружие (пропускаем номер)
+                if (parts.length >= 2) {
+                    const weaponName = parts.slice(1).join(' ').toLowerCase();
+                    const apiWeapon = parseWeaponName(weaponName);
+                    if (apiWeapon) {
+                        currentWeapons.push(apiWeapon);
+                    } else {
+                        console.warn(`Неизвестное оружие в нумерованном списке: ${weaponName}`);
+                    }
+                }
+            }
+        } else {
+            // Это не нумерованный список - возможно начало нового комбо или формат с точкой с запятой
+            
+            // Если у нас уже есть накопленное комбо из нумерованного списка, сохраняем его
+            if (currentBossName && currentWeapons.length > 0) {
+                combos.push({
+                    bossName: currentBossName,
+                    mode: currentMode || 'normal',
+                    comboMode: currentComboMode,
+                    weapons: currentWeapons
+                });
+                currentBossName = null;
+                currentComboMode = null;
+                currentMode = null;
+                currentWeapons = [];
+            }
+            
+            // Обрабатываем формат с точкой с запятой (старый формат)
+            if (line.includes(';')) {
+                const comboStrings = line.split(';').map(s => s.trim()).filter(s => s);
+                
+                for (const comboString of comboStrings) {
             const parts = comboString.split(/\s+/).filter(p => p);
             if (parts.length < 2) continue; // минимум: имя_босса удар (или имя_босса режим удар)
             
@@ -5566,10 +5609,76 @@ function parseComboFile(text) {
             } else {
                 console.warn(`Не найдено оружий для комбо: ${comboString}`);
             }
+                }
+            } else {
+                // Это может быть начало нового комбо в нумерованном формате
+                // Формат: "махно авто" (имя босса + режим комбо)
+                if (parts.length >= 2) {
+                    const bossName = parts[0].toLowerCase();
+                    const secondPart = parts[1].toLowerCase();
+                    
+                    // Проверяем, это режим комбо?
+                    if (COMBO_MODE_MAPPING[secondPart]) {
+                        currentBossName = bossName;
+                        currentComboMode = COMBO_MODE_MAPPING[secondPart];
+                        currentMode = null;
+                        currentWeapons = [];
+                    } else {
+                        // Пытаемся найти режим атаки
+                        const foundMode = Object.keys(BATTLE_MODE_INFO).find(key => 
+                            BATTLE_MODE_INFO[key].name.toLowerCase().includes(secondPart) ||
+                            key.toLowerCase() === secondPart
+                        );
+                        if (foundMode) {
+                            currentBossName = bossName;
+                            currentMode = foundMode;
+                            currentComboMode = null;
+                            currentWeapons = [];
+                        } else {
+                            // Если не нашли режим, возможно это формат в одну строку
+                            // Продолжаем обработку как обычный формат
+                        }
+                    }
+                }
+            }
         }
     }
     
+    // Сохраняем последнее комбо, если оно было в нумерованном формате
+    if (currentBossName && currentWeapons.length > 0) {
+        combos.push({
+            bossName: currentBossName,
+            mode: currentMode || 'normal',
+            comboMode: currentComboMode,
+            weapons: currentWeapons
+        });
+    }
+    
     return combos;
+}
+
+// Вспомогательная функция для парсинга названия оружия из строки
+function parseWeaponName(weaponName) {
+    weaponName = weaponName.toLowerCase().trim();
+    
+    // Проверяем прямое совпадение в маппинге
+    if (WEAPON_MAPPING[weaponName]) {
+        const apiWeapon = WEAPON_MAPPING[weaponName];
+        if (['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(apiWeapon)) {
+            return apiWeapon;
+        }
+    }
+    
+    // Проверяем частичные совпадения (например, "колено" -> "kneeear")
+    for (const [key, value] of Object.entries(WEAPON_MAPPING)) {
+        if (weaponName === key || weaponName.includes(key) || key.includes(weaponName)) {
+            if (['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(value)) {
+                return value;
+            }
+        }
+    }
+    
+    return null;
 }
 
 // Подсчет максимальной стоимости комбо (все удары могут потребовать восстановления)
