@@ -5591,7 +5591,7 @@ function displayLoadedCombos() {
         const modeName = combo.mode ? (BATTLE_MODE_INFO[combo.mode]?.name || combo.mode) : 'не указан';
         const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : 'не указан';
         const maxCost = calculateComboCost(combo.weapons.length);
-        html += `<li><strong>${combo.bossName}</strong> - Режим: ${modeName}, Комбо: ${comboModeName}, Ударов: ${combo.weapons.length}, Макс. стоимость: ${maxCost} ₽</li>`;
+        html += `<li><strong>${combo.bossName}</strong> - Режим: ${modeName}, Комбо: ${comboModeName}, Ударов: ${combo.weapons.length}, Восст: до ${maxCost} ₽</li>`;
     });
     html += '</ul>';
     
@@ -5798,7 +5798,12 @@ function displayComboBossSelection() {
                     ${modeSelectorHtml}
                     ${loadedComboSelectorHtml}
                     <div style="font-size: 10px; color: #4CAF50; margin-top: 4px;">Комбо: ${combos.length}</div>
-                    ${combos.length > 0 ? `<div class="combo-cost-display" style="font-size: 10px; color: #FFA500; margin-top: 2px;">Макс. стоимость: ${calculateComboCost(combos[0].weapons.length)} ₽</div>` : ''}
+                    ${combos.length > 0 ? (() => {
+                        const selectedComboIndex = 0; // По умолчанию первое комбо
+                        const selectedCombo = combos[selectedComboIndex];
+                        const maxCost = calculateComboCost(selectedCombo.weapons.length);
+                        return `<div class="combo-cost-display" style="font-size: 10px; color: #FFA500; margin-top: 2px;">Восст: до ${maxCost} ₽</div>`;
+                    })() : ''}
                 </div>
             </div>
         `;
@@ -5915,7 +5920,7 @@ function selectComboBoss(bossId) {
         const costElement = selectedCard.querySelector('.combo-cost-display');
         if (costElement) {
             const maxCost = calculateComboCost(combo.weapons.length);
-            costElement.textContent = `Макс. стоимость: ${maxCost} ₽`;
+            costElement.textContent = `Восст: до ${maxCost} ₽`;
         }
     }
     
@@ -5934,7 +5939,7 @@ window.startComboAttack = async function() {
         const comboModeName = selectedCombo.comboMode ? (COMBO_MODE_INFO[selectedCombo.comboMode]?.name || selectedCombo.comboMode) : 'не указан';
         const maxCost = calculateComboCost(selectedCombo.weapons.length);
         tg.showConfirm(
-            `Начать комбо атаку на ${selectedCombo.bossName}?\n\nРежим: ${modeName}\nКомбо: ${comboModeName}\nУдаров: ${selectedCombo.weapons.length}\nМакс. стоимость: ${maxCost} ₽`,
+            `Начать комбо атаку на ${selectedCombo.bossName}?\n\nРежим: ${modeName}\nКомбо: ${comboModeName}\nУдаров: ${selectedCombo.weapons.length}\nВосст: до ${maxCost} ₽`,
             resolve
         );
     });
