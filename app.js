@@ -5291,31 +5291,55 @@ async function handleComboFileUpload(event) {
             console.log('Очищенный текст:', text);
         }
         
-        loadedCombos = parseComboFile(text);
-        
-        if (loadedCombos.length === 0) {
-            tg.showAlert('Не удалось распарсить комбо из файла. Проверьте формат.\n\nУбедитесь, что файл сохранен как обычный текстовый файл (.txt), а не RTF или другой формат.');
-            return;
-        }
-        
-        // Убеждаемся, что список боссов загружен
-        if (!window.bossCategoriesData || Object.keys(window.bossCategoriesData).length === 0) {
-            console.log('📋 Список боссов не загружен, загружаем...');
-            await loadBossList();
-            // Ждем немного, чтобы данные успели обработаться
-            await new Promise(resolve => setTimeout(resolve, 500));
-        }
-        
-        // Показываем список загруженных комбо
-        displayLoadedCombos();
-        
-        // Показываем выбор боссов
-        displayComboBossSelection();
+        await loadCombosFromText(text);
         
     } catch (error) {
         console.error('Ошибка загрузки файла:', error);
         tg.showAlert('Ошибка загрузки файла: ' + error.message);
     }
+}
+
+// Загрузка комбо из текста (общая функция для файла и текстового поля)
+async function loadCombosFromText(text) {
+    if (!text || !text.trim()) {
+        tg.showAlert('Текст комбо пуст');
+        return;
+    }
+    
+    loadedCombos = parseComboFile(text);
+    
+    if (loadedCombos.length === 0) {
+        tg.showAlert('Не удалось распарсить комбо из текста. Проверьте формат.\n\nФормат: имя_босса режим удар1 удар2 ...; имя_босса2 режим удар1 удар2 ...\nПример: палыч пац фин глаз грудь ухо пах яд; махно блат пал пах фин');
+        return;
+    }
+    
+    // Убеждаемся, что список боссов загружен
+    if (!window.bossCategoriesData || Object.keys(window.bossCategoriesData).length === 0) {
+        console.log('📋 Список боссов не загружен, загружаем...');
+        await loadBossList();
+        // Ждем немного, чтобы данные успели обработаться
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    // Показываем список загруженных комбо
+    displayLoadedCombos();
+    
+    // Показываем выбор боссов
+    displayComboBossSelection();
+}
+
+// Парсинг комбо из текстового поля
+window.parseComboFromText = async function() {
+    const textInput = document.getElementById('combo-text-input');
+    if (!textInput) return;
+    
+    const text = textInput.value.trim();
+    if (!text) {
+        tg.showAlert('Введите комбо в текстовое поле');
+        return;
+    }
+    
+    await loadCombosFromText(text);
 }
 
 // Парсинг файла с комбо
