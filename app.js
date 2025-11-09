@@ -3634,9 +3634,11 @@ window.loadBossList = async function loadBossList() {
                 
                 if (response.ok) {
                     const data = await response.json();
+                    console.log(`✅ Категория ${categoryId} загружена:`, data.success, data.bosses?.length || 0, 'боссов');
                     return data;
                 } else {
                     const errorText = await response.text();
+                    console.error(`❌ Ошибка загрузки категории ${categoryId}:`, response.status, errorText);
                     throw new Error(`HTTP ${response.status}: ${errorText}`);
                 }
             } catch (err) {
@@ -3671,7 +3673,12 @@ window.loadBossList = async function loadBossList() {
         // Убеждаемся, что ключи загружены перед рендерингом
         console.log('🔑 Ключи перед рендерингом:', bossKeys);
         
+        console.log('📊 Результаты загрузки категорий:');
+        console.log('   Категория 1:', category1Data ? `✅ ${category1Data.bosses?.length || 0} боссов` : '❌ нет данных');
+        console.log('   Категория 2:', category2Data ? `✅ ${category2Data.bosses?.length || 0} боссов` : '❌ нет данных');
+        
         if (category1Data && category2Data) {
+            console.log('✅ Обе категории загружены, рендерим список...');
             renderBossList([category1Data, category2Data]);
             // После рендеринга убеждаемся, что карточки обновлены с актуальными ключами
             setTimeout(() => {
@@ -3679,6 +3686,7 @@ window.loadBossList = async function loadBossList() {
             }, 100);
         } else if (category1Data || category2Data) {
             // Если получили только одну категорию, отображаем что есть
+            console.log('⚠️ Загружена только одна категория, рендерим...');
             const categories = [];
             if (category1Data) categories.push(category1Data);
             if (category2Data) categories.push(category2Data);
@@ -3839,10 +3847,15 @@ function renderBossList(categoriesData) {
     if (defaultCategoryData && defaultCategoryData.bosses) {
         console.log(`   Количество боссов: ${defaultCategoryData.bosses.length}`);
         defaultCategoryData.bosses.forEach((bossData) => {
-            const boss = bossData.boss;
-            const bossId = boss.id;
-            const bossName = boss.title;
-            const baseHp = boss.baseHp;
+            try {
+                const boss = bossData.boss;
+                if (!boss) {
+                    console.warn('⚠️ Босс не найден в данных:', bossData);
+                    return;
+                }
+                const bossId = boss.id;
+                const bossName = boss.title;
+                const baseHp = boss.baseHp;
             // Получаем количество ключей у босса
             let keysCount = 0;
             if (bossKeys[bossId] !== undefined) {
@@ -3865,6 +3878,10 @@ function renderBossList(categoriesData) {
             const availableModes = getAvailableBattleModes(boss);
             
             // Получаем доступные режимы комбо
+            // Убеждаемся, что combos существует, даже если его нет в данных
+            if (!bossData.combos) {
+                bossData.combos = {};
+            }
             const availableComboModes = getAvailableComboModes(bossData);
             
             // Сохраняем босса
@@ -3965,6 +3982,10 @@ function renderBossList(categoriesData) {
                     </div>
                 </div>
             `;
+            } catch (error) {
+                console.error(`❌ Ошибка при рендеринге босса:`, error, bossData);
+                // Продолжаем обработку других боссов
+            }
         });
     } else {
         console.warn(`⚠️ Нет данных для категории ${defaultCategoryId} или нет боссов`);
@@ -3997,28 +4018,44 @@ function renderBossList(categoriesData) {
     
     container.innerHTML = html;
     
-    // Убеждаемся, что контейнер карусели виден
-    const carouselContainer = document.querySelector('.boss-carousel-container[data-category-id="unified"]');
-    if (carouselContainer) {
-        carouselContainer.style.display = 'block';
-        carouselContainer.style.width = '100%';
-    }
+    console.log('📝 HTML вставлен в контейнер, длина:', html.length);
+    console.log('📝 HTML содержит карусель:', html.includes('carousel-unified'));
     
-    // Убеждаемся, что карусель видна и правильно стилизована
-    const carousel = document.getElementById('carousel-unified');
-    if (carousel) {
-        carousel.style.display = 'flex';
-        carousel.style.flexDirection = 'row';
-        carousel.style.flexWrap = 'nowrap';
-        carousel.style.gap = '12px';
-        carousel.style.padding = '10px';
-        carousel.style.overflowX = 'auto';
-        carousel.style.overflowY = 'hidden';
-        carousel.style.minHeight = '200px';
-    }
-    
-    // Инициализируем карусели
-    initializeCarousels();
+    // Небольшая задержка для того, чтобы DOM обновился
+    setTimeout(() => {
+        // Убеждаемся, что контейнер карусели виден
+        const carouselContainer = document.querySelector('.boss-carousel-container[data-category-id="unified"]');
+        console.log('🎠 Контейнер карусели найден:', !!carouselContainer);
+        if (carouselContainer) {
+            carouselContainer.style.display = 'block';
+            carouselContainer.style.width = '100%';
+            console.log('✅ Контейнер карусели настроен');
+        } else {
+            console.error('❌ Контейнер карусели не найден!');
+        }
+        
+        // Убеждаемся, что карусель видна и правильно стилизована
+        const carousel = document.getElementById('carousel-unified');
+        console.log('🎠 Карусель найдена:', !!carousel);
+        if (carousel) {
+            carousel.style.display = 'flex';
+            carousel.style.flexDirection = 'row';
+            carousel.style.flexWrap = 'nowrap';
+            carousel.style.gap = '12px';
+            carousel.style.padding = '10px';
+            carousel.style.overflowX = 'auto';
+            carousel.style.overflowY = 'hidden';
+            carousel.style.minHeight = '200px';
+            carousel.style.width = '100%';
+            console.log('✅ Карусель настроена, содержимое:', carousel.innerHTML.length, 'символов');
+            console.log('✅ Количество карточек боссов:', carousel.querySelectorAll('.boss-card').length);
+        } else {
+            console.error('❌ Карусель не найдена!');
+        }
+        
+        // Инициализируем карусели
+        initializeCarousels();
+    }, 100);
 }
 
 // Переключение категории боссов
@@ -4075,6 +4112,10 @@ window.switchBossCategory = function(categoryId) {
         const availableModes = getAvailableBattleModes(boss);
         
         // Получаем доступные режимы комбо
+        // Убеждаемся, что combos существует, даже если его нет в данных
+        if (!bossData.combos) {
+            bossData.combos = {};
+        }
         const availableComboModes = getAvailableComboModes(bossData);
         
         // Сохраняем босса в allBosses
