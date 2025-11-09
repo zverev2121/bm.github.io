@@ -5298,6 +5298,14 @@ async function handleComboFileUpload(event) {
             return;
         }
         
+        // Убеждаемся, что список боссов загружен
+        if (!window.bossCategoriesData || Object.keys(window.bossCategoriesData).length === 0) {
+            console.log('📋 Список боссов не загружен, загружаем...');
+            await loadBossList();
+            // Ждем немного, чтобы данные успели обработаться
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
         // Показываем список загруженных комбо
         displayLoadedCombos();
         
@@ -5421,21 +5429,25 @@ function displayComboBossSelection() {
     // Собираем всех боссов из всех категорий
     let allBossesFromCategories = [];
     if (window.bossCategoriesData) {
+        console.log('📊 Категории для комбо:', Object.keys(window.bossCategoriesData));
         // Проходим по всем категориям
         for (const categoryId in window.bossCategoriesData) {
             const categoryData = window.bossCategoriesData[categoryId];
+            console.log(`📦 Обработка категории ${categoryId} для комбо:`, categoryData ? `${categoryData.bosses?.length || 0} боссов` : 'нет данных');
             if (categoryData && categoryData.bosses) {
                 categoryData.bosses.forEach((bossData) => {
                     const boss = bossData.boss;
                     if (boss) {
-                        // Получаем доступные режимы боя
+                        // Получаем доступные режимы боя из battleModes
                         const availableModes = getAvailableBattleModes(boss);
+                        console.log(`  Босс ${boss.id} (${boss.title}): режимов атаки=${availableModes.length}`, availableModes.map(m => m.key));
                         
                         // Получаем доступные режимы комбо
                         if (!bossData.combos) {
                             bossData.combos = {};
                         }
                         const availableComboModes = getAvailableComboModes(bossData);
+                        console.log(`  Босс ${boss.id} (${boss.title}): режимов комбо=${availableComboModes.length}`, availableComboModes.map(m => m.key));
                         
                         // Добавляем босса в список
                         allBossesFromCategories.push({
@@ -5455,6 +5467,8 @@ function displayComboBossSelection() {
         }
     }
     
+    console.log(`✅ Всего боссов собрано для комбо: ${allBossesFromCategories.length}`);
+    
     // Если не нашли в категориях, используем window.allBosses
     if (allBossesFromCategories.length === 0 && window.allBosses) {
         allBossesFromCategories = window.allBosses;
@@ -5462,23 +5476,39 @@ function displayComboBossSelection() {
     
     // Находим соответствующих боссов в списке
     const availableBosses = [];
+    console.log(`🔍 Ищем боссов для комбо. Уникальные имена: ${uniqueBossNames.join(', ')}`);
+    console.log(`🔍 Всего боссов в базе: ${allBossesFromCategories.length}`);
+    
     for (const bossName of uniqueBossNames) {
-        const boss = allBossesFromCategories.find(b => 
-            b.name.toLowerCase().includes(bossName) || 
-            bossName.includes(b.name.toLowerCase())
-        );
+        console.log(`🔍 Ищем босса: "${bossName}"`);
+        const boss = allBossesFromCategories.find(b => {
+            const nameMatch = b.name.toLowerCase().includes(bossName.toLowerCase()) || 
+                             bossName.toLowerCase().includes(b.name.toLowerCase());
+            if (nameMatch) {
+                console.log(`  ✅ Найден: ${b.name} (ID: ${b.id}, категория: ${b.categoryId})`);
+            }
+            return nameMatch;
+        });
         if (boss) {
             // Находим комбо для этого босса
             const combosForBoss = loadedCombos.filter(c => c.bossName === bossName);
+            console.log(`  📋 Найдено комбо для ${boss.name}: ${combosForBoss.length}`);
             availableBosses.push({
                 boss,
                 combos: combosForBoss
             });
+        } else {
+            console.log(`  ❌ Босс "${bossName}" не найден в базе`);
+            // Показываем список всех доступных боссов для отладки
+            console.log(`  📋 Доступные боссы:`, allBossesFromCategories.map(b => `${b.name} (ID: ${b.id}, категория: ${b.categoryId})`).join(', '));
         }
     }
     
+    console.log(`✅ Найдено боссов для комбо: ${availableBosses.length}`);
+    
     if (availableBosses.length === 0) {
-        tg.showAlert('Не найдено соответствующих боссов для загруженных комбо');
+        const availableBossNames = allBossesFromCategories.map(b => b.name).join(', ');
+        tg.showAlert(`Не найдено соответствующих боссов для загруженных комбо.\n\nИскали: ${uniqueBossNames.join(', ')}\n\nДоступные боссы: ${availableBossNames}`);
         return;
     }
     
@@ -5500,11 +5530,52 @@ function displayComboBossSelection() {
         const baseHp = boss.baseHp || 0;
         
         // Получаем доступные режимы атаки из БД
-        const availableModes = boss.availableModes || getAvailableBattleModes(boss) || [];
+        // Сначала пытаемся использовать сохраненные availableModes, если их нет - вычисляем заново
+        let availableModes = boss.availableModes || [];
+        if (availableModes.length === 0 && boss.battleModes) {
+            availableModes = getAvailableBattleModes(boss);
+        }
+        // Если все еще нет режимов атаки, пытаемся найти в исходных данных категории
+        if (availableModes.length === 0 && window.bossCategoriesData) {
+            for (const categoryId in window.bossCategoriesData) {
+                const categoryData = window.bossCategoriesData[categoryId];
+                if (categoryData && categoryData.bosses) {
+                    const bossData = categoryData.bosses.find(bd => bd.boss && bd.boss.id === boss.id);
+                    if (bossData && bossData.boss) {
+                        availableModes = getAvailableBattleModes(bossData.boss);
+                        if (availableModes.length > 0) {
+                            // Обновляем battleModes в объекте boss для будущего использования
+                            boss.battleModes = bossData.boss.battleModes || {};
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        console.log(`🎯 Босс ${boss.name} (ID: ${boss.id}): доступных режимов атаки=${availableModes.length}`, availableModes, `battleModes:`, boss.battleModes);
         const defaultMode = availableModes.find(m => m.key === 'pacansky') ? 'pacansky' : (availableModes.length > 0 ? availableModes[0].key : null);
         
         // Получаем доступные режимы комбо из БД
-        const availableComboModes = boss.availableComboModes || getAvailableComboModes(boss) || [];
+        let availableComboModes = boss.availableComboModes || [];
+        if (availableComboModes.length === 0 && boss.combos) {
+            // Нужно передать объект с combos для getAvailableComboModes
+            const bossDataForCombo = { combos: boss.combos };
+            availableComboModes = getAvailableComboModes(bossDataForCombo);
+        }
+        // Если все еще нет режимов комбо, пытаемся найти в исходных данных категории
+        if (availableComboModes.length === 0 && window.bossCategoriesData) {
+            for (const categoryId in window.bossCategoriesData) {
+                const categoryData = window.bossCategoriesData[categoryId];
+                if (categoryData && categoryData.bosses) {
+                    const bossData = categoryData.bosses.find(bd => bd.boss && bd.boss.id === boss.id);
+                    if (bossData) {
+                        availableComboModes = getAvailableComboModes(bossData);
+                        break;
+                    }
+                }
+            }
+        }
+        console.log(`🎯 Босс ${boss.name} (ID: ${boss.id}): доступных режимов комбо=${availableComboModes.length}`, availableComboModes);
         const defaultComboMode = availableComboModes.find(m => m.key === 'pacansky') ? 'pacansky' : (availableComboModes.length > 0 ? availableComboModes[0].key : null);
         
         // Формируем селектор режима атаки
