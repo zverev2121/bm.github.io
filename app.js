@@ -1155,13 +1155,13 @@ function updateStatus(connected) {
     }
 }
 
-// Функция для расшифровки режима на русский (пацанский/блатной/авторитетный)
+// Функция для расшифровки режима на русский (пац/блат/авто)
 function decodeMode(mode) {
     if (!mode) return 'N/A';
     const modeMap = {
-        'blotnoy': 'Блатной',
-        'pacansky': 'Пацанский',
-        'avtoritetny': 'Авторитетный',
+        'blotnoy': 'Блат',
+        'pacansky': 'пац',
+        'avtoritetny': 'Авто',
         'odin': 'Один'
     };
     return modeMap[mode.toLowerCase()] || mode;
@@ -1171,9 +1171,9 @@ function decodeMode(mode) {
 function decodeComboMode(comboMode) {
     if (!comboMode) return null;
     const comboModeMap = {
-        'blotnoy': 'Блатной',
-        'pacansky': 'Пацанский',
-        'avtoritetny': 'Авторитетный'
+        'blotnoy': 'Блат',
+        'pacansky': 'пац',
+        'avtoritetny': 'Авто'
     };
     return comboModeMap[comboMode.toLowerCase()] || comboMode;
 }
@@ -3297,9 +3297,9 @@ const CATEGORY_NAMES = {
 
 // Названия и множители режимов боя
 const BATTLE_MODE_INFO = {
-    'pacansky': { name: 'Пацанский', multiplier: 'x1', multiplierValue: 1 },
-    'blotnoy': { name: 'Блатной', multiplier: 'x3', multiplierValue: 3 },
-    'avtoritetny': { name: 'Авторитетный', multiplier: 'x6', multiplierValue: 6 },
+    'pacansky': { name: 'пац', multiplier: 'x1', multiplierValue: 1 },
+    'blotnoy': { name: 'Блат', multiplier: 'x3', multiplierValue: 3 },
+    'avtoritetny': { name: 'Авто', multiplier: 'x6', multiplierValue: 6 },
     'odin': { name: 'В одного', multiplier: 'x1', multiplierValue: 1 }
 };
 
@@ -3334,9 +3334,9 @@ function getAvailableBattleModes(bossData) {
 
 // Информация о режимах комбо
 const COMBO_MODE_INFO = {
-    'pacansky': { name: 'Пацанский', key: 'pacansky' },
-    'blotnoy': { name: 'Блатной', key: 'blotnoy' },
-    'avtoritetny': { name: 'Авторитетный', key: 'avtoritetny' }
+    'pacansky': { name: 'пац', key: 'pacansky' },
+    'blotnoy': { name: 'Блат', key: 'blotnoy' },
+    'avtoritetny': { name: 'Авто', key: 'avtoritetny' }
 };
 
 // Получение доступных режимов комбо для босса
