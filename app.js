@@ -1328,9 +1328,29 @@ async function loadBossInfo() {
                             timeInfo += `<br>Окончание боя: <strong>${endTime}</strong>`;
                         }
                         
+                        // Ищем босса по title для получения картинки
+                        let bossImageHtml = '';
+                        if (session.title && window.allBosses && window.allBosses.length > 0) {
+                            const currentBoss = window.allBosses.find(b => b.name === session.title);
+                            if (currentBoss) {
+                                bossImageHtml = `
+                                    <div class="boss-image" style="width: 100px; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; overflow: hidden; margin: 0 auto 12px auto;">
+                                        <img src="${getBossImageUrl(currentBoss.id, currentBoss)}" 
+                                             alt="${session.title}" 
+                                             data-fallback="${getBossImageUrlFallback(currentBoss.id, currentBoss)}"
+                                             style="max-width: 100%; max-height: 100%; object-fit: contain;"
+                                             onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
+                                             onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
+                                        <span style="font-size: 40px; display: none;">👹</span>
+                                    </div>
+                                `;
+                            }
+                        }
+                        
                         const rewardMessage = data.hasReward === true ? '<p style="color: #28a745; font-weight: bold;">💰 Награда с босса собрана!</p>' : '';
                         bossInfo.innerHTML = `
                             ${rewardMessage}
+                            ${bossImageHtml}
                             <div>
                                 <strong>${session.title || 'Босс'}</strong><br>
                                 HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
@@ -1421,8 +1441,28 @@ async function loadBossInfo() {
                 timeInfo += `<br>Окончание боя: <strong>${endTime}</strong>`;
             }
             
+            // Ищем босса по title для получения картинки
+            let bossImageHtml = '';
+            if (session.title && window.allBosses && window.allBosses.length > 0) {
+                const currentBoss = window.allBosses.find(b => b.name === session.title);
+                if (currentBoss) {
+                    bossImageHtml = `
+                        <div class="boss-image" style="width: 100px; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; overflow: hidden; margin: 0 auto 12px auto;">
+                            <img src="${getBossImageUrl(currentBoss.id, currentBoss)}" 
+                                 alt="${session.title}" 
+                                 data-fallback="${getBossImageUrlFallback(currentBoss.id, currentBoss)}"
+                                 style="max-width: 100%; max-height: 100%; object-fit: contain;"
+                                 onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
+                                 onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
+                            <span style="font-size: 40px; display: none;">👹</span>
+                        </div>
+                    `;
+                }
+            }
+            
             bossInfo.innerHTML = `
                 ${rewardMessageHtml}
+                ${bossImageHtml}
                 <div>
                     <strong>${session.title || 'Босс'}</strong><br>
                     HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
@@ -3764,7 +3804,7 @@ function renderBossList(categoriesData) {
                      data-base-hp="${baseHp}"
                      style="${cardStyle} border-radius: 12px; padding: 10px; margin-right: 12px; min-width: 140px; cursor: pointer; transition: transform 0.2s;"
                      onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}')">
-                    <div class="boss-image" style="width: 100%; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden;">
+                    <div class="boss-image" style="width: 100px; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden; flex-shrink: 0;">
                         <img src="${getBossImageUrl(bossId, boss)}" 
                              alt="${bossName}" 
                              data-fallback="${getBossImageUrlFallback(bossId, boss)}"
@@ -3917,7 +3957,7 @@ window.switchBossCategory = function(categoryId) {
                  data-base-hp="${baseHp}"
                  style="${cardStyle} border-radius: 12px; padding: 10px; margin-right: 12px; min-width: 140px; cursor: pointer; transition: transform 0.2s;"
                  onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}')">
-                <div class="boss-image" style="width: 100%; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden;">
+                <div class="boss-image" style="width: 100px; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden; flex-shrink: 0;">
                     <img src="${getBossImageUrl(bossId, boss)}" 
                          alt="${bossName}" 
                          data-fallback="${getBossImageUrlFallback(bossId, boss)}"
@@ -4084,7 +4124,7 @@ function updateOrderCarousel() {
                  data-boss-id="${boss.id}"
                  style="border: 2px solid #3390ec; background: linear-gradient(135deg, #2d3d5a 0%, #1e2a3a 100%); border-radius: 12px; padding: 10px; margin-right: 12px; min-width: 130px; position: relative;">
                 <div style="position: absolute; top: 5px; right: 5px; background: #3390ec; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">${index + 1}</div>
-                <div class="boss-image" style="width: 100%; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden;">
+                <div class="boss-image" style="width: 100px; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden; flex-shrink: 0;">
                     <img src="${getBossImageUrl(boss.id, bossData)}" 
                          alt="${boss.name}" 
                          data-fallback="${getBossImageUrlFallback(boss.id, bossData)}"
