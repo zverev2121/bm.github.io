@@ -5681,11 +5681,31 @@ function parseWeaponName(weaponName) {
     return null;
 }
 
-// Подсчет максимальной стоимости комбо (все удары могут потребовать восстановления)
-function calculateComboCost(weaponsCount) {
-    // Каждый удар может потребовать восстановления за 3 рубля
-    // Максимальная стоимость = количество ударов * 3 рубля
-    return weaponsCount * 3;
+// Подсчет стоимости восстановления для комбо
+// Восстановление нужно только для повторных ударов оружий с кулдауном (ухо/пах/глаз/грудь)
+function calculateComboCost(weapons) {
+    // Оружия с кулдауном
+    const cooldownWeapons = ['kneeear', 'kickballs', 'pokeeyes', 'punchchest'];
+    
+    // Считаем, сколько раз каждое оружие с кулдауном используется
+    const weaponUsage = {};
+    let restoreCount = 0;
+    
+    weapons.forEach(weapon => {
+        if (cooldownWeapons.includes(weapon)) {
+            if (weaponUsage[weapon]) {
+                // Это повторный удар - нужен 1 рубль на восстановление
+                weaponUsage[weapon]++;
+                restoreCount++;
+            } else {
+                // Первый удар - восстановление не нужно
+                weaponUsage[weapon] = 1;
+            }
+        }
+    });
+    
+    // Каждое восстановление стоит 3 рубля
+    return restoreCount * 3;
 }
 
 // Отображение загруженных комбо
@@ -5699,7 +5719,7 @@ function displayLoadedCombos() {
     loadedCombos.forEach((combo, index) => {
         const modeName = combo.mode ? (BATTLE_MODE_INFO[combo.mode]?.name || combo.mode) : 'не указан';
         const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : 'не указан';
-        const maxCost = calculateComboCost(combo.weapons.length);
+        const maxCost = calculateComboCost(combo.weapons);
         html += `<li><strong>${combo.bossName}</strong> - Режим: ${modeName}, Комбо: ${comboModeName}, Ударов: ${combo.weapons.length}, Восст: до ${maxCost} ₽</li>`;
     });
     html += '</ul>';
@@ -5910,7 +5930,7 @@ function displayComboBossSelection() {
                     ${combos.length > 0 ? (() => {
                         const selectedComboIndex = 0; // По умолчанию первое комбо
                         const selectedCombo = combos[selectedComboIndex];
-                        const maxCost = calculateComboCost(selectedCombo.weapons.length);
+                        const maxCost = calculateComboCost(selectedCombo.weapons);
                         return `<div class="combo-cost-display" style="font-size: 10px; color: #FFA500; margin-top: 2px;">Восст: до ${maxCost} ₽</div>`;
                     })() : ''}
                 </div>
@@ -6028,12 +6048,33 @@ function selectComboBoss(bossId) {
         // Обновляем стоимость комбо в карточке
         const costElement = selectedCard.querySelector('.combo-cost-display');
         if (costElement) {
-            const maxCost = calculateComboCost(combo.weapons.length);
+            const maxCost = calculateComboCost(combo.weapons);
             costElement.textContent = `Восст: до ${maxCost} ₽`;
         }
     }
     
     document.getElementById('start-combo-btn').style.display = 'block';
+}
+
+// Подсчет необходимых ресурсов для комбо
+function calculateRequiredResources(weapons) {
+    const required = {
+        knife: 0,
+        gunshot: 0,
+        poison: 0,
+        rubles: 0
+    };
+    
+    weapons.forEach(weapon => {
+        if (weapon === 'knife') required.knife++;
+        else if (weapon === 'gunshot') required.gunshot++;
+        else if (weapon === 'poison') required.poison++;
+    });
+    
+    // Стоимость восстановления (только для повторных ударов оружий с кулдауном)
+    required.rubles = calculateComboCost(weapons);
+    
+    return required;
 }
 
 // Начало выполнения комбо
@@ -6043,10 +6084,49 @@ window.startComboAttack = async function() {
         return;
     }
     
+    // Проверяем ресурсы перед началом комбо
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        const response = await fetch(`${apiUrl}/player/resources`, {
+            method: 'GET',
+            headers: await getApiHeaders()
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.resources) {
+                const resources = data.resources;
+                const required = calculateRequiredResources(selectedCombo.weapons);
+                
+                const missing = [];
+                if (resources.knife_count < required.knife) {
+                    missing.push(`Финок: ${required.knife} (есть ${resources.knife_count})`);
+                }
+                if (resources.gunshot_count < required.gunshot) {
+                    missing.push(`Самопалов: ${required.gunshot} (есть ${resources.gunshot_count})`);
+                }
+                if (resources.poison_count < required.poison) {
+                    missing.push(`Ядов: ${required.poison} (есть ${resources.poison_count})`);
+                }
+                if (resources.rubles < required.rubles) {
+                    missing.push(`Рублей: ${required.rubles} (есть ${resources.rubles})`);
+                }
+                
+                if (missing.length > 0) {
+                    tg.showAlert(`❌ Недостаточно ресурсов для комбо:\n\n${missing.join('\n')}\n\nОбновите данные через /api/player/init`);
+                    return;
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка проверки ресурсов:', error);
+        // Продолжаем выполнение, если не удалось проверить ресурсы
+    }
+    
     const confirmed = await new Promise(resolve => {
         const modeName = selectedCombo.mode ? (BATTLE_MODE_INFO[selectedCombo.mode]?.name || selectedCombo.mode) : 'не указан';
         const comboModeName = selectedCombo.comboMode ? (COMBO_MODE_INFO[selectedCombo.comboMode]?.name || selectedCombo.comboMode) : 'не указан';
-        const maxCost = calculateComboCost(selectedCombo.weapons.length);
+        const maxCost = calculateComboCost(selectedCombo.weapons);
         tg.showConfirm(
             `Начать комбо атаку на ${selectedCombo.bossName}?\n\nРежим: ${modeName}\nКомбо: ${comboModeName}\nУдаров: ${selectedCombo.weapons.length}\nВосст: до ${maxCost} ₽`,
             resolve
