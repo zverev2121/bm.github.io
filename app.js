@@ -3913,6 +3913,26 @@ function renderBossList(categoriesData) {
     
     container.innerHTML = html;
     
+    // Убеждаемся, что контейнер карусели виден
+    const carouselContainer = document.querySelector('.boss-carousel-container[data-category-id="unified"]');
+    if (carouselContainer) {
+        carouselContainer.style.display = 'block';
+        carouselContainer.style.width = '100%';
+    }
+    
+    // Убеждаемся, что карусель видна и правильно стилизована
+    const carousel = document.getElementById('carousel-unified');
+    if (carousel) {
+        carousel.style.display = 'flex';
+        carousel.style.flexDirection = 'row';
+        carousel.style.flexWrap = 'nowrap';
+        carousel.style.gap = '12px';
+        carousel.style.padding = '10px';
+        carousel.style.overflowX = 'auto';
+        carousel.style.overflowY = 'hidden';
+        carousel.style.minHeight = '200px';
+    }
+    
     // Инициализируем карусели
     initializeCarousels();
 }
@@ -4073,6 +4093,16 @@ window.switchBossCategory = function(categoryId) {
     
     carousel.innerHTML = html;
     
+    // Убеждаемся, что карусель правильно отображается
+    carousel.style.display = 'flex';
+    carousel.style.flexDirection = 'row';
+    carousel.style.flexWrap = 'nowrap';
+    carousel.style.gap = '12px';
+    carousel.style.padding = '10px';
+    carousel.style.overflowX = 'auto';
+    carousel.style.overflowY = 'hidden';
+    carousel.style.minHeight = '200px';
+    
     // Обновляем карточки боссов
     updateBossCards();
 }
@@ -4087,6 +4117,13 @@ function initializeCarousels() {
         // Убеждаемся, что нативный скролл включен
         carousel.style.overflowX = 'auto';
         carousel.style.overflowY = 'hidden';
+        // Убеждаемся, что карусель отображается как flex-контейнер
+        carousel.style.display = 'flex';
+        carousel.style.flexDirection = 'row';
+        carousel.style.flexWrap = 'nowrap';
+        carousel.style.gap = '12px';
+        carousel.style.padding = '10px';
+        carousel.style.minHeight = '200px';
     });
 }
 
