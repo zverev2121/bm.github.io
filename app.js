@@ -3455,27 +3455,62 @@ function preventBossAttackTabClose() {
     let touchStartY = 0;
     let touchStartX = 0;
     let isVerticalScroll = false;
+    let touchStartedInBossTab = false;
+    
+    // Функция для проверки, активна ли вкладка "Атака боссов"
+    function isBossAttackTabActive() {
+        const tab = document.getElementById('tab-boss-attack');
+        if (!tab) return false;
+        const style = window.getComputedStyle(tab);
+        return style.display !== 'none';
+    }
     
     // Обработчик на уровне документа для предотвращения закрытия страницы
     const handleTouchStart = (e) => {
-        // Проверяем, что событие произошло внутри вкладки "Атака боссов"
-        if (!bossAttackTab.contains(e.target) && !bossAttackTab.contains(e.target.closest('.boss-carousel'))) {
+        // Проверяем, активна ли вкладка "Атака боссов"
+        if (!isBossAttackTabActive()) {
+            touchStartedInBossTab = false;
             return;
         }
         
+        // Проверяем, что событие произошло внутри вкладки "Атака боссов"
+        const target = e.target;
+        const isInBossTab = bossAttackTab.contains(target) || 
+                           target.closest('.boss-carousel') && bossAttackTab.contains(target.closest('.boss-carousel'));
+        
+        if (!isInBossTab) {
+            touchStartedInBossTab = false;
+            return;
+        }
+        
+        // Если это карусель, не мешаем нативному скроллу
+        const isInCarousel = target.closest('.boss-carousel');
+        if (isInCarousel) {
+            touchStartedInBossTab = false;
+            return; // Позволяем нативному скроллу карусели работать
+        }
+        
+        touchStartedInBossTab = true;
         touchStartY = e.touches[0].pageY;
         touchStartX = e.touches[0].pageX;
         isVerticalScroll = false;
     };
     
     const handleTouchMove = (e) => {
-        // Проверяем, что событие произошло внутри вкладки "Атака боссов"
-        if (!bossAttackTab.contains(e.target) && !bossAttackTab.contains(e.target.closest('.boss-carousel'))) {
+        // Если тач не начался во вкладке "Атака боссов", не обрабатываем
+        if (!touchStartedInBossTab) {
+            return;
+        }
+        
+        // Проверяем, активна ли вкладка "Атака боссов"
+        if (!isBossAttackTabActive()) {
+            touchStartedInBossTab = false;
             return;
         }
         
         // Если это карусель, не мешаем нативному скроллу
-        const isInCarousel = e.target.closest('.boss-carousel');
+        const target = e.target;
+        const isInCarousel = target.closest('.boss-carousel');
         if (isInCarousel) {
             return; // Позволяем нативному скроллу карусели работать
         }
@@ -3483,23 +3518,30 @@ function preventBossAttackTabClose() {
         const touch = e.touches[0];
         const deltaY = touch.pageY - touchStartY;
         const deltaX = Math.abs(touch.pageX - touchStartX);
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
         
         // Определяем, что это вертикальный скролл
         if (Math.abs(deltaY) > deltaX && Math.abs(deltaY) > 5) {
             isVerticalScroll = true;
         }
         
-        // Если пользователь скроллит вверх и находится в начале страницы,
-        // и это вертикальный скролл, предотвращаем закрытие страницы Telegram
-        if (isVerticalScroll && deltaY > 0 && scrollTop <= 10) {
+        // Если пользователь скроллит вверх и это вертикальный скролл,
+        // предотвращаем закрытие страницы Telegram
+        if (isVerticalScroll && deltaY > 0) {
+            e.preventDefault();
             e.stopPropagation();
         }
+    };
+    
+    const handleTouchEnd = (e) => {
+        touchStartedInBossTab = false;
+        isVerticalScroll = false;
     };
     
     // Добавляем обработчики на уровне документа для перехвата событий
     document.addEventListener('touchstart', handleTouchStart, { passive: true });
     document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true });
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: true });
 }
 
 // Инициализация каруселей (нативный скролл)
@@ -3770,10 +3812,12 @@ async function attackNextBoss() {
         
         // Обработка 400 с "Session already active"
         if (!response.ok && response.status === 400 && data.message === "Session already active") {
-            // Бой еще продолжается, ждем 5 секунд и проверяем снова
-            updateAttackStatus(`⚔️ Бой с ${boss.name} еще продолжается, ждем 5 секунд...`);
+            // Бой еще продолжается, ждем 5 секунд и пробуем напасть снова на того же босса
+            // НЕ переходим к следующему боссу, остаемся на текущем индексе
+            updateAttackStatus(`⚔️ Бой с ${boss.name} еще продолжается, ждем 5 секунд и попробуем снова...`);
             
             bossAttackInterval = setTimeout(() => {
+                // Повторяем атаку на того же босса (не увеличиваем currentBossIndex)
                 attackNextBoss();
             }, 5000);
             return;
@@ -3853,6 +3897,7 @@ async function attackNextBoss() {
                 }
                 
                 // Удаляем один экземпляр босса из списка после завершения боя
+                // Только после успешного завершения боя переходим к следующему боссу
                 if (currentBossIndex < selectedBosses.length) {
                     selectedBosses.splice(currentBossIndex, 1);
                     updateOrderCarousel();
@@ -3864,11 +3909,13 @@ async function attackNextBoss() {
                 }
                 
                 // Переходим к следующему боссу через небольшую задержку
+                // Только после успешного завершения боя
                 setTimeout(() => {
                     attackNextBoss();
                 }, 1000);
             } else if (data.sessionId || data.session) {
-                // Бой продолжается, проверяем статус каждые 5 секунд
+                // Успешно напали, бой продолжается - проверяем статус каждые 5 секунд
+                // НЕ переходим к следующему боссу, остаемся на текущем
                 updateAttackStatus(`⚔️ Бой с ${boss.name} продолжается...`);
                 
                 // Проверяем статус через 5 секунд
