@@ -14,6 +14,10 @@ const APP_VERSION = '2.0.0';
 if (tg) {
     tg.ready();
     tg.expand();
+    // Отключаем подтверждение закрытия, чтобы не блокировать скролл
+    if (tg.enableClosingConfirmation) {
+        tg.enableClosingConfirmation(false);
+    }
 } else {
     console.error('Не удалось инициализировать Telegram WebApp');
 }
