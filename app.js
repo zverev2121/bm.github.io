@@ -5227,6 +5227,7 @@ const WEAPON_MAPPING = {
 const COMBO_MODE_MAPPING = {
     'блат': 'blotnoy',
     'пац': 'pacansky',
+    'авто': 'avtoritetny',
     'авторитетный': 'avtoritetny',
     'авторитетные': 'avtoritetny'
 };
@@ -5277,34 +5278,48 @@ function parseComboFile(text) {
         
         for (const comboString of comboStrings) {
             const parts = comboString.split(/\s+/).filter(p => p);
-            if (parts.length < 3) continue; // минимум: имя_босса режим удар
+            if (parts.length < 2) continue; // минимум: имя_босса удар (или имя_босса режим удар)
             
             const bossName = parts[0].toLowerCase();
-            const modeOrCombo = parts[1].toLowerCase();
-            
-            // Определяем, это режим комбо или режим атаки
             let comboMode = null;
             let mode = null;
+            let weaponsStartIndex = 1; // Индекс, с которого начинаются оружия
             
-            if (COMBO_MODE_MAPPING[modeOrCombo]) {
-                comboMode = COMBO_MODE_MAPPING[modeOrCombo];
-            } else {
-                // Пытаемся найти режим атаки
-                const foundMode = Object.keys(BATTLE_MODE_INFO).find(key => 
-                    BATTLE_MODE_INFO[key].name.toLowerCase().includes(modeOrCombo) ||
-                    key.toLowerCase() === modeOrCombo
-                );
-                if (foundMode) {
-                    mode = foundMode;
+            // Проверяем, есть ли режим комбо или режим атаки на второй позиции
+            if (parts.length >= 2) {
+                const secondPart = parts[1].toLowerCase();
+                
+                // Проверяем, это режим комбо?
+                if (COMBO_MODE_MAPPING[secondPart]) {
+                    comboMode = COMBO_MODE_MAPPING[secondPart];
+                    weaponsStartIndex = 2; // Оружия начинаются с третьей позиции
                 } else {
-                    // Если не нашли, считаем это режимом комбо
-                    comboMode = COMBO_MODE_MAPPING[modeOrCombo] || modeOrCombo;
+                    // Пытаемся найти режим атаки
+                    const foundMode = Object.keys(BATTLE_MODE_INFO).find(key => 
+                        BATTLE_MODE_INFO[key].name.toLowerCase().includes(secondPart) ||
+                        key.toLowerCase() === secondPart
+                    );
+                    if (foundMode) {
+                        mode = foundMode;
+                        weaponsStartIndex = 2; // Оружия начинаются с третьей позиции
+                    } else {
+                        // Если не нашли режим, проверяем, это оружие?
+                        const apiWeapon = WEAPON_MAPPING[secondPart];
+                        if (apiWeapon && ['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(apiWeapon)) {
+                            // Это оружие, значит режим не указан - оружия начинаются со второй позиции
+                            weaponsStartIndex = 1;
+                        } else {
+                            // Неизвестное значение, пропускаем
+                            console.warn(`Неизвестный режим или оружие: ${secondPart}`);
+                            continue;
+                        }
+                    }
                 }
             }
             
             // Парсим оружия
             const weapons = [];
-            for (let i = 2; i < parts.length; i++) {
+            for (let i = weaponsStartIndex; i < parts.length; i++) {
                 const weaponName = parts[i].toLowerCase();
                 const apiWeapon = WEAPON_MAPPING[weaponName];
                 if (apiWeapon && ['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(apiWeapon)) {
@@ -5321,6 +5336,8 @@ function parseComboFile(text) {
                     comboMode,
                     weapons
                 });
+            } else {
+                console.warn(`Не найдено оружий для комбо: ${comboString}`);
             }
         }
     }
