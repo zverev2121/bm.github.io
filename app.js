@@ -3402,6 +3402,13 @@ window.loadBossList = async function loadBossList() {
         return;
     }
     
+    // Убеждаемся, что секция выбора боссов всегда видна
+    const bossSelectSection = document.getElementById('boss-select-section');
+    if (bossSelectSection) {
+        bossSelectSection.style.display = 'block';
+    }
+    container.style.display = 'block';
+    
     container.innerHTML = '<p class="loading">Загрузка списка боссов...</p>';
     
     try {
@@ -4393,6 +4400,16 @@ window.startBossAutoAttack = async function() {
     document.getElementById('start-boss-attack-btn').style.display = 'none';
     document.getElementById('stop-boss-attack-btn').style.display = 'block';
     document.getElementById('boss-attack-status').style.display = 'block';
+    
+    // Убеждаемся, что секция выбора боссов всегда видна
+    const bossSelectSection = document.getElementById('boss-select-section');
+    if (bossSelectSection) {
+        bossSelectSection.style.display = 'block';
+    }
+    const bossListContainer = document.getElementById('boss-list-container');
+    if (bossListContainer) {
+        bossListContainer.style.display = 'block';
+    }
     
     attackNextBoss();
 }
