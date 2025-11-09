@@ -1334,7 +1334,7 @@ async function loadBossInfo() {
                             const currentBoss = window.allBosses.find(b => b.name === session.title);
                             if (currentBoss) {
                                 bossImageHtml = `
-                                    <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; overflow: hidden; margin: 0 auto 12px auto;">
+                                    <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 12px; overflow: hidden; flex-shrink: 0;">
                                         <img src="${getBossImageUrl(currentBoss.id, currentBoss)}" 
                                              alt="${session.title}" 
                                              data-fallback="${getBossImageUrlFallback(currentBoss.id, currentBoss)}"
@@ -1350,11 +1350,13 @@ async function loadBossInfo() {
                         const rewardMessage = data.hasReward === true ? '<p style="color: #28a745; font-weight: bold;">💰 Награда с босса собрана!</p>' : '';
                         bossInfo.innerHTML = `
                             ${rewardMessage}
-                            ${bossImageHtml}
-                            <div>
-                                <strong>${session.title || 'Босс'}</strong><br>
-                                HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
-                                Режим: ${modeDecoded}${comboText}${timeInfo}
+                            <div style="display: flex; align-items: flex-start; gap: 12px;">
+                                ${bossImageHtml}
+                                <div style="flex: 1;">
+                                    <strong>${session.title || 'Босс'}</strong><br>
+                                    HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
+                                    Режим: ${modeDecoded}${comboText}${timeInfo}
+                                </div>
                             </div>
                         `;
                         updateStatus(true);
@@ -1447,7 +1449,7 @@ async function loadBossInfo() {
                 const currentBoss = window.allBosses.find(b => b.name === session.title);
                 if (currentBoss) {
                     bossImageHtml = `
-                        <div class="boss-image" style="width: 100px; height: 100px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; overflow: hidden; margin: 0 auto 12px auto;">
+                        <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 12px; overflow: hidden; flex-shrink: 0;">
                             <img src="${getBossImageUrl(currentBoss.id, currentBoss)}" 
                                  alt="${session.title}" 
                                  data-fallback="${getBossImageUrlFallback(currentBoss.id, currentBoss)}"
@@ -1462,11 +1464,13 @@ async function loadBossInfo() {
             
             bossInfo.innerHTML = `
                 ${rewardMessageHtml}
-                ${bossImageHtml}
-                <div>
-                    <strong>${session.title || 'Босс'}</strong><br>
-                    HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
-                    Режим: ${modeDecoded}${comboText}${timeInfo}
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    ${bossImageHtml}
+                    <div style="flex: 1;">
+                        <strong>${session.title || 'Босс'}</strong><br>
+                        HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
+                        Режим: ${modeDecoded}${comboText}${timeInfo}
+                    </div>
                 </div>
             `;
             updateStatus(true);
