@@ -89,6 +89,11 @@ window.switchTab = function switchTab(tabName) {
                 loadBossList();
             }
         }
+        
+        // Если переключились на вкладку "Комбо", загружаем сохраненные комбо
+        if (tabName === 'combo') {
+            loadSavedCombosAndDisplay();
+        }
     }
     
     // Добавляем активный класс к выбранной кнопке
@@ -5543,6 +5548,9 @@ async function loadCombosFromText(text) {
         return;
     }
     
+    // Сохраняем комбо в БД
+    await saveCombosToDatabase(loadedCombos);
+    
     // Убеждаемся, что список боссов загружен
     if (!window.bossCategoriesData || Object.keys(window.bossCategoriesData).length === 0) {
         console.log('📋 Список боссов не загружен, загружаем...');
@@ -5556,6 +5564,101 @@ async function loadCombosFromText(text) {
     
     // Показываем выбор боссов
     displayComboBossSelection();
+}
+
+// Сохранение комбо в БД
+async function saveCombosToDatabase(combos) {
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        const headers = await getApiHeaders();
+        
+        // Сохраняем каждое комбо
+        for (const combo of combos) {
+            try {
+                const response = await fetch(`${apiUrl}/api/player/combos`, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        bossName: combo.bossName,
+                        weapons: combo.weapons,
+                        comboMode: combo.comboMode || null,
+                        mode: combo.mode || null
+                    })
+                });
+                
+                if (!response.ok) {
+                    console.warn(`Не удалось сохранить комбо для босса ${combo.bossName}`);
+                }
+            } catch (error) {
+                console.error(`Ошибка сохранения комбо для босса ${combo.bossName}:`, error);
+            }
+        }
+        
+        console.log(`✓ Сохранено ${combos.length} комбо в БД`);
+    } catch (error) {
+        console.error('Ошибка сохранения комбо в БД:', error);
+    }
+}
+
+// Загрузка сохраненных комбо из БД
+async function loadSavedCombos() {
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        const headers = await getApiHeaders();
+        
+        const response = await fetch(`${apiUrl}/api/player/combos`, {
+            method: 'GET',
+            headers: headers
+        });
+        
+        if (!response.ok) {
+            console.warn('Не удалось загрузить сохраненные комбо');
+            return [];
+        }
+        
+        const data = await response.json();
+        if (data.success && data.combos && data.combos.length > 0) {
+            // Преобразуем формат комбо для использования в приложении
+            const savedCombos = data.combos.map(combo => ({
+                bossName: combo.bossName,
+                comboMode: combo.comboMode,
+                mode: combo.mode || 'normal',
+                weapons: combo.weapons || []
+            }));
+            
+            console.log(`✓ Загружено ${savedCombos.length} сохраненных комбо из БД`);
+            return savedCombos;
+        }
+        
+        return [];
+    } catch (error) {
+        console.error('Ошибка загрузки сохраненных комбо:', error);
+        return [];
+    }
+}
+
+// Загрузка сохраненных комбо и отображение их
+async function loadSavedCombosAndDisplay() {
+    const savedCombos = await loadSavedCombos();
+    
+    if (savedCombos.length > 0) {
+        // Устанавливаем загруженные комбо
+        loadedCombos = savedCombos;
+        
+        // Убеждаемся, что список боссов загружен
+        if (!window.bossCategoriesData || Object.keys(window.bossCategoriesData).length === 0) {
+            console.log('📋 Список боссов не загружен, загружаем...');
+            await loadBossList();
+            // Ждем немного, чтобы данные успели обработаться
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
+        // Показываем список загруженных комбо
+        displayLoadedCombos();
+        
+        // Показываем выбор боссов
+        displayComboBossSelection();
+    }
 }
 
 // Парсинг комбо из текстового поля
