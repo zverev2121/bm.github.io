@@ -708,8 +708,8 @@ function handleSectionClick(sectionId, event) {
 
 // Инициализация
 document.addEventListener('DOMContentLoaded', async () => {
-    // Инициализация: показываем вкладку "Основное" по умолчанию
-    switchTab('main');
+    // Инициализация: показываем вкладку "Атака боссов" по умолчанию
+    switchTab('boss-attack');
     
     // ВАЖНО: Сначала закрываем все блоки по умолчанию (до загрузки из БД)
     for (const sectionId of COLLAPSIBLE_SECTIONS) {
@@ -1524,6 +1524,12 @@ let weaponCounts = {
     knife: 0
 };
 
+// Глобальная переменная для хранения статистики оружия из bootstrap
+let weaponStatsEffective = null;
+
+// Глобальная переменная для хранения данных об оружии из /api/boss/weapons
+let weaponWeaponsData = null;
+
 // Форматирование чисел в сокращенном виде (70.354кк, 3.123ккк, 7.5к)
 function formatNumberShort(num) {
     if (num >= 1000000000) {
@@ -1609,6 +1615,105 @@ function updateWeaponCountsDisplay() {
     const knifeCountEl = document.querySelector('.weapon-count[data-weapon-count="knife"]');
     if (knifeCountEl) {
         knifeCountEl.textContent = weaponCounts.knife || 0;
+    }
+}
+
+// Обновление отображения урона оружия
+function updateWeaponDamageDisplay() {
+    if (!weaponStatsEffective) return;
+    
+    const weaponDamageMap = {
+        'kickballs': weaponStatsEffective.kickBallsDamage,
+        'kneeear': weaponStatsEffective.kneeEarDamage,
+        'pokeeyes': weaponStatsEffective.pokeEyesDamage,
+        'punchchest': weaponStatsEffective.punchChestDamage,
+        'poison': weaponStatsEffective.poisonDamage,
+        'gunshot': weaponStatsEffective.gunshotDamage,
+        'knife': weaponStatsEffective.knifeDamage
+    };
+    
+    for (const [weapon, damage] of Object.entries(weaponDamageMap)) {
+        const weaponItem = document.querySelector(`.weapon-item[data-weapon="${weapon}"]`);
+        if (weaponItem) {
+            let damageEl = weaponItem.querySelector('.weapon-damage');
+            if (!damageEl) {
+                const weaponIcon = weaponItem.querySelector('.weapon-icon');
+                if (weaponIcon) {
+                    damageEl = document.createElement('div');
+                    damageEl.className = 'weapon-damage';
+                    damageEl.style.cssText = 'position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); color: white; font-size: 10px; font-weight: 600; text-align: center; padding: 2px 0; border-radius: 0 0 10px 10px; z-index: 10;';
+                    weaponIcon.appendChild(damageEl);
+                }
+            }
+            if (damageEl && damage) {
+                damageEl.textContent = formatNumberShort(damage);
+            }
+        }
+    }
+}
+
+// Загрузка данных об оружии из /api/boss/weapons
+async function loadBossWeapons() {
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        let response = await fetch(`${apiUrl}/boss/weapons`, {
+            method: 'GET',
+            headers: await getApiHeaders()
+        });
+        
+        // Обработка 401/403
+        if (response.status === 401 || response.status === 403) {
+            const currentInitData = await getCurrentInitData();
+            if (currentInitData && currentInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    response = await fetch(`${apiUrl}/boss/weapons`, {
+                        method: 'GET',
+                        headers: await getApiHeaders()
+                    });
+                }
+            }
+        }
+        
+        if (response.ok) {
+            const data = await response.json();
+            weaponWeaponsData = data;
+            console.log('✅ Данные об оружии загружены:', weaponWeaponsData);
+            
+            // Обновляем доступность оружия
+            updateWeaponAvailability();
+        }
+    } catch (error) {
+        console.error('Ошибка получения данных об оружии:', error);
+    }
+}
+
+// Обновление доступности оружия
+function updateWeaponAvailability() {
+    if (!weaponWeaponsData) return;
+    
+    const weaponLastTimeMap = {
+        'kickballs': weaponWeaponsData.lastKickBallsTime,
+        'kneeear': weaponWeaponsData.lastKneeEarTime,
+        'pokeeyes': weaponWeaponsData.lastPokeEyesTime,
+        'punchchest': weaponWeaponsData.lastPunchChestTime
+    };
+    
+    for (const [weapon, lastTime] of Object.entries(weaponLastTimeMap)) {
+        const weaponItem = document.querySelector(`.weapon-item[data-weapon="${weapon}"]`);
+        if (weaponItem) {
+            if (lastTime === null) {
+                // Оружие доступно
+                weaponItem.style.opacity = '1';
+                weaponItem.style.pointerEvents = 'auto';
+                weaponItem.classList.remove('weapon-disabled');
+            } else {
+                // Оружие недоступно
+                weaponItem.style.opacity = '0.5';
+                weaponItem.style.pointerEvents = 'auto'; // Оставляем кликабельным для восстановления
+                weaponItem.classList.add('weapon-disabled');
+            }
+        }
     }
 }
 
@@ -1872,8 +1977,11 @@ async function loadBossInfo(showLoading = true) {
             const bossWeaponsWrapper = document.getElementById('boss-weapons-wrapper');
             if (bossWeaponsWrapper) {
                 bossWeaponsWrapper.style.display = 'block';
-                // Обновляем количество оружий
-                await updateWeaponCounts();
+                // Обновляем количество оружий и данные об оружии
+                await Promise.all([
+                    updateWeaponCounts(),
+                    loadBossWeapons()
+                ]);
             }
             
             // Убеждаемся, что секция выбора боссов всегда видна, даже когда есть активный бой
@@ -1904,6 +2012,14 @@ async function loadBossInfo(showLoading = true) {
         }
         
         const data = await response.json();
+        
+        // Сохраняем weaponStatsEffective из bootstrap
+        if (data.success && data.weaponStatsEffective) {
+            weaponStatsEffective = data.weaponStatsEffective;
+            console.log('✅ weaponStatsEffective сохранен:', weaponStatsEffective);
+            // Обновляем отображение урона
+            updateWeaponDamageDisplay();
+        }
         
         // Обновляем ключи из ответа bootstrap
         // Ключи находятся в playerStats.keys
@@ -2113,8 +2229,11 @@ async function loadBossInfo(showLoading = true) {
             const bossWeaponsWrapper = document.getElementById('boss-weapons-wrapper');
             if (bossWeaponsWrapper) {
                 bossWeaponsWrapper.style.display = 'block';
-                // Обновляем количество оружий
-                await updateWeaponCounts();
+                // Обновляем количество оружий и данные об оружии
+                await Promise.all([
+                    updateWeaponCounts(),
+                    loadBossWeapons()
+                ]);
             }
             
             // Убеждаемся, что секция выбора боссов всегда видна, даже когда есть активный бой
@@ -2264,6 +2383,88 @@ async function attackBossWithWeapon(weapon) {
         return;
     }
     
+    // Проверяем доступность оружия для пах/колено/глаз/грудь
+    const freeWeapons = ['kickballs', 'kneeear', 'pokeeyes', 'punchchest'];
+    if (freeWeapons.includes(weapon) && weaponWeaponsData) {
+        const weaponLastTimeMap = {
+            'kickballs': weaponWeaponsData.lastKickBallsTime,
+            'kneeear': weaponWeaponsData.lastKneeEarTime,
+            'pokeeyes': weaponWeaponsData.lastPokeEyesTime,
+            'punchchest': weaponWeaponsData.lastPunchChestTime
+        };
+        
+        const lastTime = weaponLastTimeMap[weapon];
+        if (lastTime !== null) {
+            // Оружие недоступно, спрашиваем о восстановлении
+            const weaponDisplayName = WEAPON_DISPLAY_NAMES[weapon] || weapon;
+            const confirmRestore = confirm(`Восстановить ${weaponDisplayName}?`);
+            if (!confirmRestore) {
+                return;
+            }
+            
+            // Восстанавливаем оружие
+            try {
+                const apiUrl = API_SERVER_URL || GAME_API_URL;
+                const weaponTypeMap = {
+                    'kickballs': 'kickBalls',
+                    'kneeear': 'kneeEar',
+                    'pokeeyes': 'pokeEyes',
+                    'punchchest': 'punchChest'
+                };
+                
+                const weaponType = weaponTypeMap[weapon];
+                let response = await fetch(`${apiUrl}/boss/restore-free-hit`, {
+                    method: 'POST',
+                    headers: await getApiHeaders(),
+                    body: JSON.stringify({
+                        weaponType: weaponType
+                    })
+                });
+                
+                // Обработка 401/403
+                if (response.status === 401 || response.status === 403) {
+                    const currentInitData = await getCurrentInitData();
+                    if (currentInitData && currentInitData.trim()) {
+                        const newToken = await loginWithInitData();
+                        if (newToken) {
+                            response = await fetch(`${apiUrl}/boss/restore-free-hit`, {
+                                method: 'POST',
+                                headers: await getApiHeaders(),
+                                body: JSON.stringify({
+                                    weaponType: weaponType
+                                })
+                            });
+                        }
+                    }
+                }
+                
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    // Обновляем данные об оружии
+                    await loadBossWeapons();
+                    if (window.tg && window.tg.showAlert) {
+                        window.tg.showAlert(`${weaponDisplayName} восстановлен!`);
+                    }
+                } else {
+                    const errorMessage = data.message || data.error || 'Ошибка восстановления оружия';
+                    if (window.tg && window.tg.showAlert) {
+                        window.tg.showAlert(`Ошибка: ${errorMessage}`);
+                    } else {
+                        alert(`Ошибка: ${errorMessage}`);
+                    }
+                }
+            } catch (error) {
+                console.error(`Ошибка восстановления оружия ${weapon}:`, error);
+                if (window.tg && window.tg.showAlert) {
+                    window.tg.showAlert(`Ошибка: ${error.message}`);
+                } else {
+                    alert(`Ошибка: ${error.message}`);
+                }
+            }
+            return;
+        }
+    }
+    
     // Блокируем кнопку на время запроса
     weaponItem.style.pointerEvents = 'none';
     weaponItem.style.opacity = '0.6';
@@ -2300,6 +2501,18 @@ async function attackBossWithWeapon(weapon) {
             }
         }
         
+        // Обработка ошибки 500 - удар мог пройти, обновляем босса
+        if (response.status === 500) {
+            console.warn(`⚠️ Получена ошибка 500 при ударе ${weapon}, но удар мог пройти. Обновляем босса...`);
+            // Обновляем информацию о боссе и оружии
+            await Promise.all([
+                loadBossInfo(false),
+                updateWeaponCounts(),
+                loadBossWeapons()
+            ]);
+            return;
+        }
+        
         const data = await response.json();
         
         if (!response.ok || !data.success) {
@@ -2317,8 +2530,11 @@ async function attackBossWithWeapon(weapon) {
             // Успешный удар - обновляем информацию о боссе
             console.log(`✅ Удар ${weaponDisplayName} выполнен успешно`);
             
-            // Обновляем количество оружий (так как оно могло измениться)
-            await updateWeaponCounts();
+            // Обновляем количество оружий и данные об оружии
+            await Promise.all([
+                updateWeaponCounts(),
+                loadBossWeapons()
+            ]);
             
             // Обновляем информацию о боссе (без показа "Загрузка...")
             await loadBossInfo(false);
@@ -2338,7 +2554,9 @@ async function attackBossWithWeapon(weapon) {
     } finally {
         // Разблокируем кнопку
         weaponItem.style.pointerEvents = '';
-        weaponItem.style.opacity = '';
+        if (!weaponItem.classList.contains('weapon-disabled')) {
+            weaponItem.style.opacity = '';
+        }
     }
 }
 
