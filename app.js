@@ -4578,9 +4578,17 @@ window.loadBossList = async function loadBossList() {
     }
     container.style.display = 'block';
     
-    // Если данные уже загружены, не показываем загрузку
-    if (window.bossCategoriesData && Object.keys(window.bossCategoriesData).length > 0) {
+    // Если данные уже загружены и загрузка не выполняется, не показываем загрузку
+    if (!isBossListLoading && window.bossCategoriesData && Object.keys(window.bossCategoriesData).length > 0) {
         console.log('✅ Данные боссов уже загружены, пропускаем загрузку');
+        // Но все равно проверяем, что данные отображены
+        if (container.innerHTML.includes('Загрузка') || container.innerHTML.trim() === '') {
+            // Данные не отображены, нужно перерендерить
+            const categories = Object.values(window.bossCategoriesData);
+            if (categories.length > 0) {
+                renderBossList(categories);
+            }
+        }
         return;
     }
     
@@ -4857,6 +4865,9 @@ window.loadBossList = async function loadBossList() {
                 </p>
             `;
         }
+    } finally {
+        // Всегда сбрасываем флаг загрузки
+        isBossListLoading = false;
     }
 }
 
