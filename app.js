@@ -88,6 +88,12 @@ window.switchTab = function switchTab(tabName) {
                 console.log('📋 Переключились на вкладку атаки боссов, загружаем список...');
                 loadBossList();
             }
+            
+            // Запускаем автообновление босса
+            startBossAutoRefresh();
+        } else {
+            // Останавливаем автообновление при переключении на другую вкладку
+            stopBossAutoRefresh();
         }
         
         // Если переключились на вкладку "Основное" (main), загружаем сохраненные комбо
@@ -844,6 +850,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Показываем секцию бицухи
         document.getElementById('biceps-section').style.display = 'block';
+        
+        // Если мы на вкладке "Атака боссов", запускаем автообновление
+        const currentTab = document.querySelector('.tab-content[style*="display: block"]');
+        if (currentTab && currentTab.id === 'tab-boss-attack') {
+            startBossAutoRefresh();
+        }
     } else {
         // Даже если авторизация не удалась, проверяем наличие данных пользователя из Telegram
         const telegramUserInfo = getTelegramUserInfo();
@@ -2054,10 +2066,65 @@ function updateBossCards() {
 }
 
 // Обновление информации о боссе
-async function refreshBossInfo() {
-    const btn = event.target;
-    btn.disabled = true;
-    btn.textContent = '🔄 Обновление...';
+// Переменные для автообновления босса
+let bossRefreshInterval = null;
+let bossRefreshProgressInterval = null;
+let bossRefreshStartTime = null;
+const BOSS_REFRESH_INTERVAL_MS = 30000; // 30 секунд
+
+// Функция для обновления прогресс-бара
+function updateBossRefreshProgress() {
+    const progressBar = document.getElementById('boss-refresh-progress');
+    if (!progressBar || !bossRefreshStartTime) return;
+    
+    const elapsed = Date.now() - bossRefreshStartTime;
+    const progress = Math.min((elapsed / BOSS_REFRESH_INTERVAL_MS) * 100, 100);
+    progressBar.style.width = progress + '%';
+}
+
+// Функция для запуска автообновления
+function startBossAutoRefresh() {
+    // Останавливаем предыдущий таймер, если есть
+    stopBossAutoRefresh();
+    
+    // Сбрасываем прогресс
+    const progressBar = document.getElementById('boss-refresh-progress');
+    if (progressBar) {
+        progressBar.style.width = '0%';
+    }
+    
+    // Запускаем обновление прогресс-бара каждые 100мс
+    bossRefreshStartTime = Date.now();
+    bossRefreshProgressInterval = setInterval(updateBossRefreshProgress, 100);
+    
+    // Запускаем автообновление каждые 30 секунд
+    bossRefreshInterval = setInterval(async () => {
+        await refreshBossInfo(true); // true = автоматическое обновление
+    }, BOSS_REFRESH_INTERVAL_MS);
+}
+
+// Функция для остановки автообновления
+function stopBossAutoRefresh() {
+    if (bossRefreshInterval) {
+        clearInterval(bossRefreshInterval);
+        bossRefreshInterval = null;
+    }
+    if (bossRefreshProgressInterval) {
+        clearInterval(bossRefreshProgressInterval);
+        bossRefreshProgressInterval = null;
+    }
+    bossRefreshStartTime = null;
+}
+
+// Функция для ручного обновления (с сбросом таймера)
+window.refreshBossInfo = async function refreshBossInfo(isAuto = false) {
+    const btn = document.getElementById('boss-refresh-btn');
+    const progressBar = document.getElementById('boss-refresh-progress');
+    
+    if (!isAuto && btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳';
+    }
     
     try {
         // Обновляем ключи и информацию о боссе
@@ -2066,12 +2133,32 @@ async function refreshBossInfo() {
             loadBossInfo(),
             loadStats()
         ]);
+        
+        // Сбрасываем таймер (для ручного и автоматического обновления)
+        if (isAuto) {
+            // При автоматическом обновлении просто сбрасываем прогресс-бар
+            const progressBar = document.getElementById('boss-refresh-progress');
+            if (progressBar) {
+                progressBar.style.width = '0%';
+            }
+            bossRefreshStartTime = Date.now();
+        } else {
+            // При ручном обновлении перезапускаем весь таймер
+            startBossAutoRefresh();
+        }
     } catch (error) {
         console.error('Ошибка обновления:', error);
-        tg.showAlert(`❌ Ошибка: ${error.message}`);
+        const tg = window.Telegram?.WebApp;
+        if (tg) {
+            tg.showAlert(`❌ Ошибка: ${error.message}`);
+        } else {
+            alert(`❌ Ошибка: ${error.message}`);
+        }
     } finally {
-        btn.disabled = false;
-        btn.textContent = '🔄 Обновить';
+        if (!isAuto && btn) {
+            btn.disabled = false;
+            btn.textContent = '🔄';
+        }
     }
 }
 
@@ -5910,6 +5997,72 @@ window.parseComboFromText = async function() {
 }
 
 // Парсинг файла с комбо
+// Тестовая функция для проверки парсинга комбо
+window.testComboParsing = function testComboParsing(testText) {
+    console.log('🧪 Тестирование парсинга комбо:');
+    console.log('Входной текст:');
+    console.log(testText);
+    console.log('---');
+    
+    const combos = parseComboFile(testText);
+    
+    console.log('Результат парсинга:');
+    console.log(`Найдено комбо: ${combos.length}`);
+    
+    combos.forEach((combo, index) => {
+        console.log(`\nКомбо ${index + 1}:`);
+        console.log(`  Босс: ${combo.bossName}`);
+        console.log(`  Режим: ${combo.mode || 'normal'}`);
+        console.log(`  Комбо режим: ${combo.comboMode || 'нет'}`);
+        console.log(`  Ударов: ${combo.weapons.length}`);
+        console.log(`  Оружия: ${combo.weapons.join(', ')}`);
+    });
+    
+    if (combos.length > 0 && combos[0].weapons) {
+        console.log(`\n✅ Всего ударов: ${combos[0].weapons.length}`);
+        return combos[0].weapons.length;
+    }
+    
+    return 0;
+};
+
+// Функция для тестирования текущего текста из поля ввода
+window.testCurrentCombo = function testCurrentCombo() {
+    const textInput = document.getElementById('combo-text-input');
+    if (!textInput) {
+        if (tg) {
+            tg.showAlert('Поле ввода комбо не найдено');
+        } else {
+            alert('Поле ввода комбо не найдено');
+        }
+        return;
+    }
+    
+    const text = textInput.value.trim();
+    if (!text) {
+        if (tg) {
+            tg.showAlert('Введите комбо в текстовое поле для тестирования');
+        } else {
+            alert('Введите комбо в текстовое поле для тестирования');
+        }
+        return;
+    }
+    
+    const result = testComboParsing(text);
+    
+    // Показываем результат в модальном окне
+    let message = `🧪 Результат тестирования парсинга:\n\n`;
+    message += `Найдено комбо: ${result > 0 ? '1' : '0'}\n`;
+    message += `Ударов: ${result}\n\n`;
+    message += `Подробности смотрите в консоли браузера (F12)`;
+    
+    if (tg) {
+        tg.showAlert(message);
+    } else {
+        alert(message);
+    }
+};
+
 function parseComboFile(text) {
     const combos = [];
     const lines = text.split('\n').map(l => l.trim()).filter(l => l);

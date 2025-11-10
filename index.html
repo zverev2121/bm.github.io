@@ -218,7 +218,12 @@
                     <div class="boss-info" id="boss-info">
                         <p>Загрузка информации...</p>
                     </div>
-                    <button class="btn btn-primary" onclick="refreshBossInfo()">🔄 Обновить</button>
+                    <div class="boss-refresh-slider-container">
+                        <div class="boss-refresh-slider" id="boss-refresh-slider" onclick="refreshBossInfo()">
+                            <div class="boss-refresh-progress" id="boss-refresh-progress"></div>
+                            <button class="boss-refresh-btn" id="boss-refresh-btn" onclick="event.stopPropagation(); refreshBossInfo();">🔄</button>
+                        </div>
+                    </div>
                     </div>
                 </section>
 
@@ -270,6 +275,9 @@
                             </small>
                             <button class="btn btn-primary" onclick="parseComboFromText()" style="margin-top: 10px;">
                                 📋 Загрузить комбо из текста
+                            </button>
+                            <button class="btn btn-secondary" onclick="testCurrentCombo()" style="margin-top: 10px;">
+                                🧪 Тест парсинга (проверить текущий текст)
                             </button>
                         </div>
                         <div id="combo-list-container" style="margin-top: 15px; display: none;">
