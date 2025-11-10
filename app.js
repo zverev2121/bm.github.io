@@ -489,7 +489,8 @@ const COLLAPSIBLE_SECTIONS = [
     'biceps-section',
     'boss-section',
     'boss-select-section',
-    'boss-combo-section'
+    'boss-combo-section',
+    'boss-weapons-section'
 ];
 
 // Загрузка состояний блоков из БД
@@ -1490,6 +1491,76 @@ function formatTimeToMoscow(isoDateString) {
     }
 }
 
+// Глобальная переменная для хранения количества оружий
+let weaponCounts = {
+    poison: 0,
+    gunshot: 0,
+    knife: 0
+};
+
+// Получение количества оружий из /api/player/init
+async function updateWeaponCounts() {
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        let response = await fetch(`${apiUrl}/player/init`, {
+            method: 'POST',
+            headers: await getApiHeaders(),
+            body: JSON.stringify({})
+        });
+        
+        // Обработка 401/403
+        if (response.status === 401 || response.status === 403) {
+            const currentInitData = await getCurrentInitData();
+            if (currentInitData && currentInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    response = await fetch(`${apiUrl}/player/init`, {
+                        method: 'POST',
+                        headers: await getApiHeaders(),
+                        body: JSON.stringify({})
+                    });
+                }
+            }
+        }
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                // Обновляем количество оружий
+                weaponCounts.poison = data.poisonCount || 0;
+                weaponCounts.gunshot = data.gunshotCount || 0;
+                weaponCounts.knife = data.knifeCount || 0;
+                
+                // Обновляем отображение в UI
+                updateWeaponCountsDisplay();
+                
+                console.log('✅ Количество оружий обновлено:', weaponCounts);
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка получения количества оружий:', error);
+    }
+}
+
+// Обновление отображения количества оружий в UI
+function updateWeaponCountsDisplay() {
+    // Обновляем только для яд/самопал/финка (пах/колено/глаз/грудь не показываем)
+    const poisonCountEl = document.querySelector('.weapon-count[data-weapon-count="poison"]');
+    if (poisonCountEl) {
+        poisonCountEl.textContent = weaponCounts.poison || 0;
+    }
+    
+    const gunshotCountEl = document.querySelector('.weapon-count[data-weapon-count="gunshot"]');
+    if (gunshotCountEl) {
+        gunshotCountEl.textContent = weaponCounts.gunshot || 0;
+    }
+    
+    const knifeCountEl = document.querySelector('.weapon-count[data-weapon-count="knife"]');
+    if (knifeCountEl) {
+        knifeCountEl.textContent = weaponCounts.knife || 0;
+    }
+}
+
 // Загрузка информации о боссе
 async function loadBossInfo() {
     const bossInfo = document.getElementById('boss-info');
@@ -1664,13 +1735,15 @@ async function loadBossInfo() {
                         `;
                         updateStatus(true);
                         
-                        // Показываем блок с оружиями, так как босс активен
-                        const bossWeaponsBlock = document.getElementById('boss-weapons-block');
-                        if (bossWeaponsBlock) {
-                            bossWeaponsBlock.style.display = 'block';
-                        }
-                        
-                        // Убеждаемся, что секция выбора боссов всегда видна, даже когда есть активный бой
+            // Показываем блок с оружиями, так как босс активен (но он будет свернут по умолчанию)
+            const bossWeaponsSection = document.getElementById('boss-weapons-section');
+            if (bossWeaponsSection) {
+                bossWeaponsSection.style.display = 'block';
+                // Обновляем количество оружий
+                await updateWeaponCounts();
+            }
+            
+            // Убеждаемся, что секция выбора боссов всегда видна, даже когда есть активный бой
                         const bossSelectSection = document.getElementById('boss-select-section');
                         if (bossSelectSection) {
                             bossSelectSection.style.display = 'block';
@@ -1831,10 +1904,12 @@ async function loadBossInfo() {
             `;
             updateStatus(true);
             
-            // Показываем блок с оружиями, так как босс активен
-            const bossWeaponsBlock = document.getElementById('boss-weapons-block');
-            if (bossWeaponsBlock) {
-                bossWeaponsBlock.style.display = 'block';
+            // Показываем блок с оружиями, так как босс активен (но он будет свернут по умолчанию)
+            const bossWeaponsSection = document.getElementById('boss-weapons-section');
+            if (bossWeaponsSection) {
+                bossWeaponsSection.style.display = 'block';
+                // Обновляем количество оружий
+                await updateWeaponCounts();
             }
             
             // Убеждаемся, что секция выбора боссов всегда видна, даже когда есть активный бой
@@ -1857,9 +1932,9 @@ async function loadBossInfo() {
             updateStatus(false);
             
             // Скрываем блок с оружиями, так как босса нет
-            const bossWeaponsBlock = document.getElementById('boss-weapons-block');
-            if (bossWeaponsBlock) {
-                bossWeaponsBlock.style.display = 'none';
+            const bossWeaponsSection = document.getElementById('boss-weapons-section');
+            if (bossWeaponsSection) {
+                bossWeaponsSection.style.display = 'none';
             }
             
             // Убеждаемся, что секция выбора боссов видна даже когда нет активного боя
@@ -1882,9 +1957,9 @@ async function loadBossInfo() {
         updateStatus(false);
         
         // Скрываем блок с оружиями при ошибке
-        const bossWeaponsBlock = document.getElementById('boss-weapons-block');
-        if (bossWeaponsBlock) {
-            bossWeaponsBlock.style.display = 'none';
+        const bossWeaponsSection = document.getElementById('boss-weapons-section');
+        if (bossWeaponsSection) {
+            bossWeaponsSection.style.display = 'none';
         }
     }
 }
@@ -1949,6 +2024,9 @@ async function attackBossWithWeapon(weapon) {
         } else {
             // Успешный удар - обновляем информацию о боссе
             console.log(`✅ Удар ${weaponDisplayName} выполнен успешно`);
+            
+            // Обновляем количество оружий (так как оно могло измениться)
+            await updateWeaponCounts();
             
             // Обновляем информацию о боссе
             await loadBossInfo();
