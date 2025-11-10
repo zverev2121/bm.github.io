@@ -1738,280 +1738,12 @@ async function loadBossInfo(showLoading = true) {
             throw new Error('Токен не найден');
         }
         
-        const apiUrl = API_SERVER_URL || GAME_API_URL;
-        // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
-        let response = await fetch(`${apiUrl}/boss/bootstrap`, {
-            method: 'GET',
-            headers: await getApiHeaders()
-        });
+        // Используем единую функцию для получения bootstrap данных (с кэшированием)
+        const data = await getBootstrapData();
         
-        // Если получили 401/403, пытаемся обновить токен через initData из БД
-        if (response.status === 401 || response.status === 403) {
-            console.warn('Токен протух, пытаемся обновить через initData из БД...');
-            const currentInitData = await getCurrentInitData();
-            if (currentInitData && currentInitData.trim()) {
-                const newToken = await loginWithInitData();
-                if (newToken) {
-                    // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
-                    // Используем getApiHeaders() для получения актуального токена
-                    // Повторяем запрос с новым токеном
-                    const retryResponse = await fetch(`${apiUrl}/boss/bootstrap`, {
-                        method: 'GET',
-                        headers: await getApiHeaders()
-                    });
-                    if (!retryResponse.ok) {
-                        throw new Error(`HTTP ${retryResponse.status}: ${retryResponse.statusText}`);
-                    }
-                    // Продолжаем с retryResponse
-                    const data = await retryResponse.json();
-                    
-                    // Обновляем ключи из ответа bootstrap
-                    // Ключи находятся в playerStats.keys
-                    let keysData = null;
-                    if (data.success) {
-                        if (data.playerStats && data.playerStats.keys) {
-                            keysData = data.playerStats.keys;
-                        } else if (data.keys) {
-                            keysData = data.keys;
-                        }
-                    }
-                    
-                    if (keysData) {
-                        const oldKeys = { ...bossKeys };
-                        bossKeys = {};
-                        for (const [bossIdStr, count] of Object.entries(keysData)) {
-                            const bossId = parseInt(bossIdStr);
-                            const keyCount = parseInt(count) || 0;
-                            bossKeys[bossId] = keyCount;
-                            if (oldKeys[bossId] !== keyCount) {
-                                console.log(`🔑 [loadBossInfo retry] Босс ${bossId}: ${oldKeys[bossId] || 0} → ${keyCount} ключей`);
-                            }
-                        }
-                        console.log('✅ [loadBossInfo retry] Ключи обновлены:', bossKeys);
-                        
-                        // Обновляем карточки, если они уже отрисованы
-                        const existingCards = document.querySelectorAll('.boss-card');
-                        if (existingCards.length > 0) {
-                            updateBossCards();
-                        }
-                    }
-                    
-                    // Проверяем, есть ли награда для сбора
-                    if (data.success && data.hasReward === true) {
-                        try {
-                            const rewardData = await collectBossRewards();
-                            // Форматируем сообщение о награде
-                            const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
-                            const rewardMessageText = formatRewardMessage(rewardData, 'text');
-                            
-                            // Показываем сообщение о собранной награде
-                            if (bossInfo) {
-                                bossInfo.innerHTML = `<p style="color: #28a745; font-weight: bold;">${rewardMessageHtml}</p>`;
-                            }
-                            
-                            // Показываем модальное окно с наградой
-                            showCustomModal(rewardMessageText);
-                        } catch (error) {
-                            console.error('Ошибка сбора награды:', error);
-                        }
-                    }
-                    
-                    if (data.success && data.session) {
-                        const session = data.session;
-                        const hpPercent = ((session.currentHp / session.maxHp) * 100).toFixed(1);
-                        const modeDecoded = decodeMode(session.mode);
-                        const modeColor = session.mode ? getModeColor(session.mode) : '#888';
-                        const modeText = modeDecoded ? `<span style="color: ${modeColor}; font-weight: 600;">${modeDecoded}</span>` : modeDecoded;
-                        
-                        // Используем selectedComboType, если есть, иначе comboMode
-                        const comboModeKey = session.selectedComboType || session.comboMode;
-                        const comboModeDecoded = comboModeKey ? decodeComboMode(comboModeKey) : null;
-                        
-                        let comboText = '';
-                        if (comboModeDecoded && comboModeKey) {
-                            const comboColor = getComboModeColor(comboModeKey);
-                            comboText = `<br>Комбо: <span style="color: ${comboColor}; font-weight: 600;">${comboModeDecoded}</span>`;
-                        }
-                        
-                        let timeInfo = '';
-                        if (session.startedAt) {
-                            const startTime = formatTimeToMoscow(session.startedAt);
-                            timeInfo += `<br>Начало боя: <strong>${startTime}</strong>`;
-                        }
-                        if (session.endsAt) {
-                            const endTime = formatTimeToMoscow(session.endsAt);
-                            timeInfo += `<br>Окончание боя: <strong>${endTime}</strong>`;
-                        }
-                        
-                        // Получаем иконку босса напрямую из session, без ожидания загрузки всех боссов
-                        let bossImageHtml = '';
-                        const bossId = session.bossId || session.id || null;
-                        const imageUrl = session.imageUrl || session.image || null;
-                        
-                        if (bossId || imageUrl) {
-                            // Используем imageUrl из session, если есть, иначе используем локальный путь по ID
-                            const imgSrc = imageUrl || (bossId ? `images/${bossId}.png` : '');
-                            const fallbackSrc = imageUrl || '';
-                            const localImagePath = bossId ? `images/${bossId}.png` : '';
-                            
-                            bossImageHtml = `
-                                <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
-                                    <img src="${imgSrc}" 
-                                         alt="${session.title || 'Босс'}" 
-                                         data-fallback="${fallbackSrc}"
-                                         data-local="${localImagePath}"
-                                         style="max-width: 100%; max-height: 100%; object-fit: contain;"
-                                         onerror="const img = this; if(img.dataset.fallback && img.dataset.fallback !== '' && img.src !== img.dataset.fallback) { img.src = img.dataset.fallback; } else if(img.dataset.local && img.dataset.local !== '' && img.src !== img.dataset.local) { img.src = img.dataset.local; } else { img.style.display='none'; if(img.nextElementSibling) img.nextElementSibling.style.display='flex'; }"
-                                         onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
-                                    <span style="font-size: 40px; display: none;">👹</span>
-                                </div>
-                            `;
-                        } else if (session.title) {
-                            // Если нет ID или imageUrl, пытаемся найти в window.allBosses (fallback)
-                            if (window.allBosses && window.allBosses.length > 0) {
-                                const currentBoss = window.allBosses.find(b => b.name === session.title);
-                                if (currentBoss) {
-                                    bossImageHtml = `
-                                        <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 12px; overflow: hidden; flex-shrink: 0;">
-                                            <img src="${getBossImageUrl(currentBoss.id, currentBoss)}" 
-                                                 alt="${session.title}" 
-                                                 data-fallback="${getBossImageUrlFallback(currentBoss.id, currentBoss)}"
-                                                 style="max-width: 100%; max-height: 100%; object-fit: contain;"
-                                                 onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
-                                                 onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
-                                            <span style="font-size: 40px; display: none;">👹</span>
-                                        </div>
-                                    `;
-                                }
-                            }
-                        }
-                        
-                        const rewardMessage = data.hasReward === true ? '<p style="color: #28a745; font-weight: bold;">💰 Награда с босса собрана!</p>' : '';
-                        
-                        // Функция для форматирования оставшегося времени
-                        function formatRemainingTime(ms) {
-                            if (ms <= 0) return '0:00';
-                            const totalSeconds = Math.floor(ms / 1000);
-                            const hours = Math.floor(totalSeconds / 3600);
-                            const minutes = Math.floor((totalSeconds % 3600) / 60);
-                            const seconds = totalSeconds % 60;
-                            if (hours > 0) {
-                                return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                            }
-                            return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-                        }
-                        
-                        // Слайдер HP
-                        const currentHpShort = formatNumberShort(session.currentHp);
-                        const maxHpShort = formatNumberShort(session.maxHp);
-                        const hpSliderHtml = `
-                            <div class="boss-hp-slider-container" style="margin-bottom: 10px;">
-                                <div class="boss-hp-slider" style="position: relative; width: 100%; height: 40px; background: rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden;">
-                                    <div class="boss-hp-progress" style="position: absolute; top: 0; left: 0; height: 100%; width: ${hpPercent}%; background: linear-gradient(90deg, #ff4444, #ff6666); transition: width 0.3s ease; border-radius: 8px;"></div>
-                                    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-size: 12px; font-weight: 600; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); white-space: nowrap;">
-                                        ${currentHpShort} / ${maxHpShort} (${hpPercent}%)
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                        
-                        // Слайдер времени боя
-                        let timeSliderHtml = '';
-                        if (session.startedAt && session.endsAt) {
-                            const endTime = formatTimeToMoscow(session.endsAt);
-                            const now = new Date().getTime();
-                            const start = new Date(session.startedAt).getTime();
-                            const end = new Date(session.endsAt).getTime();
-                            const total = end - start;
-                            const elapsed = now - start;
-                            const remaining = end - now;
-                            // Показываем оставшееся время (в начале 100%, к концу уменьшается)
-                            const timePercent = total > 0 ? Math.max(0, Math.min(100, (remaining / total) * 100)) : 0;
-                            const remainingTimeStr = formatRemainingTime(remaining);
-                            
-                            timeSliderHtml = `
-                                <div class="boss-time-slider-container">
-                                    <div class="boss-time-slider" style="position: relative; width: 100%; height: 40px; background: rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden;">
-                                        <div class="boss-time-progress" style="position: absolute; top: 0; left: 0; height: 100%; width: ${timePercent}%; background: linear-gradient(90deg, #44ff44, #66ff66); transition: width 0.3s ease; border-radius: 8px;"></div>
-                                        <div class="boss-time-text" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-size: 11px; font-weight: 600; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); white-space: nowrap; text-align: center;">
-                                            ${remainingTimeStr} / ${endTime}
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                            
-                            // Сохраняем данные для автоматического обновления
-                            window.bossTimeData = {
-                                startedAt: session.startedAt,
-                                endsAt: session.endsAt,
-                                startTime: start,
-                                endTime: end,
-                                endTimeStr: endTime
-                            };
-                            
-                            // Запускаем автоматическое обновление слайдера времени
-                            startBossTimeSliderUpdate();
-                        }
-                        
-                        // Имя босса и режим в одну строчку (без HTML тегов)
-                        const modeTextPlain = modeDecoded || '';
-                        const comboTextPlain = comboModeDecoded || '';
-                        const bossNameAndMode = `${session.title || 'Босс'}${modeTextPlain ? ' ' + modeTextPlain : ''}${comboTextPlain ? ' ' + comboTextPlain : ''}`.trim();
-                        
-                        bossInfo.innerHTML = `
-                            ${rewardMessage}
-                            <div style="text-align: center; margin-bottom: 15px; font-size: 16px; font-weight: 600;">
-                                ${bossNameAndMode}
-                            </div>
-                            <div style="display: flex; align-items: flex-start; gap: 12px;">
-                                ${bossImageHtml}
-                                <div style="flex: 1; display: flex; flex-direction: column; gap: 10px;">
-                                    ${hpSliderHtml}
-                                    ${timeSliderHtml}
-                                </div>
-                            </div>
-                        `;
-                        updateStatus(true);
-                        
-            // Показываем блок с оружиями, так как босс активен (но он будет свернут по умолчанию)
-            const bossWeaponsWrapper = document.getElementById('boss-weapons-wrapper');
-            if (bossWeaponsWrapper) {
-                bossWeaponsWrapper.style.display = 'block';
-                // Обновляем количество оружий и данные об оружии
-                await Promise.all([
-                    updateWeaponCounts(),
-                    loadBossWeapons()
-                ]);
-            }
-            
-            // Убеждаемся, что секция выбора боссов всегда видна, даже когда есть активный бой
-                        const bossSelectSection = document.getElementById('boss-select-section');
-                        if (bossSelectSection) {
-                            bossSelectSection.style.display = 'block';
-                        }
-                        const bossListContainer = document.getElementById('boss-list-container');
-                        if (bossListContainer) {
-                            bossListContainer.style.display = 'block';
-                        }
-                        
-                        // Если список боссов еще не загружен, загружаем его
-                        if (!window.bossCategoriesData || Object.keys(window.bossCategoriesData).length === 0) {
-                            console.log('📋 Список боссов не загружен, загружаем...');
-                            loadBossList();
-                        }
-                        
-                        return;
-                    }
-                }
-            }
-            throw new Error(`HTTP ${response.status}: Токен протух и не удалось обновить`);
+        if (!data) {
+            throw new Error('Не удалось получить данные bootstrap');
         }
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
         
         // Сохраняем weaponStatsEffective из bootstrap
         if (data.success && data.weaponStatsEffective) {
@@ -2560,6 +2292,75 @@ async function attackBossWithWeapon(weapon) {
     }
 }
 
+// Глобальная переменная для кэширования bootstrap данных
+let cachedBootstrapData = null;
+let bootstrapCacheTime = 0;
+const BOOTSTRAP_CACHE_MS = 5000; // Кэшируем на 5 секунд
+let isBootstrapLoading = false;
+let bootstrapLoadingPromise = null;
+
+// Единая функция для получения bootstrap данных с кэшированием
+async function getBootstrapData(forceRefresh = false) {
+    const now = Date.now();
+    
+    // Если данные в кэше и не устарели, возвращаем их
+    if (!forceRefresh && cachedBootstrapData && (now - bootstrapCacheTime) < BOOTSTRAP_CACHE_MS) {
+        console.log('📦 Используем кэшированные данные bootstrap');
+        return cachedBootstrapData;
+    }
+    
+    // Если уже идет загрузка, ждем её завершения
+    if (isBootstrapLoading && bootstrapLoadingPromise) {
+        console.log('⏳ Bootstrap уже загружается, ждем...');
+        return await bootstrapLoadingPromise;
+    }
+    
+    // Начинаем загрузку
+    isBootstrapLoading = true;
+    bootstrapLoadingPromise = (async () => {
+        try {
+            const apiUrl = API_SERVER_URL || GAME_API_URL;
+            let response = await fetch(`${apiUrl}/boss/bootstrap`, {
+                method: 'GET',
+                headers: await getApiHeaders()
+            });
+            
+            // Обработка 401/403 - обновляем токен
+            if (response.status === 401 || response.status === 403) {
+                const currentInitData = await getCurrentInitData();
+                if (currentInitData && currentInitData.trim()) {
+                    const newToken = await loginWithInitData();
+                    if (newToken) {
+                        response = await fetch(`${apiUrl}/boss/bootstrap`, {
+                            method: 'GET',
+                            headers: await getApiHeaders()
+                        });
+                    }
+                }
+            }
+            
+            if (response.ok) {
+                const data = await response.json();
+                cachedBootstrapData = data;
+                bootstrapCacheTime = Date.now();
+                console.log('✅ Bootstrap данные загружены и закэшированы');
+                return data;
+            } else {
+                console.error(`❌ Ошибка загрузки bootstrap: HTTP ${response.status}`);
+                throw new Error(`HTTP ${response.status}`);
+            }
+        } catch (error) {
+            console.error('❌ Ошибка загрузки bootstrap:', error);
+            throw error;
+        } finally {
+            isBootstrapLoading = false;
+            bootstrapLoadingPromise = null;
+        }
+    })();
+    
+    return await bootstrapLoadingPromise;
+}
+
 // Обновление ключей боссов из bootstrap
 async function updateBossKeys() {
     try {
@@ -2589,30 +2390,11 @@ async function updateBossKeys() {
             console.warn('⚠️ Не удалось загрузить ключи из БД:', error);
         }
         
-        // Затем обновляем из bootstrap
+        // Затем обновляем из bootstrap (используем кэшированные данные)
         console.log('🔄 Обновление ключей из bootstrap...');
-        let bootstrapResponse = await fetch(`${apiUrl}/boss/bootstrap`, {
-            method: 'GET',
-            headers: await getApiHeaders()
-        });
+        const bootstrapData = await getBootstrapData();
         
-        // Обработка 401/403 - обновляем токен
-        if (bootstrapResponse.status === 401 || bootstrapResponse.status === 403) {
-            console.log('⚠️ Токен протух, обновляем...');
-            const currentInitData = await getCurrentInitData();
-            if (currentInitData && currentInitData.trim()) {
-                const newToken = await loginWithInitData();
-                if (newToken) {
-                    bootstrapResponse = await fetch(`${apiUrl}/boss/bootstrap`, {
-                        method: 'GET',
-                        headers: await getApiHeaders()
-                    });
-                }
-            }
-        }
-        
-        if (bootstrapResponse.ok) {
-            const bootstrapData = await bootstrapResponse.json();
+        if (bootstrapData) {
             console.log('📦 Bootstrap ответ получен:', bootstrapData);
             console.log('📦 Bootstrap playerStats:', bootstrapData.playerStats);
             console.log('📦 Bootstrap playerStats.keys:', bootstrapData.playerStats?.keys);
@@ -2682,10 +2464,6 @@ async function updateBossKeys() {
                     console.error('❌ Ошибка сбора награды из updateBossKeys:', error);
                 }
             }
-        } else {
-            console.error(`❌ Ошибка загрузки bootstrap: HTTP ${bootstrapResponse.status}`);
-            const errorText = await bootstrapResponse.text();
-            console.error('Текст ошибки:', errorText);
         }
     } catch (error) {
         console.error('❌ Ошибка обновления ключей:', error);
@@ -2821,6 +2599,11 @@ window.refreshBossInfo = async function refreshBossInfo(isAuto = false) {
     }
     
     try {
+        // При ручном обновлении принудительно обновляем кэш bootstrap
+        if (!isAuto) {
+            await getBootstrapData(true); // forceRefresh = true
+        }
+        
         // Обновляем ключи и информацию о боссе (без показа "Загрузка...")
         await Promise.all([
             updateBossKeys(),
@@ -3609,33 +3392,10 @@ async function loadStats() {
     }
     
     try {
-        // Получаем информацию о боссе для отображения энергии
-        // ВАЖНО: Используем getApiHeaders() для получения актуального токена из localStorage
-        let response = await fetch(`${GAME_API_URL}/boss/bootstrap`, {
-            method: 'GET',
-            headers: await getApiHeaders()
-        });
+        // Используем единую функцию для получения bootstrap данных (с кэшированием)
+        const data = await getBootstrapData();
         
-        // Если получили 401/403, пытаемся обновить токен через initData из БД
-        if (response.status === 401 || response.status === 403) {
-            console.warn('Токен протух, пытаемся обновить через initData из БД...');
-            const currentInitData = await getCurrentInitData();
-            if (currentInitData && currentInitData.trim()) {
-                const newToken = await loginWithInitData();
-                if (newToken) {
-                    // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
-                    // Используем getApiHeaders() для получения актуального токена
-                    // Повторяем запрос с новым токеном
-                    response = await fetch(`${GAME_API_URL}/boss/bootstrap`, {
-                        method: 'GET',
-                        headers: await getApiHeaders()
-                    });
-                }
-            }
-        }
-        
-        if (response.ok) {
-            const data = await response.json();
+        if (data) {
             // TODO: Добавить счетчик атак (можно хранить в localStorage)
             const totalAttacks = parseInt(localStorage.getItem('total_attacks') || '0');
             document.getElementById('total-attacks').textContent = totalAttacks;
@@ -4636,29 +4396,11 @@ window.loadBossList = async function loadBossList() {
             console.warn('⚠️ Не удалось загрузить ключи из БД:', error);
         }
         
-        // Затем загружаем и обновляем ключи из bootstrap
+        // Затем загружаем и обновляем ключи из bootstrap (используем кэшированные данные)
         console.log('Загружаем ключи из bootstrap...');
-        let bootstrapResponse = await fetch(`${apiUrl}/boss/bootstrap`, {
-            method: 'GET',
-            headers: await getApiHeaders()
-        });
+        const bootstrapData = await getBootstrapData();
         
-        // Обработка 401/403 - обновляем токен
-        if (bootstrapResponse.status === 401 || bootstrapResponse.status === 403) {
-            const currentInitData = await getCurrentInitData();
-            if (currentInitData && currentInitData.trim()) {
-                const newToken = await loginWithInitData();
-                if (newToken) {
-                    bootstrapResponse = await fetch(`${apiUrl}/boss/bootstrap`, {
-                        method: 'GET',
-                        headers: await getApiHeaders()
-                    });
-                }
-            }
-        }
-        
-        if (bootstrapResponse.ok) {
-            const bootstrapData = await bootstrapResponse.json();
+        if (bootstrapData) {
             console.log('📦 Bootstrap данные:', bootstrapData);
             console.log('📦 Bootstrap playerStats:', bootstrapData.playerStats);
             console.log('📦 Bootstrap playerStats.keys:', bootstrapData.playerStats?.keys);
@@ -5930,31 +5672,16 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
             throw new Error('Токен не найден');
         }
         
-        const apiUrl = API_SERVER_URL || GAME_API_URL;
-        // ВАЖНО: Используем bootstrap для проверки статуса, а не start-attack
-        let response = await fetch(`${apiUrl}/boss/bootstrap`, {
-            method: 'GET',
-            headers: await getApiHeaders()
-        });
+        // Используем единую функцию для получения bootstrap данных (с кэшированием)
+        const data = await getBootstrapData();
         
-        // Обработка 401/403 - обновляем токен через initData из БД
-        if (response.status === 401 || response.status === 403) {
-            const currentInitData = await getCurrentInitData();
-            if (currentInitData && currentInitData.trim()) {
-                const newToken = await loginWithInitData();
-                if (newToken) {
-                    // ВАЖНО: loginWithInitData() уже сохранил токен в localStorage
-                    // Используем getApiHeaders() для получения актуального токена
-                    response = await fetch(`${apiUrl}/boss/bootstrap`, {
-                        method: 'GET',
-                        headers: await getApiHeaders()
-                    });
-                }
-            }
+        if (!data) {
+            throw new Error('Не удалось получить данные bootstrap');
         }
         
         // Обработка таймаутов (504 Gateway Timeout или 999 Internal Error)
-        if (response.status === 504 || response.status === 999) {
+        // Проверяем в данных, есть ли ошибка таймаута
+        if (data.error && (data.error.includes('таймаут') || data.error.includes('timeout'))) {
             if (retryCount < maxRetries) {
                 const boss = selectedBosses[currentBossIndex];
                 const errorText = await response.text();
@@ -5978,12 +5705,6 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
                 throw new Error(`Таймаут при проверке статуса после ${maxRetries} попыток`);
             }
         }
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
         
         // Проверяем, это таймаут в сообщении об ошибке?
         if (data && !data.success) {
