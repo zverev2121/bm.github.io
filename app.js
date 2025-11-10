@@ -6212,13 +6212,7 @@ function parseComboFile(text) {
         
         console.log(`[parseComboFile] Строка ${lineIndex + 1}/${lines.length}: "${line}" | currentBossName: ${currentBossName || 'null'}, оружий: ${currentWeapons.length}`);
         
-        // Пропускаем разделители и заголовки
-        if (isSeparator(line) || isHeader(line)) {
-            console.log(`[parseComboFile] Пропущена строка (разделитель/заголовок): "${line}"`);
-            continue;
-        }
-        
-        // Проверяем, является ли строка заголовком комбо
+        // Проверяем, является ли строка заголовком комбо (это проверяем первым, чтобы не пропустить заголовки)
         const headerInfo = parseComboHeader(line);
         if (headerInfo) {
             console.log(`[parseComboFile] Найден заголовок комбо: ${headerInfo.bossName} (режим: ${headerInfo.comboMode || headerInfo.mode || 'normal'})`);
@@ -6237,6 +6231,25 @@ function parseComboFile(text) {
             currentComboMode = headerInfo.comboMode;
             currentMode = headerInfo.mode;
             currentWeapons = [];
+            continue;
+        }
+        
+        // Проверяем, является ли строка оружием (перед проверкой разделителя, чтобы не пропустить короткие названия оружия типа "яд")
+        const weapon = parseWeaponFromLine(line);
+        if (weapon) {
+            // Это оружие, не пропускаем
+            if (currentBossName) {
+                currentWeapons.push(weapon);
+                console.log(`✓ Распознано оружие: "${line}" -> ${weapon} (всего оружий: ${currentWeapons.length})`);
+            } else {
+                console.log(`[parseComboFile] Пропущено оружие "${line}" (нет активного босса)`);
+            }
+            continue;
+        }
+        
+        // Пропускаем разделители и заголовки (только если это не оружие)
+        if (isSeparator(line) || isHeader(line)) {
+            console.log(`[parseComboFile] Пропущена строка (разделитель/заголовок): "${line}"`);
             continue;
         }
         
@@ -6402,17 +6415,12 @@ function parseComboFile(text) {
             continue;
         }
         
-        // Если у нас есть текущий босс, пытаемся распарсить строку как оружие
+        // Если мы дошли сюда, значит строка не была распознана как заголовок, оружие или разделитель
+        // Если у нас есть текущий босс, но строка не распознана как оружие, это может быть ошибка
         if (currentBossName) {
-            const weapon = parseWeaponFromLine(line);
-            if (weapon) {
-                currentWeapons.push(weapon);
-                console.log(`✓ Распознано оружие: "${line}" -> ${weapon} (всего оружий: ${currentWeapons.length})`);
-            } else {
-                // Если не удалось распарсить, возможно это не оружие
-                // Пропускаем строку (может быть пустая строка или что-то другое)
-                console.warn(`⚠️ Не удалось распарсить оружие из строки: "${line}" (босс: ${currentBossName}, уже оружий: ${currentWeapons.length})`);
-            }
+            // Строка не была распознана как оружие в предыдущей проверке
+            // Это может быть неизвестное оружие или ошибка формата
+            console.warn(`⚠️ Не удалось распарсить оружие из строки: "${line}" (босс: ${currentBossName}, уже оружий: ${currentWeapons.length})`);
         } else {
             // Нет текущего босса, возможно это начало нового комбо в другом формате
             // Пробуем распарсить как заголовок еще раз (на случай, если формат немного другой)
