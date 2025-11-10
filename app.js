@@ -506,11 +506,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Инициализируем селектор типа взаимодействия
     initInteractionTypeSelector();
     
-    // Инициализируем обработчик загрузки файла комбо
-    const comboFileInput = document.getElementById('combo-file-input');
-    if (comboFileInput) {
-        comboFileInput.addEventListener('change', handleComboFileUpload);
-    }
     
     // Проверяем username из URL параметров и сохраняем его
     const urlParams = new URLSearchParams(window.location.search);
@@ -5516,30 +5511,7 @@ function cleanRtfText(text) {
     return cleaned;
 }
 
-// Обработка загрузки файла с комбо
-async function handleComboFileUpload(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    
-    try {
-        let text = await file.text();
-        
-        // Проверяем, является ли файл RTF (содержит RTF-разметку)
-        if (text.includes('\\u') || text.includes('\\uc0') || text.includes('\\expnd') || text.includes('\\kerning')) {
-            console.log('Обнаружена RTF-разметка, очищаем...');
-            text = cleanRtfText(text);
-            console.log('Очищенный текст:', text);
-        }
-        
-        await loadCombosFromText(text);
-        
-    } catch (error) {
-        console.error('Ошибка загрузки файла:', error);
-        tg.showAlert('Ошибка загрузки файла: ' + error.message);
-    }
-}
-
-// Загрузка комбо из текста (общая функция для файла и текстового поля)
+// Загрузка комбо из текста
 async function loadCombosFromText(text) {
     if (!text || !text.trim()) {
         tg.showAlert('Текст комбо пуст');
@@ -5701,6 +5673,9 @@ window.parseComboFromText = async function() {
     }
     
     await loadCombosFromText(text);
+    
+    // Очищаем текстовое поле после загрузки
+    textInput.value = '';
 }
 
 // Парсинг файла с комбо
@@ -6197,10 +6172,9 @@ function displayLoadedCombos() {
         const combos = combosByBoss[bossName];
         html += `<li><strong>${bossName}</strong>:`;
         combos.forEach((combo) => {
-            const modeName = combo.mode ? (BATTLE_MODE_INFO[combo.mode]?.name || combo.mode) : 'не указан';
             const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : 'не указан';
             const maxCost = calculateComboCost(combo.weapons);
-            html += `<br>&nbsp;&nbsp;• ${comboModeName} - Режим: ${modeName}, Ударов: ${combo.weapons.length}, Восст: ${maxCost} ₽`;
+            html += `<br>&nbsp;&nbsp;• ${comboModeName} - Ударов: ${combo.weapons.length}, Восст: ${maxCost} ₽`;
         });
         html += '</li>';
     });
@@ -6619,11 +6593,10 @@ window.startComboAttack = async function() {
     }
     
     const confirmed = await new Promise(resolve => {
-        const modeName = selectedCombo.mode ? (BATTLE_MODE_INFO[selectedCombo.mode]?.name || selectedCombo.mode) : 'не указан';
         const comboModeName = selectedCombo.comboMode ? (COMBO_MODE_INFO[selectedCombo.comboMode]?.name || selectedCombo.comboMode) : 'не указан';
         const maxCost = calculateComboCost(selectedCombo.weapons);
         tg.showConfirm(
-            `Начать комбо атаку на ${selectedCombo.bossName}?\n\nРежим: ${modeName}\nКомбо: ${comboModeName}\nУдаров: ${selectedCombo.weapons.length}\nВосст:  ${maxCost} ₽`,
+            `Начать комбо атаку на ${selectedCombo.bossName}?\n\nКомбо: ${comboModeName}\nУдаров: ${selectedCombo.weapons.length}\nВосст:  ${maxCost} ₽`,
             resolve
         );
     });
