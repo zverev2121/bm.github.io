@@ -640,6 +640,32 @@ window.toggleSection = function toggleSection(sectionId, event) {
     applySectionState(sectionId, !isCollapsed, true); // true = сохранить в БД
 };
 
+// Переключение блока оружий внутри секции босса
+window.toggleBossWeaponsSection = function toggleBossWeaponsSection(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    
+    const content = document.getElementById('boss-weapons-content');
+    const header = document.querySelector('.boss-weapons-header .collapse-btn');
+    
+    if (!content) {
+        return;
+    }
+    
+    const isCollapsed = content.classList.contains('collapsed');
+    
+    if (isCollapsed) {
+        content.style.display = 'block';
+        content.classList.remove('collapsed');
+        if (header) header.textContent = '▲';
+    } else {
+        content.style.display = 'none';
+        content.classList.add('collapsed');
+        if (header) header.textContent = '▼';
+    }
+};
+
 // Обработчик клика на секцию (открывает, если закрыта)
 function handleSectionClick(sectionId, event) {
     const section = document.getElementById(sectionId);
@@ -1736,9 +1762,9 @@ async function loadBossInfo() {
                         updateStatus(true);
                         
             // Показываем блок с оружиями, так как босс активен (но он будет свернут по умолчанию)
-            const bossWeaponsSection = document.getElementById('boss-weapons-section');
-            if (bossWeaponsSection) {
-                bossWeaponsSection.style.display = 'block';
+            const bossWeaponsWrapper = document.getElementById('boss-weapons-wrapper');
+            if (bossWeaponsWrapper) {
+                bossWeaponsWrapper.style.display = 'block';
                 // Обновляем количество оружий
                 await updateWeaponCounts();
             }
@@ -1905,9 +1931,9 @@ async function loadBossInfo() {
             updateStatus(true);
             
             // Показываем блок с оружиями, так как босс активен (но он будет свернут по умолчанию)
-            const bossWeaponsSection = document.getElementById('boss-weapons-section');
-            if (bossWeaponsSection) {
-                bossWeaponsSection.style.display = 'block';
+            const bossWeaponsWrapper = document.getElementById('boss-weapons-wrapper');
+            if (bossWeaponsWrapper) {
+                bossWeaponsWrapper.style.display = 'block';
                 // Обновляем количество оружий
                 await updateWeaponCounts();
             }
@@ -1932,9 +1958,9 @@ async function loadBossInfo() {
             updateStatus(false);
             
             // Скрываем блок с оружиями, так как босса нет
-            const bossWeaponsSection = document.getElementById('boss-weapons-section');
-            if (bossWeaponsSection) {
-                bossWeaponsSection.style.display = 'none';
+            const bossWeaponsWrapper = document.getElementById('boss-weapons-wrapper');
+            if (bossWeaponsWrapper) {
+                bossWeaponsWrapper.style.display = 'none';
             }
             
             // Убеждаемся, что секция выбора боссов видна даже когда нет активного боя
@@ -1957,9 +1983,9 @@ async function loadBossInfo() {
         updateStatus(false);
         
         // Скрываем блок с оружиями при ошибке
-        const bossWeaponsSection = document.getElementById('boss-weapons-section');
-        if (bossWeaponsSection) {
-            bossWeaponsSection.style.display = 'none';
+        const bossWeaponsWrapper = document.getElementById('boss-weapons-wrapper');
+        if (bossWeaponsWrapper) {
+            bossWeaponsWrapper.style.display = 'none';
         }
     }
 }
