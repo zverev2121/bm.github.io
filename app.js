@@ -5580,7 +5580,7 @@ async function saveCombosToDatabase(combos) {
         // Сохраняем каждое комбо
         for (const combo of combos) {
             try {
-                const response = await fetch(`${apiUrl}/api/player/combos`, {
+                const response = await fetch(`${apiUrl}/player/combos`, {
                     method: 'POST',
                     headers: headers,
                     body: JSON.stringify({
@@ -5615,7 +5615,7 @@ async function loadSavedCombos() {
         const headers = await getApiHeaders();
         console.log('📋 [loadSavedCombos] Заголовки запроса:', Object.keys(headers));
         
-        const response = await fetch(`${apiUrl}/api/player/combos`, {
+        const response = await fetch(`${apiUrl}/player/combos`, {
             method: 'GET',
             headers: headers
         });
