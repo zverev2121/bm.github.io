@@ -1524,6 +1524,31 @@ let weaponCounts = {
     knife: 0
 };
 
+// Форматирование чисел в сокращенном виде (70.354кк, 3.123ккк, 7.5к)
+function formatNumberShort(num) {
+    if (num >= 1000000000) {
+        // Миллиарды (ккк)
+        const value = num / 1000000000;
+        // Убираем лишние нули в конце
+        const formatted = value.toFixed(3).replace(/\.?0+$/, '');
+        return formatted + 'ккк';
+    } else if (num >= 1000000) {
+        // Миллионы (кк)
+        const value = num / 1000000;
+        // Убираем лишние нули в конце
+        const formatted = value.toFixed(3).replace(/\.?0+$/, '');
+        return formatted + 'кк';
+    } else if (num >= 1000) {
+        // Тысячи (к)
+        const value = num / 1000;
+        // Убираем лишние нули в конце
+        const formatted = value.toFixed(3).replace(/\.?0+$/, '');
+        return formatted + 'к';
+    } else {
+        return num.toString();
+    }
+}
+
 // Получение количества оружий из /api/player/init
 async function updateWeaponCounts() {
     try {
@@ -1588,9 +1613,18 @@ function updateWeaponCountsDisplay() {
 }
 
 // Загрузка информации о боссе
-async function loadBossInfo() {
+async function loadBossInfo(showLoading = true) {
     const bossInfo = document.getElementById('boss-info');
-    bossInfo.innerHTML = '<p class="loading">Загрузка...</p>';
+    // Показываем "Загрузка..." только при первой загрузке, не при обновлении
+    // Проверяем, есть ли уже данные (не показываем "Загрузка..." если есть контент)
+    const hasContent = bossInfo && bossInfo.innerHTML && 
+                       !bossInfo.innerHTML.includes('Загрузка информации') && 
+                       bossInfo.innerHTML.trim() !== '<p>Загрузка информации...</p>' &&
+                       bossInfo.innerHTML.trim() !== '<p class="loading">Загрузка...</p>';
+    
+    if (showLoading && !hasContent) {
+        bossInfo.innerHTML = '<p class="loading">Загрузка...</p>';
+    }
     
     try {
         // Получаем токен (с автоматическим обновлением при необходимости)
@@ -1716,7 +1750,7 @@ async function loadBossInfo() {
                             const localImagePath = bossId ? `images/${bossId}.png` : '';
                             
                             bossImageHtml = `
-                                <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 12px; overflow: hidden; flex-shrink: 0;">
+                                <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
                                     <img src="${imgSrc}" 
                                          alt="${session.title || 'Босс'}" 
                                          data-fallback="${fallbackSrc}"
@@ -1749,13 +1783,28 @@ async function loadBossInfo() {
                         
                         const rewardMessage = data.hasReward === true ? '<p style="color: #28a745; font-weight: bold;">💰 Награда с босса собрана!</p>' : '';
                         
+                        // Функция для форматирования оставшегося времени
+                        function formatRemainingTime(ms) {
+                            if (ms <= 0) return '0:00';
+                            const totalSeconds = Math.floor(ms / 1000);
+                            const hours = Math.floor(totalSeconds / 3600);
+                            const minutes = Math.floor((totalSeconds % 3600) / 60);
+                            const seconds = totalSeconds % 60;
+                            if (hours > 0) {
+                                return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                            }
+                            return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                        }
+                        
                         // Слайдер HP
+                        const currentHpShort = formatNumberShort(session.currentHp);
+                        const maxHpShort = formatNumberShort(session.maxHp);
                         const hpSliderHtml = `
-                            <div class="boss-hp-slider-container" style="margin-top: 10px; margin-bottom: 10px;">
-                                <div class="boss-hp-slider" style="position: relative; width: 100%; height: 40px; background: rgba(0,0,0,0.2); border-radius: 20px; overflow: hidden;">
-                                    <div class="boss-hp-progress" style="position: absolute; top: 0; left: 0; height: 100%; width: ${hpPercent}%; background: linear-gradient(90deg, #ff4444, #ff6666); transition: width 0.3s ease; border-radius: 20px;"></div>
+                            <div class="boss-hp-slider-container" style="margin-bottom: 10px;">
+                                <div class="boss-hp-slider" style="position: relative; width: 100%; height: 40px; background: rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden;">
+                                    <div class="boss-hp-progress" style="position: absolute; top: 0; left: 0; height: 100%; width: ${hpPercent}%; background: linear-gradient(90deg, #ff4444, #ff6666); transition: width 0.3s ease; border-radius: 8px;"></div>
                                     <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-size: 12px; font-weight: 600; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); white-space: nowrap;">
-                                        ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)
+                                        ${currentHpShort} / ${maxHpShort} (${hpPercent}%)
                                     </div>
                                 </div>
                             </div>
@@ -1764,7 +1813,6 @@ async function loadBossInfo() {
                         // Слайдер времени боя
                         let timeSliderHtml = '';
                         if (session.startedAt && session.endsAt) {
-                            const startTime = formatTimeToMoscow(session.startedAt);
                             const endTime = formatTimeToMoscow(session.endsAt);
                             const now = new Date().getTime();
                             const start = new Date(session.startedAt).getTime();
@@ -1774,13 +1822,14 @@ async function loadBossInfo() {
                             const remaining = end - now;
                             // Показываем оставшееся время (в начале 100%, к концу уменьшается)
                             const timePercent = total > 0 ? Math.max(0, Math.min(100, (remaining / total) * 100)) : 0;
+                            const remainingTimeStr = formatRemainingTime(remaining);
                             
                             timeSliderHtml = `
-                                <div class="boss-time-slider-container" style="margin-top: 10px;">
-                                    <div class="boss-time-slider" style="position: relative; width: 100%; height: 40px; background: rgba(0,0,0,0.2); border-radius: 20px; overflow: hidden;">
-                                        <div class="boss-time-progress" style="position: absolute; top: 0; left: 0; height: 100%; width: ${timePercent}%; background: linear-gradient(90deg, #3390ec, #4fa3ff); transition: width 0.3s ease; border-radius: 20px;"></div>
-                                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-size: 11px; font-weight: 600; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); white-space: nowrap; text-align: center;">
-                                            ${startTime} → ${endTime}
+                                <div class="boss-time-slider-container">
+                                    <div class="boss-time-slider" style="position: relative; width: 100%; height: 40px; background: rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden;">
+                                        <div class="boss-time-progress" style="position: absolute; top: 0; left: 0; height: 100%; width: ${timePercent}%; background: linear-gradient(90deg, #44ff44, #66ff66); transition: width 0.3s ease; border-radius: 8px;"></div>
+                                        <div class="boss-time-text" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-size: 11px; font-weight: 600; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); white-space: nowrap; text-align: center;">
+                                            ${remainingTimeStr} / ${endTime}
                                         </div>
                                     </div>
                                 </div>
@@ -1791,20 +1840,27 @@ async function loadBossInfo() {
                                 startedAt: session.startedAt,
                                 endsAt: session.endsAt,
                                 startTime: start,
-                                endTime: end
+                                endTime: end,
+                                endTimeStr: endTime
                             };
                             
                             // Запускаем автоматическое обновление слайдера времени
                             startBossTimeSliderUpdate();
                         }
                         
+                        // Имя босса и режим в одну строчку (без HTML тегов)
+                        const modeTextPlain = modeDecoded || '';
+                        const comboTextPlain = comboModeDecoded || '';
+                        const bossNameAndMode = `${session.title || 'Босс'}${modeTextPlain ? ' ' + modeTextPlain : ''}${comboTextPlain ? ' ' + comboTextPlain : ''}`.trim();
+                        
                         bossInfo.innerHTML = `
                             ${rewardMessage}
+                            <div style="text-align: center; margin-bottom: 15px; font-size: 16px; font-weight: 600;">
+                                ${bossNameAndMode}
+                            </div>
                             <div style="display: flex; align-items: flex-start; gap: 12px;">
                                 ${bossImageHtml}
-                                <div style="flex: 1;">
-                                    <strong>${session.title || 'Босс'}</strong><br>
-                                    Режим: ${modeText}${comboText}
+                                <div style="flex: 1; display: flex; flex-direction: column; gap: 10px;">
                                     ${hpSliderHtml}
                                     ${timeSliderHtml}
                                 </div>
@@ -1937,7 +1993,7 @@ async function loadBossInfo() {
                 const localImagePath = bossId ? `images/${bossId}.png` : '';
                 
                 bossImageHtml = `
-                    <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 12px; overflow: hidden; flex-shrink: 0;">
+                    <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
                         <img src="${imgSrc}" 
                              alt="${session.title || 'Босс'}" 
                              data-fallback="${fallbackSrc}"
@@ -1968,13 +2024,28 @@ async function loadBossInfo() {
                 }
             }
             
+            // Функция для форматирования оставшегося времени
+            function formatRemainingTime(ms) {
+                if (ms <= 0) return '0:00';
+                const totalSeconds = Math.floor(ms / 1000);
+                const hours = Math.floor(totalSeconds / 3600);
+                const minutes = Math.floor((totalSeconds % 3600) / 60);
+                const seconds = totalSeconds % 60;
+                if (hours > 0) {
+                    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                }
+                return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            }
+            
             // Слайдер HP
+            const currentHpShort = formatNumberShort(session.currentHp);
+            const maxHpShort = formatNumberShort(session.maxHp);
             const hpSliderHtml = `
-                <div class="boss-hp-slider-container" style="margin-top: 10px; margin-bottom: 10px;">
-                    <div class="boss-hp-slider" style="position: relative; width: 100%; height: 40px; background: rgba(0,0,0,0.2); border-radius: 20px; overflow: hidden;">
-                        <div class="boss-hp-progress" style="position: absolute; top: 0; left: 0; height: 100%; width: ${hpPercent}%; background: linear-gradient(90deg, #ff4444, #ff6666); transition: width 0.3s ease; border-radius: 20px;"></div>
+                <div class="boss-hp-slider-container" style="margin-bottom: 10px;">
+                    <div class="boss-hp-slider" style="position: relative; width: 100%; height: 40px; background: rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden;">
+                        <div class="boss-hp-progress" style="position: absolute; top: 0; left: 0; height: 100%; width: ${hpPercent}%; background: linear-gradient(90deg, #ff4444, #ff6666); transition: width 0.3s ease; border-radius: 8px;"></div>
                         <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-size: 12px; font-weight: 600; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); white-space: nowrap;">
-                            ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)
+                            ${currentHpShort} / ${maxHpShort} (${hpPercent}%)
                         </div>
                     </div>
                 </div>
@@ -1983,7 +2054,6 @@ async function loadBossInfo() {
             // Слайдер времени боя
             let timeSliderHtml = '';
             if (session.startedAt && session.endsAt) {
-                const startTime = formatTimeToMoscow(session.startedAt);
                 const endTime = formatTimeToMoscow(session.endsAt);
                 const now = new Date().getTime();
                 const start = new Date(session.startedAt).getTime();
@@ -1993,13 +2063,14 @@ async function loadBossInfo() {
                 const remaining = end - now;
                 // Показываем оставшееся время (в начале 100%, к концу уменьшается)
                 const timePercent = total > 0 ? Math.max(0, Math.min(100, (remaining / total) * 100)) : 0;
+                const remainingTimeStr = formatRemainingTime(remaining);
                 
                 timeSliderHtml = `
-                    <div class="boss-time-slider-container" style="margin-top: 10px;">
-                        <div class="boss-time-slider" style="position: relative; width: 100%; height: 40px; background: rgba(0,0,0,0.2); border-radius: 20px; overflow: hidden;">
-                            <div class="boss-time-progress" style="position: absolute; top: 0; left: 0; height: 100%; width: ${timePercent}%; background: linear-gradient(90deg, #3390ec, #4fa3ff); transition: width 0.3s ease; border-radius: 20px;"></div>
-                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-size: 11px; font-weight: 600; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); white-space: nowrap; text-align: center;">
-                                ${startTime} → ${endTime}
+                    <div class="boss-time-slider-container">
+                        <div class="boss-time-slider" style="position: relative; width: 100%; height: 40px; background: rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden;">
+                            <div class="boss-time-progress" style="position: absolute; top: 0; left: 0; height: 100%; width: ${timePercent}%; background: linear-gradient(90deg, #44ff44, #66ff66); transition: width 0.3s ease; border-radius: 8px;"></div>
+                            <div class="boss-time-text" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-size: 11px; font-weight: 600; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); white-space: nowrap; text-align: center;">
+                                ${remainingTimeStr} / ${endTime}
                             </div>
                         </div>
                     </div>
@@ -2010,20 +2081,27 @@ async function loadBossInfo() {
                     startedAt: session.startedAt,
                     endsAt: session.endsAt,
                     startTime: start,
-                    endTime: end
+                    endTime: end,
+                    endTimeStr: endTime
                 };
                 
                 // Запускаем автоматическое обновление слайдера времени
                 startBossTimeSliderUpdate();
             }
             
+            // Имя босса и режим в одну строчку (без HTML тегов)
+            const modeTextPlain = modeDecoded || '';
+            const comboTextPlain = comboModeDecoded || '';
+            const bossNameAndMode = `${session.title || 'Босс'}${modeTextPlain ? ' ' + modeTextPlain : ''}${comboTextPlain ? ' ' + comboTextPlain : ''}`.trim();
+            
             bossInfo.innerHTML = `
                 ${rewardMessageHtml}
+                <div style="text-align: center; margin-bottom: 15px; font-size: 16px; font-weight: 600;">
+                    ${bossNameAndMode}
+                </div>
                 <div style="display: flex; align-items: flex-start; gap: 12px;">
                     ${bossImageHtml}
-                    <div style="flex: 1;">
-                        <strong>${session.title || 'Босс'}</strong><br>
-                        Режим: ${modeDecoded}${comboText}
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 10px;">
                         ${hpSliderHtml}
                         ${timeSliderHtml}
                     </div>
@@ -2130,9 +2208,26 @@ function startBossTimeSliderUpdate() {
         const total = end - start;
         const remaining = end - now;
         
+        // Функция для форматирования оставшегося времени
+        function formatRemainingTime(ms) {
+            if (ms <= 0) return '0:00';
+            const totalSeconds = Math.floor(ms / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            if (hours > 0) {
+                return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+            return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
         if (now >= end) {
             // Время истекло
             progressEl.style.width = '0%';
+            const timeTextEl = document.querySelector('.boss-time-text');
+            if (timeTextEl) {
+                timeTextEl.textContent = `0:00 / ${window.bossTimeData.endTimeStr || ''}`;
+            }
             if (bossTimeSliderInterval) {
                 clearInterval(bossTimeSliderInterval);
                 bossTimeSliderInterval = null;
@@ -2143,6 +2238,13 @@ function startBossTimeSliderUpdate() {
         // Показываем оставшееся время (в начале 100%, к концу уменьшается)
         const timePercent = total > 0 ? Math.max(0, Math.min(100, (remaining / total) * 100)) : 0;
         progressEl.style.width = timePercent + '%';
+        
+        // Обновляем текст времени
+        const timeTextEl = document.querySelector('.boss-time-text');
+        if (timeTextEl) {
+            const remainingTimeStr = formatRemainingTime(remaining);
+            timeTextEl.textContent = `${remainingTimeStr} / ${window.bossTimeData.endTimeStr || ''}`;
+        }
     }, 1000);
 }
 
@@ -2218,8 +2320,8 @@ async function attackBossWithWeapon(weapon) {
             // Обновляем количество оружий (так как оно могло измениться)
             await updateWeaponCounts();
             
-            // Обновляем информацию о боссе
-            await loadBossInfo();
+            // Обновляем информацию о боссе (без показа "Загрузка...")
+            await loadBossInfo(false);
             
             // Показываем уведомление об успехе (опционально)
             if (window.tg && window.tg.showAlert) {
@@ -2502,10 +2604,10 @@ window.refreshBossInfo = async function refreshBossInfo(isAuto = false) {
     }
     
     try {
-        // Обновляем ключи и информацию о боссе
+        // Обновляем ключи и информацию о боссе (без показа "Загрузка...")
         await Promise.all([
             updateBossKeys(),
-            loadBossInfo(),
+            loadBossInfo(false),
             loadStats()
         ]);
         
