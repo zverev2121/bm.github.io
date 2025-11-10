@@ -125,6 +125,7 @@ header h1 {
 .section-content {
     overflow: hidden;
     transition: max-height 0.3s ease, opacity 0.3s ease;
+    display: none; /* По умолчанию все блоки закрыты */
 }
 
 .section-content.collapsed {
@@ -137,6 +138,33 @@ header h1 {
 
 .section.collapsed .section-content {
     display: none;
+}
+
+.section:not(.collapsed) .section-content {
+    display: block;
+}
+
+/* Секция кликабельна для открытия (только если закрыта) */
+.section.collapsed {
+    cursor: pointer;
+}
+
+/* Заголовок кликабелен для закрытия */
+.section-header {
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Контент не должен быть кликабельным (чтобы не закрывался при клике на него) */
+.section-content {
+    cursor: default;
+    pointer-events: auto;
+}
+
+/* Открытая секция не должна быть кликабельной (кроме заголовка) */
+.section:not(.collapsed) {
+    cursor: default;
 }
 
 .boss-info, .prison-info {

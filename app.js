@@ -618,8 +618,12 @@ function applySectionState(sectionId, isCollapsed, saveToDb = true) {
     }
 }
 
-// Переключение состояния секции
-window.toggleSection = function toggleSection(sectionId) {
+// Переключение состояния секции (вызывается при клике на кнопку)
+window.toggleSection = function toggleSection(sectionId, event) {
+    if (event) {
+        event.stopPropagation(); // Останавливаем всплытие события
+    }
+    
     const section = document.getElementById(sectionId);
     if (!section) {
         return;
@@ -629,10 +633,77 @@ window.toggleSection = function toggleSection(sectionId) {
     applySectionState(sectionId, !isCollapsed, true); // true = сохранить в БД
 };
 
+// Обработчик клика на секцию (открывает, если закрыта)
+function handleSectionClick(sectionId, event) {
+    const section = document.getElementById(sectionId);
+    if (!section) {
+        return;
+    }
+    
+    // Если клик был на заголовке, закрываем блок (если открыт) или открываем (если закрыт)
+    const header = section.querySelector('.section-header');
+    if (header && header.contains(event.target)) {
+        const isCollapsed = section.classList.contains('collapsed');
+        applySectionState(sectionId, !isCollapsed, true);
+        return;
+    }
+    
+    // Если клик был на контенте или на кнопках внутри, не делаем ничего
+    const content = section.querySelector('.section-content');
+    if (content && content.contains(event.target)) {
+        // Проверяем, не кликнули ли на кнопку или другой интерактивный элемент
+        const target = event.target;
+        if (target.tagName === 'BUTTON' || 
+            target.tagName === 'INPUT' || 
+            target.tagName === 'SELECT' || 
+            target.tagName === 'TEXTAREA' ||
+            target.closest('button') ||
+            target.closest('input') ||
+            target.closest('select') ||
+            target.closest('textarea')) {
+            return; // Не обрабатываем клик на интерактивных элементах
+        }
+        return; // Не обрабатываем клик на контенте
+    }
+    
+    // Если блок закрыт и клик был не на заголовке и не на контенте, открываем его
+    const isCollapsed = section.classList.contains('collapsed');
+    if (isCollapsed) {
+        applySectionState(sectionId, false, true);
+    }
+}
+
 // Инициализация
 document.addEventListener('DOMContentLoaded', async () => {
     // Инициализация: показываем вкладку "Основное" по умолчанию
     switchTab('main');
+    
+    // ВАЖНО: Сначала закрываем все блоки по умолчанию (до загрузки из БД)
+    for (const sectionId of COLLAPSIBLE_SECTIONS) {
+        const section = document.getElementById(sectionId);
+        if (section) {
+            section.classList.add('collapsed');
+            const content = section.querySelector('.section-content');
+            const btn = section.querySelector('.collapse-btn');
+            if (content) {
+                content.style.display = 'none';
+            }
+            if (btn) {
+                btn.textContent = '▶';
+            }
+        }
+    }
+    
+    // Добавляем обработчики кликов на секции
+    for (const sectionId of COLLAPSIBLE_SECTIONS) {
+        const section = document.getElementById(sectionId);
+        if (section) {
+            section.addEventListener('click', function(e) {
+                handleSectionClick(sectionId, e);
+            });
+        }
+    }
+    
     // Загружаем сохраненные комбо при инициализации (так как комбо находится во вкладке main)
     console.log('🚀 [DOMContentLoaded] Инициализация, загружаем сохраненные комбо');
     loadSavedCombosAndDisplay();
@@ -660,7 +731,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadSettings();
     updateSettingsDisplay();
     
-    // Загружаем состояния блоков из БД
+    // Загружаем состояния блоков из БД (после этого блоки откроются/закроются согласно БД)
     await loadSectionStates();
     
     // Инициализируем селектор типа взаимодействия
