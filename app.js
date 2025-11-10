@@ -1787,7 +1787,7 @@ function updateBossCards() {
         // Обновляем количество ключей
         const keysElement = card.querySelector('.boss-keys');
         if (keysElement) {
-            keysElement.textContent = `🔑 ${keysInfo.hasRequirements ? `${keysInfo.required}/${keysInfo.available}` : keysCount}`;
+            keysElement.textContent = `🔑 ${keysInfo.hasRequirements ? `${keysInfo.available}/${keysInfo.required}` : keysCount}`;
         } else {
             console.warn(`⚠️ Не найден элемент .boss-keys для босса ${bossId}`);
         }
@@ -4088,7 +4088,7 @@ function renderBossList(categoriesData) {
                         <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bossName}</div>
                         <div class="boss-hp" data-base-hp="${baseHp}" style="font-size: 12px; color: #e0e0e0; margin-bottom: 4px;">HP: ${currentHp.toLocaleString()}</div>
                         <div class="boss-keys" style="font-size: 12px; color: #ffd700; margin-bottom: 6px;">
-                            🔑 ${keysInfo.hasRequirements ? `${keysInfo.required}/${keysInfo.available}` : keysCount}
+                            🔑 ${keysInfo.hasRequirements ? `${keysInfo.available}/${keysInfo.required}` : keysCount}
                         </div>
                         ${modeSelectorHtml}
                         ${comboModeSelectorHtml}
@@ -4334,7 +4334,7 @@ window.switchBossCategory = function(categoryId) {
                     <div class="boss-name" style="font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bossName}</div>
                     <div class="boss-hp" data-base-hp="${baseHp}" style="font-size: 12px; color: #e0e0e0; margin-bottom: 4px;">HP: ${currentHp.toLocaleString()}</div>
                     <div class="boss-keys" style="font-size: 12px; color: #ffd700; margin-bottom: 6px;">
-                        🔑 ${keysInfo.hasRequirements ? `${keysInfo.required}/${keysInfo.available}` : keysCount}
+                        🔑 ${keysInfo.hasRequirements ? `${keysInfo.available}/${keysInfo.required}` : keysCount}
                     </div>
                     ${modeSelectorHtml}
                     ${comboModeSelectorHtml}
@@ -5738,6 +5738,9 @@ function parseComboFile(text) {
         line = line.replace(/^\d+\s+/, ''); // 1 пах -> пах
         line = line.trim();
         
+        // Пропускаем пустые строки
+        if (!line) return null;
+        
         const parts = line.split(/\s+/).filter(p => p);
         if (parts.length === 0) return null;
         
@@ -6030,10 +6033,11 @@ function parseComboFile(text) {
             const weapon = parseWeaponFromLine(line);
             if (weapon) {
                 currentWeapons.push(weapon);
+                console.log(`✓ Распознано оружие: "${line}" -> ${weapon}`);
             } else {
                 // Если не удалось распарсить, возможно это не оружие
                 // Пропускаем строку (может быть пустая строка или что-то другое)
-                console.warn(`Не удалось распарсить оружие из строки: ${line}`);
+                console.warn(`⚠️ Не удалось распарсить оружие из строки: "${line}" (босс: ${currentBossName})`);
             }
         } else {
             // Нет текущего босса, возможно это начало нового комбо в другом формате
@@ -6101,7 +6105,10 @@ function parseComboFile(text) {
 function parseWeaponName(weaponName) {
     weaponName = weaponName.toLowerCase().trim();
     
-    // Проверяем прямое совпадение в маппинге
+    // Пропускаем пустые строки
+    if (!weaponName) return null;
+    
+    // Проверяем прямое совпадение в маппинге (приоритет точному совпадению)
     if (WEAPON_MAPPING[weaponName]) {
         const apiWeapon = WEAPON_MAPPING[weaponName];
         if (['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(apiWeapon)) {
@@ -6110,8 +6117,13 @@ function parseWeaponName(weaponName) {
     }
     
     // Проверяем частичные совпадения (например, "колено" -> "kneeear")
+    // Но только если не нашли точное совпадение
     for (const [key, value] of Object.entries(WEAPON_MAPPING)) {
-        if (weaponName === key || weaponName.includes(key) || key.includes(weaponName)) {
+        // Пропускаем ключи, которые уже были проверены как точное совпадение
+        if (key === weaponName) continue;
+        
+        // Проверяем, содержит ли weaponName ключ или наоборот
+        if (weaponName.includes(key) || key.includes(weaponName)) {
             if (['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(value)) {
                 return value;
             }
@@ -6170,13 +6182,27 @@ function displayLoadedCombos() {
         return;
     }
     
-    let html = '<ul style="text-align: left; padding-left: 20px;">';
+    // Группируем комбо по боссу
+    const combosByBoss = {};
     loadedCombos.forEach((combo, index) => {
         console.log(`  📝 [displayLoadedCombos] Обработка комбо ${index + 1}:`, combo);
-        const modeName = combo.mode ? (BATTLE_MODE_INFO[combo.mode]?.name || combo.mode) : 'не указан';
-        const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : 'не указан';
-        const maxCost = calculateComboCost(combo.weapons);
-        html += `<li><strong>${combo.bossName}</strong> - Режим: ${modeName}, Комбо: ${comboModeName}, Ударов: ${combo.weapons.length}, Восст:  ${maxCost} ₽</li>`;
+        if (!combosByBoss[combo.bossName]) {
+            combosByBoss[combo.bossName] = [];
+        }
+        combosByBoss[combo.bossName].push(combo);
+    });
+    
+    let html = '<ul style="text-align: left; padding-left: 20px;">';
+    Object.keys(combosByBoss).forEach(bossName => {
+        const combos = combosByBoss[bossName];
+        html += `<li><strong>${bossName}</strong>:`;
+        combos.forEach((combo) => {
+            const modeName = combo.mode ? (BATTLE_MODE_INFO[combo.mode]?.name || combo.mode) : 'не указан';
+            const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : 'не указан';
+            const maxCost = calculateComboCost(combo.weapons);
+            html += `<br>&nbsp;&nbsp;• ${comboModeName} - Режим: ${modeName}, Ударов: ${combo.weapons.length}, Восст: ${maxCost} ₽`;
+        });
+        html += '</li>';
     });
     html += '</ul>';
     
