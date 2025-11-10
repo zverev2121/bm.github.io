@@ -5546,29 +5546,20 @@ async function loadCombosFromText(text) {
         return;
     }
     
-    loadedCombos = parseComboFile(text);
+    const parsedCombos = parseComboFile(text);
     
-    if (loadedCombos.length === 0) {
+    if (parsedCombos.length === 0) {
         tg.showAlert('Не удалось распарсить комбо из текста. Проверьте формат.\n\nФормат: имя_босса режим удар1 удар2 ...; имя_босса2 режим удар1 удар2 ...\nПример: палыч пац фин глаз грудь ухо пах яд; махно блат пал пах фин');
         return;
     }
     
-    // Сохраняем комбо в БД
-    await saveCombosToDatabase(loadedCombos);
+    // Сохраняем новые комбо в БД
+    console.log(`💾 [loadCombosFromText] Сохраняем ${parsedCombos.length} новых комбо в БД`);
+    await saveCombosToDatabase(parsedCombos);
     
-    // Убеждаемся, что список боссов загружен
-    if (!window.bossCategoriesData || Object.keys(window.bossCategoriesData).length === 0) {
-        console.log('📋 Список боссов не загружен, загружаем...');
-        await loadBossList();
-        // Ждем немного, чтобы данные успели обработаться
-        await new Promise(resolve => setTimeout(resolve, 500));
-    }
-    
-    // Показываем список загруженных комбо
-    displayLoadedCombos();
-    
-    // Показываем выбор боссов
-    displayComboBossSelection();
+    // После сохранения загружаем ВСЕ комбо из БД (включая старые и новые)
+    console.log(`📥 [loadCombosFromText] Загружаем все комбо из БД после сохранения`);
+    await loadSavedCombosAndDisplay();
 }
 
 // Сохранение комбо в БД
@@ -6298,7 +6289,8 @@ function displayComboBossSelection() {
     
     if (availableBosses.length === 0) {
         const availableBossNames = allBossesFromCategories.map(b => b.name).join(', ');
-        tg.showAlert(`Не найдено соответствующих боссов для загруженных комбо.\n\nИскали: ${uniqueBossNames.join(', ')}\n\nДоступные боссы: ${availableBossNames}`);
+        // Не показываем алерт, просто логируем
+        console.log(`ℹ️ [displayComboBossSelection] Не найдено соответствующих боссов для загруженных комбо. Искали: ${uniqueBossNames.join(', ')}. Доступные боссы: ${availableBossNames}`);
         return;
     }
     
