@@ -7207,7 +7207,7 @@ function displayComboBossSelection() {
                  data-boss-name="${boss.name.replace(/'/g, "\\'")}"
                  style="border: 2px solid #3390ec; background: linear-gradient(135deg, #2d3d5a 0%, #1e2a3a 100%); border-radius: 12px; padding: 10px; margin-right: 12px; min-width: 140px; cursor: pointer; transition: transform 0.2s;"
                  onclick="selectComboBossFromCard(${boss.id})">
-                <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden; flex-shrink: 0;">
+                <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px auto; overflow: hidden; flex-shrink: 0;">
                     <img src="${getBossImageUrl(boss.id, boss)}" 
                          alt="${boss.name}" 
                          data-fallback="${getBossImageUrlFallback(boss.id, boss)}"
