@@ -4311,7 +4311,7 @@ window.switchBossCategory = function(categoryId) {
                  data-base-hp="${baseHp}"
                  style="${cardStyle} border-radius: 12px; padding: 10px; margin-right: 12px; min-width: 140px; cursor: pointer; transition: transform 0.2s;"
                  onclick="toggleBossSelection(${bossId}, '${bossName.replace(/'/g, "\\'")}')">
-                <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; overflow: hidden; flex-shrink: 0;">
+                <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px auto; overflow: hidden; flex-shrink: 0;">
                     <img src="${boss.imageUrl || boss.image || `images/${bossId}.png`}" 
                          alt="${bossName}" 
                          data-fallback="${boss.imageUrl || boss.image || ''}"
@@ -5582,31 +5582,159 @@ function parseComboFile(text) {
     let currentMode = null;
     let currentWeapons = [];
     
+    // Функция для проверки, является ли строка разделителем
+    function isSeparator(line) {
+        // Проверяем на разделители типа ➖➖➖➖➖➖➖➖➖➖
+        return /^[➖\-─=]+$/.test(line) || line.length < 3;
+    }
+    
+    // Функция для проверки, является ли строка заголовком (не комбо)
+    function isHeader(line) {
+        // Заголовки типа "Комбо на 10.11.25 👇 БЕСПРЕДЕЛЬЩИКИ"
+        return /^комбо\s+на/i.test(line) || 
+               /^👇/i.test(line) ||
+               /^(беспредельщики|вертухаи|боссы)/i.test(line);
+    }
+    
+    // Функция для парсинга оружия из строки
+    function parseWeaponFromLine(line) {
+        // Убираем нумерацию в начале (1.пах, 1. пах, 1 пах, 1)пах)
+        // Сначала обрабатываем формат с точкой/скобкой без пробела
+        line = line.replace(/^\d+[\.\)]([^\s])/, '$1'); // 1.пах -> пах
+        // Затем обрабатываем формат с пробелом
+        line = line.replace(/^\d+[\.\)]\s+/, ''); // 1. пах -> пах
+        // Обрабатываем формат без точки/скобки
+        line = line.replace(/^\d+\s+/, ''); // 1 пах -> пах
+        line = line.trim();
+        
+        const parts = line.split(/\s+/).filter(p => p);
+        if (parts.length === 0) return null;
+        
+        // Пробуем распарсить как оружие
+        let weaponName = parts.join(' ').toLowerCase();
+        const apiWeapon = parseWeaponName(weaponName);
+        
+        if (apiWeapon) {
+            return apiWeapon;
+        }
+        
+        // Если не нашли, пробуем первое слово
+        if (parts.length > 0) {
+            weaponName = parts[0].toLowerCase();
+            const singleWeapon = parseWeaponName(weaponName);
+            if (singleWeapon) {
+                return singleWeapon;
+            }
+        }
+        
+        return null;
+    }
+    
+    // Функция для определения, является ли строка заголовком комбо (имя босса + режим)
+    function parseComboHeader(line) {
+        const parts = line.split(/\s+/).filter(p => p);
+        if (parts.length < 2) return null;
+        
+        // Пробуем найти режим комбо в последних словах
+        for (let i = parts.length - 1; i >= 0; i--) {
+            const word = parts[i].toLowerCase();
+            
+            // Проверяем режим комбо
+            if (COMBO_MODE_MAPPING[word]) {
+                const bossName = parts.slice(0, i).join(' ').toLowerCase();
+                if (bossName) {
+                    return {
+                        bossName: bossName,
+                        comboMode: COMBO_MODE_MAPPING[word],
+                        mode: null
+                    };
+                }
+            }
+            
+            // Проверяем режим атаки
+            const foundMode = Object.keys(BATTLE_MODE_INFO).find(key => 
+                BATTLE_MODE_INFO[key].name.toLowerCase().includes(word) ||
+                key.toLowerCase() === word
+            );
+            if (foundMode) {
+                const bossName = parts.slice(0, i).join(' ').toLowerCase();
+                if (bossName) {
+                    return {
+                        bossName: bossName,
+                        comboMode: null,
+                        mode: foundMode
+                    };
+                }
+            }
+        }
+        
+        // Если не нашли режим, пробуем первые два слова как имя босса + режим
+        if (parts.length >= 2) {
+            const bossName = parts[0].toLowerCase();
+            const secondPart = parts[1].toLowerCase();
+            
+            if (COMBO_MODE_MAPPING[secondPart]) {
+                return {
+                    bossName: bossName,
+                    comboMode: COMBO_MODE_MAPPING[secondPart],
+                    mode: null
+                };
+            }
+            
+            const foundMode = Object.keys(BATTLE_MODE_INFO).find(key => 
+                BATTLE_MODE_INFO[key].name.toLowerCase().includes(secondPart) ||
+                key.toLowerCase() === secondPart
+            );
+            if (foundMode) {
+                return {
+                    bossName: bossName,
+                    comboMode: null,
+                    mode: foundMode
+                };
+            }
+        }
+        
+        return null;
+    }
+    
+    // Функция для проверки, является ли строка нумерованным списком
+    function isNumberedList(line) {
+        // Проверяем формат: "1.пах" или "1 пах" или "1. пах"
+        return /^\d+[\.\)]?\s*/.test(line);
+    }
+    
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
         const line = lines[lineIndex];
         
-        // Проверяем, является ли строка нумерованным списком (начинается с цифры)
-        const parts = line.split(/\s+/).filter(p => p);
-        const isNumbered = parts.length > 0 && /^\d+$/.test(parts[0]);
+        // Пропускаем разделители и заголовки
+        if (isSeparator(line) || isHeader(line)) {
+            continue;
+        }
         
-        if (isNumbered) {
-            // Это нумерованный список оружий
-            if (currentBossName) {
-                // Парсим оружие (пропускаем номер)
-                if (parts.length >= 2) {
-                    const weaponName = parts.slice(1).join(' ').toLowerCase();
-                    const apiWeapon = parseWeaponName(weaponName);
-                    if (apiWeapon) {
-                        currentWeapons.push(apiWeapon);
-                    } else {
-                        console.warn(`Неизвестное оружие в нумерованном списке: ${weaponName}`);
-                    }
-                }
+        // Проверяем, является ли строка заголовком комбо
+        const headerInfo = parseComboHeader(line);
+        if (headerInfo) {
+            // Сохраняем предыдущее комбо, если оно было
+            if (currentBossName && currentWeapons.length > 0) {
+                combos.push({
+                    bossName: currentBossName,
+                    mode: currentMode || 'normal',
+                    comboMode: currentComboMode,
+                    weapons: currentWeapons
+                });
             }
-        } else {
-            // Это не нумерованный список - возможно начало нового комбо или формат с точкой с запятой
             
-            // Если у нас уже есть накопленное комбо из нумерованного списка, сохраняем его
+            // Начинаем новое комбо
+            currentBossName = headerInfo.bossName;
+            currentComboMode = headerInfo.comboMode;
+            currentMode = headerInfo.mode;
+            currentWeapons = [];
+            continue;
+        }
+        
+        // Проверяем формат с точкой с запятой (старый формат)
+        if (line.includes(';')) {
+            // Сохраняем предыдущее комбо, если оно было
             if (currentBossName && currentWeapons.length > 0) {
                 combos.push({
                     bossName: currentBossName,
@@ -5620,210 +5748,212 @@ function parseComboFile(text) {
                 currentWeapons = [];
             }
             
-            // Обрабатываем формат с точкой с запятой (старый формат)
-            if (line.includes(';')) {
-                const comboStrings = line.split(';').map(s => s.trim()).filter(s => s);
-                
-                for (const comboString of comboStrings) {
-            const parts = comboString.split(/\s+/).filter(p => p);
-            if (parts.length < 2) continue; // минимум: имя_босса удар (или имя_босса режим удар)
+            const comboStrings = line.split(';').map(s => s.trim()).filter(s => s);
             
-            const bossName = parts[0].toLowerCase();
-            let comboMode = null;
-            let mode = null;
-            let weaponsStartIndex = 1; // Индекс, с которого начинаются оружия
-            
-            // Проверяем, есть ли режим комбо или режим атаки на второй позиции
-            if (parts.length >= 2) {
-                const secondPart = parts[1].toLowerCase();
+            for (const comboString of comboStrings) {
+                const parts = comboString.split(/\s+/).filter(p => p);
+                if (parts.length < 2) continue;
                 
-                // Проверяем, это режим комбо?
-                if (COMBO_MODE_MAPPING[secondPart]) {
-                    comboMode = COMBO_MODE_MAPPING[secondPart];
-                    weaponsStartIndex = 2; // Оружия начинаются с третьей позиции
-                } else {
-                    // Пытаемся найти режим атаки
-                    const foundMode = Object.keys(BATTLE_MODE_INFO).find(key => 
-                        BATTLE_MODE_INFO[key].name.toLowerCase().includes(secondPart) ||
-                        key.toLowerCase() === secondPart
-                    );
-                    if (foundMode) {
-                        mode = foundMode;
-                        weaponsStartIndex = 2; // Оружия начинаются с третьей позиции
-                    } else {
-                        // Если не нашли режим, проверяем, это оружие?
-                        const apiWeapon = WEAPON_MAPPING[secondPart];
-                        if (apiWeapon && ['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(apiWeapon)) {
-                            // Это оружие, значит режим не указан - оружия начинаются со второй позиции
-                            weaponsStartIndex = 1;
-                        } else {
-                            // Неизвестное значение, пропускаем
-                            console.warn(`Неизвестный режим или оружие: ${secondPart}`);
-                            continue;
-                        }
-                    }
-                }
-            }
-            
-            // Парсим оружия
-            const weapons = [];
-            for (let i = weaponsStartIndex; i < parts.length; i++) {
-                let weaponName = parts[i].toLowerCase();
-                let skipNext = 0; // Сколько следующих слов пропустить
-                let foundWeapon = false;
+                const bossName = parts[0].toLowerCase();
+                let comboMode = null;
+                let mode = null;
+                let weaponsStartIndex = 1;
                 
-                // Проверяем многословные названия, начиная с самых длинных
-                // "шмальнуть из самопала" (3 слова)
-                if (i + 2 < parts.length && weaponName === 'шмальнуть') {
-                    const nextWord = parts[i + 1].toLowerCase();
-                    const thirdWord = parts[i + 2].toLowerCase();
-                    if (nextWord === 'из' && (thirdWord === 'самопала' || thirdWord === 'сапомала')) {
-                        weaponName = 'шмальнуть из ' + thirdWord;
-                        skipNext = 2;
-                        foundWeapon = true;
-                    }
-                }
-                // "подкинуть яда" или "подкинуть яд" (2 слова)
-                else if (i + 1 < parts.length && weaponName === 'подкинуть') {
-                    const nextWord = parts[i + 1].toLowerCase();
-                    if (nextWord === 'яда' || nextWord === 'яд') {
-                        weaponName = 'подкинуть ' + nextWord;
-                        skipNext = 1;
-                        foundWeapon = true;
-                    }
-                }
-                // "коленом в ухо" (3 слова)
-                else if (i + 2 < parts.length && weaponName === 'коленом') {
-                    const nextWord = parts[i + 1].toLowerCase();
-                    const thirdWord = parts[i + 2].toLowerCase();
-                    if (nextWord === 'в' && thirdWord === 'ухо') {
-                        weaponName = 'коленом в ухо';
-                        skipNext = 2;
-                        foundWeapon = true;
-                    }
-                }
-                // "пальцем в глаз" (3 слова)
-                else if (i + 2 < parts.length && weaponName === 'пальцем') {
-                    const nextWord = parts[i + 1].toLowerCase();
-                    const thirdWord = parts[i + 2].toLowerCase();
-                    if (nextWord === 'в' && (thirdWord === 'глаз' || thirdWord === 'глаза')) {
-                        weaponName = 'пальцем в глаз';
-                        skipNext = 2;
-                        foundWeapon = true;
-                    }
-                }
-                // "тычок в глаза" или "тычок в глаз" (3 слова)
-                else if (i + 2 < parts.length && weaponName === 'тычок') {
-                    const nextWord = parts[i + 1].toLowerCase();
-                    const thirdWord = parts[i + 2].toLowerCase();
-                    if (nextWord === 'в' && (thirdWord === 'глаза' || thirdWord === 'глаз')) {
-                        weaponName = 'тычок в ' + thirdWord;
-                        skipNext = 2;
-                        foundWeapon = true;
-                    }
-                }
-                // "удар в пах" (3 слова)
-                else if (i + 2 < parts.length && weaponName === 'удар') {
-                    const nextWord = parts[i + 1].toLowerCase();
-                    const thirdWord = parts[i + 2].toLowerCase();
-                    if (nextWord === 'в' && thirdWord === 'пах') {
-                        weaponName = 'удар в пах';
-                        skipNext = 2;
-                        foundWeapon = true;
-                    } else if (nextWord === 'в' && thirdWord === 'грудь') {
-                        weaponName = 'удар в грудь';
-                        skipNext = 2;
-                        foundWeapon = true;
-                    }
-                }
-                // "пыр в солнышко" (3 слова)
-                else if (i + 2 < parts.length && weaponName === 'пыр') {
-                    const nextWord = parts[i + 1].toLowerCase();
-                    const thirdWord = parts[i + 2].toLowerCase();
-                    if (nextWord === 'в' && thirdWord === 'солнышко') {
-                        weaponName = 'пыр в солнышко';
-                        skipNext = 2;
-                        foundWeapon = true;
-                    }
-                }
-                // "в глаз", "в пах" (2 слова)
-                else if (i + 1 < parts.length && weaponName === 'в') {
-                    const nextWord = parts[i + 1].toLowerCase();
-                    if (nextWord === 'глаз' || nextWord === 'глаза') {
-                        weaponName = 'в глаз';
-                        skipNext = 1;
-                        foundWeapon = true;
-                    } else if (nextWord === 'пах') {
-                        weaponName = 'в пах';
-                        skipNext = 1;
-                        foundWeapon = true;
-                    }
-                }
-                
-                // Проверяем в маппинге
-                const apiWeapon = WEAPON_MAPPING[weaponName];
-                if (apiWeapon && ['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(apiWeapon)) {
-                    weapons.push(apiWeapon);
-                    i += skipNext; // Пропускаем обработанные слова
-                } else if (!foundWeapon) {
-                    // Если не нашли многословное совпадение, пробуем одно слово
-                    const singleWordWeapon = WEAPON_MAPPING[weaponName];
-                    if (singleWordWeapon && ['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(singleWordWeapon)) {
-                        weapons.push(singleWordWeapon);
-                    } else {
-                        console.warn(`Неизвестное оружие: ${weaponName}`);
-                    }
-                } else {
-                    console.warn(`Неизвестное оружие: ${weaponName}`);
-                }
-            }
-            
-            if (weapons.length > 0) {
-                combos.push({
-                    bossName,
-                    mode: mode || 'normal', // по умолчанию normal
-                    comboMode,
-                    weapons
-                });
-            } else {
-                console.warn(`Не найдено оружий для комбо: ${comboString}`);
-            }
-                }
-            } else {
-                // Это может быть начало нового комбо в нумерованном формате
-                // Формат: "махно авто" (имя босса + режим комбо)
                 if (parts.length >= 2) {
-                    const bossName = parts[0].toLowerCase();
                     const secondPart = parts[1].toLowerCase();
                     
-                    // Проверяем, это режим комбо?
                     if (COMBO_MODE_MAPPING[secondPart]) {
-                        currentBossName = bossName;
-                        currentComboMode = COMBO_MODE_MAPPING[secondPart];
-                        currentMode = null;
-                        currentWeapons = [];
+                        comboMode = COMBO_MODE_MAPPING[secondPart];
+                        weaponsStartIndex = 2;
                     } else {
-                        // Пытаемся найти режим атаки
                         const foundMode = Object.keys(BATTLE_MODE_INFO).find(key => 
                             BATTLE_MODE_INFO[key].name.toLowerCase().includes(secondPart) ||
                             key.toLowerCase() === secondPart
                         );
                         if (foundMode) {
-                            currentBossName = bossName;
-                            currentMode = foundMode;
-                            currentComboMode = null;
-                            currentWeapons = [];
+                            mode = foundMode;
+                            weaponsStartIndex = 2;
                         } else {
-                            // Если не нашли режим, возможно это формат в одну строку
-                            // Продолжаем обработку как обычный формат
+                            const apiWeapon = WEAPON_MAPPING[secondPart];
+                            if (apiWeapon && ['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(apiWeapon)) {
+                                weaponsStartIndex = 1;
+                            } else {
+                                console.warn(`Неизвестный режим или оружие: ${secondPart}`);
+                                continue;
+                            }
                         }
+                    }
+                }
+                
+                const weapons = [];
+                for (let i = weaponsStartIndex; i < parts.length; i++) {
+                    let weaponName = parts[i].toLowerCase();
+                    let skipNext = 0;
+                    let foundWeapon = false;
+                    
+                    // Проверяем многословные названия
+                    if (i + 2 < parts.length && weaponName === 'шмальнуть') {
+                        const nextWord = parts[i + 1].toLowerCase();
+                        const thirdWord = parts[i + 2].toLowerCase();
+                        if (nextWord === 'из' && (thirdWord === 'самопала' || thirdWord === 'сапомала')) {
+                            weaponName = 'шмальнуть из ' + thirdWord;
+                            skipNext = 2;
+                            foundWeapon = true;
+                        }
+                    } else if (i + 1 < parts.length && weaponName === 'подкинуть') {
+                        const nextWord = parts[i + 1].toLowerCase();
+                        if (nextWord === 'яда' || nextWord === 'яд') {
+                            weaponName = 'подкинуть ' + nextWord;
+                            skipNext = 1;
+                            foundWeapon = true;
+                        }
+                    } else if (i + 2 < parts.length && weaponName === 'коленом') {
+                        const nextWord = parts[i + 1].toLowerCase();
+                        const thirdWord = parts[i + 2].toLowerCase();
+                        if (nextWord === 'в' && thirdWord === 'ухо') {
+                            weaponName = 'коленом в ухо';
+                            skipNext = 2;
+                            foundWeapon = true;
+                        }
+                    } else if (i + 2 < parts.length && weaponName === 'пальцем') {
+                        const nextWord = parts[i + 1].toLowerCase();
+                        const thirdWord = parts[i + 2].toLowerCase();
+                        if (nextWord === 'в' && (thirdWord === 'глаз' || thirdWord === 'глаза')) {
+                            weaponName = 'пальцем в глаз';
+                            skipNext = 2;
+                            foundWeapon = true;
+                        }
+                    } else if (i + 2 < parts.length && weaponName === 'тычок') {
+                        const nextWord = parts[i + 1].toLowerCase();
+                        const thirdWord = parts[i + 2].toLowerCase();
+                        if (nextWord === 'в' && (thirdWord === 'глаза' || thirdWord === 'глаз')) {
+                            weaponName = 'тычок в ' + thirdWord;
+                            skipNext = 2;
+                            foundWeapon = true;
+                        }
+                    } else if (i + 2 < parts.length && weaponName === 'удар') {
+                        const nextWord = parts[i + 1].toLowerCase();
+                        const thirdWord = parts[i + 2].toLowerCase();
+                        if (nextWord === 'в' && thirdWord === 'пах') {
+                            weaponName = 'удар в пах';
+                            skipNext = 2;
+                            foundWeapon = true;
+                        } else if (nextWord === 'в' && thirdWord === 'грудь') {
+                            weaponName = 'удар в грудь';
+                            skipNext = 2;
+                            foundWeapon = true;
+                        }
+                    } else if (i + 2 < parts.length && weaponName === 'пыр') {
+                        const nextWord = parts[i + 1].toLowerCase();
+                        const thirdWord = parts[i + 2].toLowerCase();
+                        if (nextWord === 'в' && thirdWord === 'солнышко') {
+                            weaponName = 'пыр в солнышко';
+                            skipNext = 2;
+                            foundWeapon = true;
+                        }
+                    } else if (i + 1 < parts.length && weaponName === 'в') {
+                        const nextWord = parts[i + 1].toLowerCase();
+                        if (nextWord === 'глаз' || nextWord === 'глаза') {
+                            weaponName = 'в глаз';
+                            skipNext = 1;
+                            foundWeapon = true;
+                        } else if (nextWord === 'пах') {
+                            weaponName = 'в пах';
+                            skipNext = 1;
+                            foundWeapon = true;
+                        }
+                    }
+                    
+                    const apiWeapon = WEAPON_MAPPING[weaponName];
+                    if (apiWeapon && ['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(apiWeapon)) {
+                        weapons.push(apiWeapon);
+                        i += skipNext;
+                    } else if (!foundWeapon) {
+                        const singleWordWeapon = WEAPON_MAPPING[weaponName];
+                        if (singleWordWeapon && ['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(singleWordWeapon)) {
+                            weapons.push(singleWordWeapon);
+                        } else {
+                            console.warn(`Неизвестное оружие: ${weaponName}`);
+                        }
+                    } else {
+                        console.warn(`Неизвестное оружие: ${weaponName}`);
+                    }
+                }
+                
+                if (weapons.length > 0) {
+                    combos.push({
+                        bossName,
+                        mode: mode || 'normal',
+                        comboMode,
+                        weapons
+                    });
+                } else {
+                    console.warn(`Не найдено оружий для комбо: ${comboString}`);
+                }
+            }
+            continue;
+        }
+        
+        // Если у нас есть текущий босс, пытаемся распарсить строку как оружие
+        if (currentBossName) {
+            const weapon = parseWeaponFromLine(line);
+            if (weapon) {
+                currentWeapons.push(weapon);
+            } else {
+                // Если не удалось распарсить, возможно это не оружие
+                // Пропускаем строку (может быть пустая строка или что-то другое)
+                console.warn(`Не удалось распарсить оружие из строки: ${line}`);
+            }
+        } else {
+            // Нет текущего босса, возможно это начало нового комбо в другом формате
+            // Пробуем распарсить как заголовок еще раз (на случай, если формат немного другой)
+            const parts = line.split(/\s+/).filter(p => p);
+            if (parts.length >= 2) {
+                const bossName = parts[0].toLowerCase();
+                const secondPart = parts[1].toLowerCase();
+                
+                if (COMBO_MODE_MAPPING[secondPart]) {
+                    // Сохраняем предыдущее комбо, если оно было
+                    if (currentBossName && currentWeapons.length > 0) {
+                        combos.push({
+                            bossName: currentBossName,
+                            mode: currentMode || 'normal',
+                            comboMode: currentComboMode,
+                            weapons: currentWeapons
+                        });
+                    }
+                    
+                    currentBossName = bossName;
+                    currentComboMode = COMBO_MODE_MAPPING[secondPart];
+                    currentMode = null;
+                    currentWeapons = [];
+                } else {
+                    const foundMode = Object.keys(BATTLE_MODE_INFO).find(key => 
+                        BATTLE_MODE_INFO[key].name.toLowerCase().includes(secondPart) ||
+                        key.toLowerCase() === secondPart
+                    );
+                    if (foundMode) {
+                        // Сохраняем предыдущее комбо, если оно было
+                        if (currentBossName && currentWeapons.length > 0) {
+                            combos.push({
+                                bossName: currentBossName,
+                                mode: currentMode || 'normal',
+                                comboMode: currentComboMode,
+                                weapons: currentWeapons
+                            });
+                        }
+                        
+                        currentBossName = bossName;
+                        currentMode = foundMode;
+                        currentComboMode = null;
+                        currentWeapons = [];
                     }
                 }
             }
         }
     }
     
-    // Сохраняем последнее комбо, если оно было в нумерованном формате
+    // Сохраняем последнее комбо, если оно было
     if (currentBossName && currentWeapons.length > 0) {
         combos.push({
             bossName: currentBossName,
@@ -5899,7 +6029,7 @@ function displayLoadedCombos() {
         const modeName = combo.mode ? (BATTLE_MODE_INFO[combo.mode]?.name || combo.mode) : 'не указан';
         const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : 'не указан';
         const maxCost = calculateComboCost(combo.weapons);
-        html += `<li><strong>${combo.bossName}</strong> - Режим: ${modeName}, Комбо: ${comboModeName}, Ударов: ${combo.weapons.length}, Восст: до ${maxCost} ₽</li>`;
+        html += `<li><strong>${combo.bossName}</strong> - Режим: ${modeName}, Комбо: ${comboModeName}, Ударов: ${combo.weapons.length}, Восст:  ${maxCost} ₽</li>`;
     });
     html += '</ul>';
     
@@ -6110,7 +6240,7 @@ function displayComboBossSelection() {
                         const selectedComboIndex = 0; // По умолчанию первое комбо
                         const selectedCombo = combos[selectedComboIndex];
                         const maxCost = calculateComboCost(selectedCombo.weapons);
-                        return `<div class="combo-cost-display" style="font-size: 10px; color: #FFA500; margin-top: 2px;">Восст: до ${maxCost} ₽</div>`;
+                        return `<div class="combo-cost-display" style="font-size: 10px; color: #FFA500; margin-top: 2px;">Восст:  ${maxCost} ₽</div>`;
                     })() : ''}
                 </div>
             </div>
@@ -6228,7 +6358,7 @@ function selectComboBoss(bossId) {
         const costElement = selectedCard.querySelector('.combo-cost-display');
         if (costElement) {
             const maxCost = calculateComboCost(combo.weapons);
-            costElement.textContent = `Восст: до ${maxCost} ₽`;
+            costElement.textContent = `Восст:  ${maxCost} ₽`;
         }
     }
     
@@ -6307,7 +6437,7 @@ window.startComboAttack = async function() {
         const comboModeName = selectedCombo.comboMode ? (COMBO_MODE_INFO[selectedCombo.comboMode]?.name || selectedCombo.comboMode) : 'не указан';
         const maxCost = calculateComboCost(selectedCombo.weapons);
         tg.showConfirm(
-            `Начать комбо атаку на ${selectedCombo.bossName}?\n\nРежим: ${modeName}\nКомбо: ${comboModeName}\nУдаров: ${selectedCombo.weapons.length}\nВосст: до ${maxCost} ₽`,
+            `Начать комбо атаку на ${selectedCombo.bossName}?\n\nРежим: ${modeName}\nКомбо: ${comboModeName}\nУдаров: ${selectedCombo.weapons.length}\nВосст:  ${maxCost} ₽`,
             resolve
         );
     });
