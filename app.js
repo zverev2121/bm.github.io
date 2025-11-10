@@ -1772,7 +1772,8 @@ async function loadBossInfo() {
                             const total = end - start;
                             const elapsed = now - start;
                             const remaining = end - now;
-                            const timePercent = total > 0 ? Math.max(0, Math.min(100, (elapsed / total) * 100)) : 0;
+                            // Показываем оставшееся время (в начале 100%, к концу уменьшается)
+                            const timePercent = total > 0 ? Math.max(0, Math.min(100, (remaining / total) * 100)) : 0;
                             
                             timeSliderHtml = `
                                 <div class="boss-time-slider-container" style="margin-top: 10px;">
@@ -1990,7 +1991,8 @@ async function loadBossInfo() {
                 const total = end - start;
                 const elapsed = now - start;
                 const remaining = end - now;
-                const timePercent = total > 0 ? Math.max(0, Math.min(100, (elapsed / total) * 100)) : 0;
+                // Показываем оставшееся время (в начале 100%, к концу уменьшается)
+                const timePercent = total > 0 ? Math.max(0, Math.min(100, (remaining / total) * 100)) : 0;
                 
                 timeSliderHtml = `
                     <div class="boss-time-slider-container" style="margin-top: 10px;">
@@ -2126,11 +2128,11 @@ function startBossTimeSliderUpdate() {
         const start = window.bossTimeData.startTime;
         const end = window.bossTimeData.endTime;
         const total = end - start;
-        const elapsed = now - start;
+        const remaining = end - now;
         
         if (now >= end) {
             // Время истекло
-            progressEl.style.width = '100%';
+            progressEl.style.width = '0%';
             if (bossTimeSliderInterval) {
                 clearInterval(bossTimeSliderInterval);
                 bossTimeSliderInterval = null;
@@ -2138,7 +2140,8 @@ function startBossTimeSliderUpdate() {
             return;
         }
         
-        const timePercent = total > 0 ? Math.max(0, Math.min(100, (elapsed / total) * 100)) : 0;
+        // Показываем оставшееся время (в начале 100%, к концу уменьшается)
+        const timePercent = total > 0 ? Math.max(0, Math.min(100, (remaining / total) * 100)) : 0;
         progressEl.style.width = timePercent + '%';
     }, 1000);
 }
