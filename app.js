@@ -1748,14 +1748,64 @@ async function loadBossInfo() {
                         }
                         
                         const rewardMessage = data.hasReward === true ? '<p style="color: #28a745; font-weight: bold;">💰 Награда с босса собрана!</p>' : '';
+                        
+                        // Слайдер HP
+                        const hpSliderHtml = `
+                            <div class="boss-hp-slider-container" style="margin-top: 10px; margin-bottom: 10px;">
+                                <div class="boss-hp-slider" style="position: relative; width: 100%; height: 40px; background: rgba(0,0,0,0.2); border-radius: 20px; overflow: hidden;">
+                                    <div class="boss-hp-progress" style="position: absolute; top: 0; left: 0; height: 100%; width: ${hpPercent}%; background: linear-gradient(90deg, #ff4444, #ff6666); transition: width 0.3s ease; border-radius: 20px;"></div>
+                                    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-size: 12px; font-weight: 600; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); white-space: nowrap;">
+                                        ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        
+                        // Слайдер времени боя
+                        let timeSliderHtml = '';
+                        if (session.startedAt && session.endsAt) {
+                            const startTime = formatTimeToMoscow(session.startedAt);
+                            const endTime = formatTimeToMoscow(session.endsAt);
+                            const now = new Date().getTime();
+                            const start = new Date(session.startedAt).getTime();
+                            const end = new Date(session.endsAt).getTime();
+                            const total = end - start;
+                            const elapsed = now - start;
+                            const remaining = end - now;
+                            const timePercent = total > 0 ? Math.max(0, Math.min(100, (elapsed / total) * 100)) : 0;
+                            
+                            timeSliderHtml = `
+                                <div class="boss-time-slider-container" style="margin-top: 10px;">
+                                    <div class="boss-time-slider" style="position: relative; width: 100%; height: 40px; background: rgba(0,0,0,0.2); border-radius: 20px; overflow: hidden;">
+                                        <div class="boss-time-progress" style="position: absolute; top: 0; left: 0; height: 100%; width: ${timePercent}%; background: linear-gradient(90deg, #3390ec, #4fa3ff); transition: width 0.3s ease; border-radius: 20px;"></div>
+                                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-size: 11px; font-weight: 600; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); white-space: nowrap; text-align: center;">
+                                            ${startTime} → ${endTime}
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            
+                            // Сохраняем данные для автоматического обновления
+                            window.bossTimeData = {
+                                startedAt: session.startedAt,
+                                endsAt: session.endsAt,
+                                startTime: start,
+                                endTime: end
+                            };
+                            
+                            // Запускаем автоматическое обновление слайдера времени
+                            startBossTimeSliderUpdate();
+                        }
+                        
                         bossInfo.innerHTML = `
                             ${rewardMessage}
                             <div style="display: flex; align-items: flex-start; gap: 12px;">
                                 ${bossImageHtml}
                                 <div style="flex: 1;">
                                     <strong>${session.title || 'Босс'}</strong><br>
-                                    HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
-                                    Режим: ${modeText}${comboText}${timeInfo}
+                                    Режим: ${modeText}${comboText}
+                                    ${hpSliderHtml}
+                                    ${timeSliderHtml}
                                 </div>
                             </div>
                         `;
@@ -1917,14 +1967,63 @@ async function loadBossInfo() {
                 }
             }
             
+            // Слайдер HP
+            const hpSliderHtml = `
+                <div class="boss-hp-slider-container" style="margin-top: 10px; margin-bottom: 10px;">
+                    <div class="boss-hp-slider" style="position: relative; width: 100%; height: 40px; background: rgba(0,0,0,0.2); border-radius: 20px; overflow: hidden;">
+                        <div class="boss-hp-progress" style="position: absolute; top: 0; left: 0; height: 100%; width: ${hpPercent}%; background: linear-gradient(90deg, #ff4444, #ff6666); transition: width 0.3s ease; border-radius: 20px;"></div>
+                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-size: 12px; font-weight: 600; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); white-space: nowrap;">
+                            ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Слайдер времени боя
+            let timeSliderHtml = '';
+            if (session.startedAt && session.endsAt) {
+                const startTime = formatTimeToMoscow(session.startedAt);
+                const endTime = formatTimeToMoscow(session.endsAt);
+                const now = new Date().getTime();
+                const start = new Date(session.startedAt).getTime();
+                const end = new Date(session.endsAt).getTime();
+                const total = end - start;
+                const elapsed = now - start;
+                const remaining = end - now;
+                const timePercent = total > 0 ? Math.max(0, Math.min(100, (elapsed / total) * 100)) : 0;
+                
+                timeSliderHtml = `
+                    <div class="boss-time-slider-container" style="margin-top: 10px;">
+                        <div class="boss-time-slider" style="position: relative; width: 100%; height: 40px; background: rgba(0,0,0,0.2); border-radius: 20px; overflow: hidden;">
+                            <div class="boss-time-progress" style="position: absolute; top: 0; left: 0; height: 100%; width: ${timePercent}%; background: linear-gradient(90deg, #3390ec, #4fa3ff); transition: width 0.3s ease; border-radius: 20px;"></div>
+                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-size: 11px; font-weight: 600; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); white-space: nowrap; text-align: center;">
+                                ${startTime} → ${endTime}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Сохраняем данные для автоматического обновления
+                window.bossTimeData = {
+                    startedAt: session.startedAt,
+                    endsAt: session.endsAt,
+                    startTime: start,
+                    endTime: end
+                };
+                
+                // Запускаем автоматическое обновление слайдера времени
+                startBossTimeSliderUpdate();
+            }
+            
             bossInfo.innerHTML = `
                 ${rewardMessageHtml}
                 <div style="display: flex; align-items: flex-start; gap: 12px;">
                     ${bossImageHtml}
                     <div style="flex: 1;">
                         <strong>${session.title || 'Босс'}</strong><br>
-                        HP: ${session.currentHp.toLocaleString()} / ${session.maxHp.toLocaleString()} (${hpPercent}%)<br>
-                        Режим: ${modeDecoded}${comboText}${timeInfo}
+                        Режим: ${modeDecoded}${comboText}
+                        ${hpSliderHtml}
+                        ${timeSliderHtml}
                     </div>
                 </div>
             `;
@@ -1957,6 +2056,9 @@ async function loadBossInfo() {
             bossInfo.innerHTML = '<p>Информация о боссе недоступна</p>';
             updateStatus(false);
             
+            // Останавливаем обновление слайдера времени
+            stopBossTimeSliderUpdate();
+            
             // Скрываем блок с оружиями, так как босса нет
             const bossWeaponsWrapper = document.getElementById('boss-weapons-wrapper');
             if (bossWeaponsWrapper) {
@@ -1982,12 +2084,71 @@ async function loadBossInfo() {
         }
         updateStatus(false);
         
+        // Останавливаем обновление слайдера времени
+        stopBossTimeSliderUpdate();
+        
         // Скрываем блок с оружиями при ошибке
         const bossWeaponsWrapper = document.getElementById('boss-weapons-wrapper');
         if (bossWeaponsWrapper) {
             bossWeaponsWrapper.style.display = 'none';
         }
     }
+}
+
+// Автоматическое обновление слайдера времени боя
+let bossTimeSliderInterval = null;
+
+function startBossTimeSliderUpdate() {
+    // Останавливаем предыдущий интервал, если есть
+    if (bossTimeSliderInterval) {
+        clearInterval(bossTimeSliderInterval);
+    }
+    
+    // Обновляем каждую секунду
+    bossTimeSliderInterval = setInterval(() => {
+        if (!window.bossTimeData) {
+            return;
+        }
+        
+        const progressEl = document.querySelector('.boss-time-progress');
+        const sliderEl = document.querySelector('.boss-time-slider');
+        
+        if (!progressEl || !sliderEl) {
+            // Слайдер не найден, останавливаем обновление
+            if (bossTimeSliderInterval) {
+                clearInterval(bossTimeSliderInterval);
+                bossTimeSliderInterval = null;
+            }
+            return;
+        }
+        
+        const now = new Date().getTime();
+        const start = window.bossTimeData.startTime;
+        const end = window.bossTimeData.endTime;
+        const total = end - start;
+        const elapsed = now - start;
+        
+        if (now >= end) {
+            // Время истекло
+            progressEl.style.width = '100%';
+            if (bossTimeSliderInterval) {
+                clearInterval(bossTimeSliderInterval);
+                bossTimeSliderInterval = null;
+            }
+            return;
+        }
+        
+        const timePercent = total > 0 ? Math.max(0, Math.min(100, (elapsed / total) * 100)) : 0;
+        progressEl.style.width = timePercent + '%';
+    }, 1000);
+}
+
+function stopBossTimeSliderUpdate() {
+    if (bossTimeSliderInterval) {
+        clearInterval(bossTimeSliderInterval);
+        bossTimeSliderInterval = null;
+    }
+    window.bossTimeData = null;
 }
 
 // Атака босса с выбранным оружием
