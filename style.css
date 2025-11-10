@@ -807,3 +807,28 @@ header h1 {
     opacity: 0.6;
     cursor: not-allowed;
 }
+
+/* Стили для блока оружий */
+.weapon-item {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.weapon-item:hover {
+    transform: scale(1.05);
+    background: rgba(0,0,0,0.15) !important;
+}
+
+.weapon-item:active {
+    transform: scale(0.95);
+}
+
+.weapon-item:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.weapon-item:disabled:hover {
+    transform: scale(1);
+    background: rgba(0,0,0,0.1) !important;
+}

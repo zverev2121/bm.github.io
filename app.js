@@ -1664,6 +1664,12 @@ async function loadBossInfo() {
                         `;
                         updateStatus(true);
                         
+                        // Показываем блок с оружиями, так как босс активен
+                        const bossWeaponsBlock = document.getElementById('boss-weapons-block');
+                        if (bossWeaponsBlock) {
+                            bossWeaponsBlock.style.display = 'block';
+                        }
+                        
                         // Убеждаемся, что секция выбора боссов всегда видна, даже когда есть активный бой
                         const bossSelectSection = document.getElementById('boss-select-section');
                         if (bossSelectSection) {
@@ -1825,6 +1831,12 @@ async function loadBossInfo() {
             `;
             updateStatus(true);
             
+            // Показываем блок с оружиями, так как босс активен
+            const bossWeaponsBlock = document.getElementById('boss-weapons-block');
+            if (bossWeaponsBlock) {
+                bossWeaponsBlock.style.display = 'block';
+            }
+            
             // Убеждаемся, что секция выбора боссов всегда видна, даже когда есть активный бой
             const bossSelectSection = document.getElementById('boss-select-section');
             if (bossSelectSection) {
@@ -1844,6 +1856,12 @@ async function loadBossInfo() {
             bossInfo.innerHTML = '<p>Информация о боссе недоступна</p>';
             updateStatus(false);
             
+            // Скрываем блок с оружиями, так как босса нет
+            const bossWeaponsBlock = document.getElementById('boss-weapons-block');
+            if (bossWeaponsBlock) {
+                bossWeaponsBlock.style.display = 'none';
+            }
+            
             // Убеждаемся, что секция выбора боссов видна даже когда нет активного боя
             const bossSelectSection = document.getElementById('boss-select-section');
             if (bossSelectSection) {
@@ -1862,6 +1880,95 @@ async function loadBossInfo() {
             bossInfo.innerHTML = `<p class="error">❌ Ошибка подключения:<br>${error.message}</p>`;
         }
         updateStatus(false);
+        
+        // Скрываем блок с оружиями при ошибке
+        const bossWeaponsBlock = document.getElementById('boss-weapons-block');
+        if (bossWeaponsBlock) {
+            bossWeaponsBlock.style.display = 'none';
+        }
+    }
+}
+
+// Атака босса с выбранным оружием
+async function attackBossWithWeapon(weapon) {
+    const weaponItem = document.querySelector(`.weapon-item[data-weapon="${weapon}"]`);
+    if (!weaponItem) {
+        console.error(`Оружие ${weapon} не найдено`);
+        return;
+    }
+    
+    // Блокируем кнопку на время запроса
+    weaponItem.style.pointerEvents = 'none';
+    weaponItem.style.opacity = '0.6';
+    
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        const weaponDisplayName = WEAPON_DISPLAY_NAMES[weapon] || weapon;
+        
+        // Отправляем запрос
+        let response = await fetch(`${apiUrl}/boss/use-weapon`, {
+            method: 'POST',
+            headers: await getApiHeaders(),
+            body: JSON.stringify({
+                weapon: weapon,
+                count: 1
+            })
+        });
+        
+        // Обработка 401/403
+        if (response.status === 401 || response.status === 403) {
+            const currentInitData = await getCurrentInitData();
+            if (currentInitData && currentInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    response = await fetch(`${apiUrl}/boss/use-weapon`, {
+                        method: 'POST',
+                        headers: await getApiHeaders(),
+                        body: JSON.stringify({
+                            weapon: weapon,
+                            count: 1
+                        })
+                    });
+                }
+            }
+        }
+        
+        const data = await response.json();
+        
+        if (!response.ok || !data.success) {
+            const errorMessage = data.message || data.error || 'Ошибка использования оружия';
+            
+            // Показываем ошибку пользователю
+            if (window.tg && window.tg.showAlert) {
+                window.tg.showAlert(`Ошибка: ${errorMessage}`);
+            } else {
+                alert(`Ошибка: ${errorMessage}`);
+            }
+            
+            console.error(`Ошибка использования оружия ${weapon}:`, errorMessage);
+        } else {
+            // Успешный удар - обновляем информацию о боссе
+            console.log(`✅ Удар ${weaponDisplayName} выполнен успешно`);
+            
+            // Обновляем информацию о боссе
+            await loadBossInfo();
+            
+            // Показываем уведомление об успехе (опционально)
+            if (window.tg && window.tg.showAlert) {
+                window.tg.showAlert(`Удар ${weaponDisplayName} выполнен!`);
+            }
+        }
+    } catch (error) {
+        console.error(`Ошибка при ударе ${weapon}:`, error);
+        if (window.tg && window.tg.showAlert) {
+            window.tg.showAlert(`Ошибка: ${error.message}`);
+        } else {
+            alert(`Ошибка: ${error.message}`);
+        }
+    } finally {
+        // Разблокируем кнопку
+        weaponItem.style.pointerEvents = '';
+        weaponItem.style.opacity = '';
     }
 }
 
@@ -5997,72 +6104,6 @@ window.parseComboFromText = async function() {
 }
 
 // Парсинг файла с комбо
-// Тестовая функция для проверки парсинга комбо
-window.testComboParsing = function testComboParsing(testText) {
-    console.log('🧪 Тестирование парсинга комбо:');
-    console.log('Входной текст:');
-    console.log(testText);
-    console.log('---');
-    
-    const combos = parseComboFile(testText);
-    
-    console.log('Результат парсинга:');
-    console.log(`Найдено комбо: ${combos.length}`);
-    
-    combos.forEach((combo, index) => {
-        console.log(`\nКомбо ${index + 1}:`);
-        console.log(`  Босс: ${combo.bossName}`);
-        console.log(`  Режим: ${combo.mode || 'normal'}`);
-        console.log(`  Комбо режим: ${combo.comboMode || 'нет'}`);
-        console.log(`  Ударов: ${combo.weapons.length}`);
-        console.log(`  Оружия: ${combo.weapons.join(', ')}`);
-    });
-    
-    if (combos.length > 0 && combos[0].weapons) {
-        console.log(`\n✅ Всего ударов: ${combos[0].weapons.length}`);
-        return combos[0].weapons.length;
-    }
-    
-    return 0;
-};
-
-// Функция для тестирования текущего текста из поля ввода
-window.testCurrentCombo = function testCurrentCombo() {
-    const textInput = document.getElementById('combo-text-input');
-    if (!textInput) {
-        if (tg) {
-            tg.showAlert('Поле ввода комбо не найдено');
-        } else {
-            alert('Поле ввода комбо не найдено');
-        }
-        return;
-    }
-    
-    const text = textInput.value.trim();
-    if (!text) {
-        if (tg) {
-            tg.showAlert('Введите комбо в текстовое поле для тестирования');
-        } else {
-            alert('Введите комбо в текстовое поле для тестирования');
-        }
-        return;
-    }
-    
-    const result = testComboParsing(text);
-    
-    // Показываем результат в модальном окне
-    let message = `🧪 Результат тестирования парсинга:\n\n`;
-    message += `Найдено комбо: ${result > 0 ? '1' : '0'}\n`;
-    message += `Ударов: ${result}\n\n`;
-    message += `Подробности смотрите в консоли браузера (F12)`;
-    
-    if (tg) {
-        tg.showAlert(message);
-    } else {
-        alert(message);
-    }
-};
-
 function parseComboFile(text) {
     const combos = [];
     const lines = text.split('\n').map(l => l.trim()).filter(l => l);
