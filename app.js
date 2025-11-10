@@ -2600,7 +2600,6 @@ window.refreshBossInfo = async function refreshBossInfo(isAuto = false) {
     
     if (!isAuto && btn) {
         btn.disabled = true;
-        btn.textContent = '⏳';
     }
     
     try {
@@ -2634,7 +2633,6 @@ window.refreshBossInfo = async function refreshBossInfo(isAuto = false) {
     } finally {
         if (!isAuto && btn) {
             btn.disabled = false;
-            btn.textContent = '🔄';
         }
     }
 }

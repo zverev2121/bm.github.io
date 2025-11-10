@@ -780,7 +780,7 @@ header h1 {
     height: 40px;
     border-radius: 50%;
     border: none;
-    background: var(--tg-theme-bg-color, #ffffff);
+    background: transparent;
     color: var(--tg-theme-button-color, #3390ec);
     font-size: 20px;
     cursor: pointer;
@@ -789,7 +789,7 @@ header h1 {
     align-items: center;
     justify-content: center;
     transition: all 0.2s;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    box-shadow: none;
     user-select: none;
     -webkit-user-select: none;
 }
