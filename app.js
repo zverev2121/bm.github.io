@@ -92,6 +92,7 @@ window.switchTab = function switchTab(tabName) {
         
         // Если переключились на вкладку "Комбо", загружаем сохраненные комбо
         if (tabName === 'combo') {
+            console.log('🔄 [switchTab] Переключились на вкладку "combo", загружаем сохраненные комбо');
             loadSavedCombosAndDisplay();
         }
     }
@@ -4777,7 +4778,7 @@ async function attackNextBoss() {
             bossAttackInterval = setTimeout(() => {
                 // Проверяем статус через bootstrap вместо повторной атаки
                 checkBossBattleStatus(boss.id, boss.mode, null);
-            }, 5000);
+            }, 20000);
             return;
         }
         
@@ -4839,16 +4840,16 @@ async function attackNextBoss() {
                     checkBossBattleStatus(boss.id, boss.mode, data.sessionId);
                 }, 1000);
             } else if (data.sessionId || data.session) {
-                // Успешно напали, бой продолжается - проверяем статус через bootstrap каждые 5 секунд
+                // Успешно напали, бой продолжается - проверяем статус через bootstrap каждые 20 секунд
                 // НЕ переходим к следующему боссу, остаемся на текущем
                 const weaponsUsed = boss.weaponsUsed || 0;
                 const weaponsCount = boss.weaponsCount || 1;
                 updateAttackStatus(`⚔️ Бой с ${boss.name} начат. Проверка статуса через bootstrap... (Атака ${weaponsUsed + 1}/${weaponsCount})`);
                 
-                // Проверяем статус через bootstrap через 5 секунд
+                // Проверяем статус через bootstrap через 20 секунд
                 bossAttackInterval = setTimeout(() => {
                     checkBossBattleStatus(boss.id, boss.mode, data.sessionId);
-                }, 5000);
+                }, 20000);
             } else {
                 // Неожиданный ответ - удаляем текущего босса и переходим к следующему
                 updateAttackStatus(`⚠️ Неожиданный ответ от сервера для ${boss.name}`);
@@ -5123,14 +5124,14 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
                 }
             }
         } else {
-            // Награда еще не готова - проверяем снова через 5 секунд
+            // Награда еще не готова - проверяем снова через 20 секунд
             const weaponsUsed = boss ? (boss.weaponsUsed || 0) : 0;
             const weaponsCount = boss ? (boss.weaponsCount || 1) : 1;
             updateAttackStatus(`⚔️ Бой с ${boss.name} продолжается... (Атака ${weaponsUsed + 1}/${weaponsCount})`);
             
             bossAttackInterval = setTimeout(() => {
                 checkBossBattleStatus(bossId, mode, sessionId);
-            }, 5000);
+            }, 20000);
         }
         
     } catch (error) {
@@ -5177,11 +5178,11 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
             const boss = selectedBosses[currentBossIndex];
             const weaponsUsed = boss ? (boss.weaponsUsed || 0) : 0;
             const weaponsCount = boss ? (boss.weaponsCount || 1) : 1;
-            updateAttackStatus(`⚠️ Таймаут после ${maxRetries} попыток. Повторная проверка через 5 секунд... (Атака ${weaponsUsed + 1}/${weaponsCount})`);
+            updateAttackStatus(`⚠️ Таймаут после ${maxRetries} попыток. Повторная проверка через 20 секунд... (Атака ${weaponsUsed + 1}/${weaponsCount})`);
             
             bossAttackInterval = setTimeout(() => {
                 checkBossBattleStatus(bossId, mode, sessionId, 0);  // Сбрасываем счетчик попыток
-            }, 5000);
+            }, 20000);
         }
     }
 }
@@ -5602,62 +5603,94 @@ async function saveCombosToDatabase(combos) {
 
 // Загрузка сохраненных комбо из БД
 async function loadSavedCombos() {
+    console.log('🔍 [loadSavedCombos] Начало загрузки сохраненных комбо');
     try {
         const apiUrl = API_SERVER_URL || GAME_API_URL;
+        console.log(`🔗 [loadSavedCombos] API URL: ${apiUrl}`);
+        
         const headers = await getApiHeaders();
+        console.log('📋 [loadSavedCombos] Заголовки запроса:', Object.keys(headers));
         
         const response = await fetch(`${apiUrl}/api/player/combos`, {
             method: 'GET',
             headers: headers
         });
         
+        console.log(`📡 [loadSavedCombos] Ответ сервера: status=${response.status}, ok=${response.ok}`);
+        
         if (!response.ok) {
-            console.warn('Не удалось загрузить сохраненные комбо');
+            const errorText = await response.text();
+            console.warn(`⚠️ [loadSavedCombos] Не удалось загрузить сохраненные комбо: ${response.status} - ${errorText}`);
             return [];
         }
         
         const data = await response.json();
+        console.log('📦 [loadSavedCombos] Данные от сервера:', {
+            success: data.success,
+            combosCount: data.combos ? data.combos.length : 0,
+            combos: data.combos
+        });
+        
         if (data.success && data.combos && data.combos.length > 0) {
             // Преобразуем формат комбо для использования в приложении
-            const savedCombos = data.combos.map(combo => ({
-                bossName: combo.bossName,
-                comboMode: combo.comboMode,
-                mode: combo.mode || 'normal',
-                weapons: combo.weapons || []
-            }));
+            const savedCombos = data.combos.map(combo => {
+                console.log(`  📝 [loadSavedCombos] Обработка комбо: босс=${combo.bossName}, режим=${combo.mode}, комбо=${combo.comboMode}, оружий=${combo.weapons ? combo.weapons.length : 0}`);
+                return {
+                    bossName: combo.bossName,
+                    comboMode: combo.comboMode,
+                    mode: combo.mode || 'normal',
+                    weapons: combo.weapons || []
+                };
+            });
             
-            console.log(`✓ Загружено ${savedCombos.length} сохраненных комбо из БД`);
+            console.log(`✓ [loadSavedCombos] Загружено ${savedCombos.length} сохраненных комбо из БД`);
             return savedCombos;
+        } else {
+            console.log(`ℹ️ [loadSavedCombos] Нет сохраненных комбо (success=${data.success}, combos=${data.combos ? data.combos.length : 'null'})`);
         }
         
         return [];
     } catch (error) {
-        console.error('Ошибка загрузки сохраненных комбо:', error);
+        console.error('❌ [loadSavedCombos] Ошибка загрузки сохраненных комбо:', error);
+        console.error('❌ [loadSavedCombos] Stack trace:', error.stack);
         return [];
     }
 }
 
 // Загрузка сохраненных комбо и отображение их
 async function loadSavedCombosAndDisplay() {
+    console.log('🎯 [loadSavedCombosAndDisplay] Начало загрузки и отображения сохраненных комбо');
+    
     const savedCombos = await loadSavedCombos();
+    console.log(`📊 [loadSavedCombosAndDisplay] Получено комбо: ${savedCombos.length}`);
     
     if (savedCombos.length > 0) {
         // Устанавливаем загруженные комбо
         loadedCombos = savedCombos;
+        console.log(`✅ [loadSavedCombosAndDisplay] Установлено loadedCombos: ${loadedCombos.length} комбо`);
         
         // Убеждаемся, что список боссов загружен
         if (!window.bossCategoriesData || Object.keys(window.bossCategoriesData).length === 0) {
-            console.log('📋 Список боссов не загружен, загружаем...');
+            console.log('📋 [loadSavedCombosAndDisplay] Список боссов не загружен, загружаем...');
             await loadBossList();
             // Ждем немного, чтобы данные успели обработаться
             await new Promise(resolve => setTimeout(resolve, 500));
+            console.log('✅ [loadSavedCombosAndDisplay] Список боссов загружен');
+        } else {
+            console.log('✅ [loadSavedCombosAndDisplay] Список боссов уже загружен');
         }
         
         // Показываем список загруженных комбо
+        console.log('🖼️ [loadSavedCombosAndDisplay] Вызов displayLoadedCombos()');
         displayLoadedCombos();
         
         // Показываем выбор боссов
+        console.log('🖼️ [loadSavedCombosAndDisplay] Вызов displayComboBossSelection()');
         displayComboBossSelection();
+        
+        console.log('✅ [loadSavedCombosAndDisplay] Завершено успешно');
+    } else {
+        console.log('ℹ️ [loadSavedCombosAndDisplay] Нет сохраненных комбо для отображения');
     }
 }
 
@@ -6122,13 +6155,29 @@ function calculateComboCost(weapons) {
 
 // Отображение загруженных комбо
 function displayLoadedCombos() {
+    console.log('🖼️ [displayLoadedCombos] Начало отображения комбо');
+    console.log(`📊 [displayLoadedCombos] loadedCombos.length = ${loadedCombos.length}`);
+    console.log(`📋 [displayLoadedCombos] loadedCombos:`, loadedCombos);
+    
     const container = document.getElementById('combo-list-content');
     const listContainer = document.getElementById('combo-list-container');
     
-    if (!container || loadedCombos.length === 0) return;
+    console.log(`🔍 [displayLoadedCombos] container:`, container ? 'найден' : 'не найден');
+    console.log(`🔍 [displayLoadedCombos] listContainer:`, listContainer ? 'найден' : 'не найден');
+    
+    if (!container) {
+        console.warn('⚠️ [displayLoadedCombos] Элемент combo-list-content не найден');
+        return;
+    }
+    
+    if (loadedCombos.length === 0) {
+        console.log('ℹ️ [displayLoadedCombos] Нет комбо для отображения');
+        return;
+    }
     
     let html = '<ul style="text-align: left; padding-left: 20px;">';
     loadedCombos.forEach((combo, index) => {
+        console.log(`  📝 [displayLoadedCombos] Обработка комбо ${index + 1}:`, combo);
         const modeName = combo.mode ? (BATTLE_MODE_INFO[combo.mode]?.name || combo.mode) : 'не указан';
         const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : 'не указан';
         const maxCost = calculateComboCost(combo.weapons);
@@ -6138,18 +6187,30 @@ function displayLoadedCombos() {
     
     container.innerHTML = html;
     listContainer.style.display = 'block';
+    console.log('✅ [displayLoadedCombos] Комбо отображены');
 }
 
 // Отображение выбора боссов для комбо
 function displayComboBossSelection() {
+    console.log('🖼️ [displayComboBossSelection] Начало отображения выбора боссов');
+    console.log(`📊 [displayComboBossSelection] loadedCombos.length = ${loadedCombos.length}`);
+    
     const carousel = document.getElementById('combo-boss-carousel');
     const selectContainer = document.getElementById('combo-boss-select');
     const startBtn = document.getElementById('start-combo-btn');
     
-    if (!carousel) return;
+    console.log(`🔍 [displayComboBossSelection] carousel:`, carousel ? 'найден' : 'не найден');
+    console.log(`🔍 [displayComboBossSelection] selectContainer:`, selectContainer ? 'найден' : 'не найден');
+    console.log(`🔍 [displayComboBossSelection] startBtn:`, startBtn ? 'найден' : 'не найден');
+    
+    if (!carousel) {
+        console.warn('⚠️ [displayComboBossSelection] Элемент combo-boss-carousel не найден');
+        return;
+    }
     
     // Находим уникальных боссов из загруженных комбо
     const uniqueBossNames = [...new Set(loadedCombos.map(c => c.bossName))];
+    console.log(`📋 [displayComboBossSelection] Уникальные имена боссов:`, uniqueBossNames);
     
     // Собираем всех боссов из всех категорий
     let allBossesFromCategories = [];
