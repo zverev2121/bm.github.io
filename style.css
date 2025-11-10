@@ -89,6 +89,56 @@ header h1 {
     color: var(--tg-theme-text-color, #000000);
 }
 
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    cursor: pointer;
+}
+
+.section-header span {
+    flex: 1;
+}
+
+.collapse-btn {
+    background: transparent;
+    border: none;
+    color: var(--tg-theme-text-color, #000000);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 8px;
+    transition: transform 0.3s ease;
+    user-select: none;
+    -webkit-user-select: none;
+    opacity: 0.7;
+}
+
+.collapse-btn:hover {
+    opacity: 1;
+}
+
+.collapse-btn:active {
+    transform: scale(0.9);
+}
+
+.section-content {
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+}
+
+.section-content.collapsed {
+    max-height: 0;
+    opacity: 0;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+.section.collapsed .section-content {
+    display: none;
+}
+
 .boss-info, .prison-info {
     margin-bottom: 15px;
     padding: 15px;

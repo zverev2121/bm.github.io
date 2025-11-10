@@ -25,7 +25,11 @@
             <div class="tab-content" id="tab-main">
                 <!-- Раздел настроек (показывается при первом запуске) -->
                 <section class="card" id="settings-section" style="display: none;">
-                    <h2>⚙️ Настройки</h2>
+                    <h2 class="section-header">
+                        <span>⚙️ Настройки</span>
+                        <button class="collapse-btn" onclick="toggleSection('settings-section')" aria-label="Свернуть/развернуть">▼</button>
+                    </h2>
+                    <div class="section-content">
                     
                     <div class="settings-welcome" id="settings-welcome" style="display: none;">
                         <p><strong>👋 Добро пожаловать!</strong></p>
@@ -86,11 +90,16 @@
                         </div>
                         <button class="btn btn-secondary" onclick="showSettingsForm()" style="margin-top: 10px;">✏️ Изменить настройки</button>
                     </div>
+                    </div>
                 </section>
 
                 <!-- Раздел тюрем -->
                 <section class="card" id="prison-section">
-                    <h2>🏛️ Тюрьмы</h2>
+                    <h2 class="section-header">
+                        <span>🏛️ Тюрьмы</span>
+                        <button class="collapse-btn" onclick="toggleSection('prison-section')" aria-label="Свернуть/развернуть">▼</button>
+                    </h2>
+                    <div class="section-content">
                     <div class="prison-select">
                         <select id="prison-select" onchange="loadPrisonInfo()">
                             <option value="">Выберите тюрьму...</option>
@@ -106,11 +115,16 @@
                     <button class="btn btn-success" onclick="startPrisonWalk()" id="prison-walk-btn" disabled>
                         🚀 Начать прохождение
                     </button>
+                    </div>
                 </section>
 
                 <!-- Раздел мастерских -->
                 <section class="card" id="master-section">
-                    <h2>🔨 Мастерские</h2>
+                    <h2 class="section-header">
+                        <span>🔨 Мастерские</span>
+                        <button class="collapse-btn" onclick="toggleSection('master-section')" aria-label="Свернуть/развернуть">▼</button>
+                    </h2>
+                    <div class="section-content">
                     <div class="prison-select">
                         <select id="master-select" onchange="loadMasterInfo()">
                             <option value="">Выберите мастера...</option>
@@ -122,11 +136,16 @@
                     <button class="btn btn-success" onclick="startMasterWalk()" id="master-walk-btn" disabled>
                         🚀 Начать обучение
                     </button>
+                    </div>
                 </section>
 
                 <!-- Статистика -->
                 <section class="card" id="stats-section">
-                    <h2>📊 Статистика</h2>
+                    <h2 class="section-header">
+                        <span>📊 Статистика</span>
+                        <button class="collapse-btn" onclick="toggleSection('stats-section')" aria-label="Свернуть/развернуть">▼</button>
+                    </h2>
+                    <div class="section-content">
                     <div class="stats" id="stats">
                         <div class="stat-item">
                             <span class="stat-label">Всего атак:</span>
@@ -137,11 +156,16 @@
                             <span class="stat-value" id="energy">-</span>
                         </div>
                     </div>
+                    </div>
                 </section>
 
                 <!-- Прокачка бицухи -->
                 <section class="card" id="biceps-section">
-                    <h2>💪 Взаимодействия с игроками</h2>
+                    <h2 class="section-header">
+                        <span>💪 Взаимодействия с игроками</span>
+                        <button class="collapse-btn" onclick="toggleSection('biceps-section')" aria-label="Свернуть/развернуть">▼</button>
+                    </h2>
+                    <div class="section-content">
                     <div class="biceps-controls">
                         <div class="form-group">
                             <label for="interaction-type">Тип взаимодействия:</label>
@@ -178,6 +202,7 @@
                             <div id="biceps-results-content"></div>
                         </div>
                     </div>
+                    </div>
                 </section>
             </div>
 
@@ -185,16 +210,25 @@
             <div class="tab-content" id="tab-boss-attack" style="display: none;">
                 <!-- Раздел босса -->
                 <section class="card" id="boss-section">
-                    <h2>👹 Босс</h2>
+                    <h2 class="section-header">
+                        <span>Босс</span>
+                        <button class="collapse-btn" onclick="toggleSection('boss-section')" aria-label="Свернуть/развернуть">▼</button>
+                    </h2>
+                    <div class="section-content">
                     <div class="boss-info" id="boss-info">
                         <p>Загрузка информации...</p>
                     </div>
                     <button class="btn btn-primary" onclick="refreshBossInfo()">🔄 Обновить</button>
+                    </div>
                 </section>
 
                 <!-- Раздел выбора боссов для автоматической атаки -->
                 <section class="card" id="boss-select-section">
-                    <h2>🎯 Выбор боссов для атаки</h2>
+                    <h2 class="section-header">
+                        <span>Авто-боссинг</span>
+                        <button class="collapse-btn" onclick="toggleSection('boss-select-section')" aria-label="Свернуть/развернуть">▼</button>
+                    </h2>
+                    <div class="section-content">
                     <div class="boss-select-controls">
                         <div id="boss-list-container" style="margin-top: 15px;">
                             <p class="loading">Загрузка списка боссов...</p>
@@ -213,22 +247,19 @@
                             <div id="boss-attack-status-content"></div>
                         </div>
                     </div>
+                    </div>
                 </section>
 
                 <!-- Раздел комбо для боссов -->
                 <section class="card" id="boss-combo-section">
-                    <h2>🎯 Комбо атака</h2>
+                    <h2 class="section-header">
+                        <span>Авто Комбо</span>
+                        <button class="collapse-btn" onclick="toggleSection('boss-combo-section')" aria-label="Свернуть/развернуть">▼</button>
+                    </h2>
+                    <div class="section-content">
                     <div class="boss-combo-controls">
                         <div class="form-group">
-                            <label for="combo-file-input">📄 Загрузить файл с комбо:</label>
-                            <input type="file" id="combo-file-input" accept=".txt" style="margin-top: 5px;">
-                            <small class="form-hint">
-                                Загрузите txt файл с комбо. Формат: имя_босса режим удар1 удар2 ...; имя_босса2 режим удар1 удар2 ...<br>
-                                Пример: палыч пац фин глаз грудь ухо пах яд; махно блат пал пах фин
-                            </small>
-                        </div>
-                        <div class="form-group" style="margin-top: 15px;">
-                            <label for="combo-text-input">✏️ Или введите комбо текстом:</label>
+                            <label for="combo-text-input">✏️ Введите комбо текстом:</label>
                             <textarea id="combo-text-input" 
                                       placeholder="махно авто фин пал грудь ухо пах фин пах фин яд глаз пах пал фин пал яд; палыч авто фин пал грудь ухо пах фин пах фин пах пал фин пал яд; палыч яд глаз пах пал фин пал яд" 
                                       rows="4" 
@@ -259,6 +290,7 @@
                             <h4>Статус комбо:</h4>
                             <div id="combo-status-content"></div>
                         </div>
+                    </div>
                     </div>
                 </section>
             </div>

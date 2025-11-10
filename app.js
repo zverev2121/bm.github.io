@@ -472,6 +472,163 @@ async function toggleSettings() {
     }
 }
 
+// ==================== ФУНКЦИИ ДЛЯ РАБОТЫ С СОСТОЯНИЕМ БЛОКОВ ====================
+
+// Список всех секций, которые можно сворачивать
+const COLLAPSIBLE_SECTIONS = [
+    'settings-section',
+    'prison-section',
+    'master-section',
+    'stats-section',
+    'biceps-section',
+    'boss-section',
+    'boss-select-section',
+    'boss-combo-section'
+];
+
+// Загрузка состояний блоков из БД
+async function loadSectionStates() {
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        if (!apiUrl) {
+            console.warn('⚠️ API URL не определен, состояния блоков не загружены. Блоки будут свернуты по умолчанию.');
+            // По умолчанию все блоки свернуты
+            for (const sectionId of COLLAPSIBLE_SECTIONS) {
+                applySectionState(sectionId, true, false);
+            }
+            return;
+        }
+
+        const headers = await getApiHeaders();
+        // Проверяем, что у нас есть initData для идентификации пользователя
+        if (!headers['X-Init-Data']) {
+            console.warn('⚠️ initData не найден, состояния блоков не загружены. Блоки будут свернуты по умолчанию.');
+            // По умолчанию все блоки свернуты
+            for (const sectionId of COLLAPSIBLE_SECTIONS) {
+                applySectionState(sectionId, true, false);
+            }
+            return;
+        }
+
+        const response = await fetch(`${apiUrl}/user/section-states`, {
+            method: 'GET',
+            headers: headers
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.states) {
+                console.log('✓ Состояния блоков загружены из БД:', data.states);
+                
+                // Применяем состояния к секциям
+                for (const sectionId of COLLAPSIBLE_SECTIONS) {
+                    const isCollapsed = data.states[sectionId] !== undefined 
+                        ? data.states[sectionId] 
+                        : true; // По умолчанию свернуты
+                    
+                    applySectionState(sectionId, isCollapsed, false); // false = не сохранять в БД
+                }
+            } else {
+                // Если данных нет, все блоки свернуты по умолчанию
+                for (const sectionId of COLLAPSIBLE_SECTIONS) {
+                    applySectionState(sectionId, true, false);
+                }
+            }
+        } else {
+            console.warn('⚠️ Не удалось загрузить состояния блоков из БД. Блоки будут свернуты по умолчанию.');
+            // По умолчанию все блоки свернуты
+            for (const sectionId of COLLAPSIBLE_SECTIONS) {
+                applySectionState(sectionId, true, false);
+            }
+        }
+    } catch (error) {
+        console.warn('⚠️ Ошибка при загрузке состояний блоков:', error);
+        // По умолчанию все блоки свернуты
+        for (const sectionId of COLLAPSIBLE_SECTIONS) {
+            applySectionState(sectionId, true, false);
+        }
+    }
+}
+
+// Сохранение состояния блока в БД
+async function saveSectionState(sectionId, isCollapsed) {
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        if (!apiUrl) {
+            console.warn('⚠️ API URL не определен, состояние блока не сохранено');
+            return;
+        }
+
+        const response = await fetch(`${apiUrl}/user/section-state`, {
+            method: 'POST',
+            headers: await getApiHeaders(),
+            body: JSON.stringify({
+                sectionId: sectionId,
+                isCollapsed: isCollapsed
+            })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                console.log(`✓ Состояние блока ${sectionId} сохранено: collapsed=${isCollapsed}`);
+            }
+        } else {
+            console.warn(`⚠️ Не удалось сохранить состояние блока ${sectionId}`);
+        }
+    } catch (error) {
+        console.warn(`⚠️ Ошибка при сохранении состояния блока ${sectionId}:`, error);
+    }
+}
+
+// Применение состояния к секции
+function applySectionState(sectionId, isCollapsed, saveToDb = true) {
+    const section = document.getElementById(sectionId);
+    if (!section) {
+        console.warn(`⚠️ Секция ${sectionId} не найдена`);
+        return;
+    }
+
+    const content = section.querySelector('.section-content');
+    const btn = section.querySelector('.collapse-btn');
+    
+    if (!content) {
+        console.warn(`⚠️ Контент секции ${sectionId} не найден`);
+        return;
+    }
+    
+    if (!btn) {
+        console.warn(`⚠️ Кнопка сворачивания секции ${sectionId} не найдена`);
+        return;
+    }
+
+    if (isCollapsed) {
+        section.classList.add('collapsed');
+        content.style.display = 'none';
+        btn.textContent = '▶';
+    } else {
+        section.classList.remove('collapsed');
+        content.style.display = 'block';
+        btn.textContent = '▼';
+    }
+
+    // Сохраняем в БД только если явно запрошено
+    if (saveToDb) {
+        saveSectionState(sectionId, isCollapsed);
+    }
+}
+
+// Переключение состояния секции
+window.toggleSection = function toggleSection(sectionId) {
+    const section = document.getElementById(sectionId);
+    if (!section) {
+        return;
+    }
+
+    const isCollapsed = section.classList.contains('collapsed');
+    applySectionState(sectionId, !isCollapsed, true); // true = сохранить в БД
+};
+
 // Инициализация
 document.addEventListener('DOMContentLoaded', async () => {
     // Инициализация: показываем вкладку "Основное" по умолчанию
@@ -502,6 +659,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Загружаем настройки (async, т.к. может получать initData с сервера)
     await loadSettings();
     updateSettingsDisplay();
+    
+    // Загружаем состояния блоков из БД
+    await loadSectionStates();
     
     // Инициализируем селектор типа взаимодействия
     initInteractionTypeSelector();
@@ -5714,28 +5874,39 @@ function parseComboFile(text) {
         line = line.trim();
         
         // Пропускаем пустые строки
-        if (!line) return null;
+        if (!line) {
+            console.log(`[parseWeaponFromLine] Пустая строка после обработки`);
+            return null;
+        }
         
         const parts = line.split(/\s+/).filter(p => p);
-        if (parts.length === 0) return null;
+        if (parts.length === 0) {
+            console.log(`[parseWeaponFromLine] Нет частей после разбиения: "${line}"`);
+            return null;
+        }
         
-        // Пробуем распарсить как оружие
+        // Пробуем распарсить как оружие (сначала полную строку, потом первое слово)
         let weaponName = parts.join(' ').toLowerCase();
-        const apiWeapon = parseWeaponName(weaponName);
+        console.log(`[parseWeaponFromLine] Пробуем распарсить: "${weaponName}" (полная строка)`);
+        let apiWeapon = parseWeaponName(weaponName);
         
         if (apiWeapon) {
+            console.log(`[parseWeaponFromLine] Найдено оружие (полная строка): "${weaponName}" -> ${apiWeapon}`);
             return apiWeapon;
         }
         
         // Если не нашли, пробуем первое слово
         if (parts.length > 0) {
             weaponName = parts[0].toLowerCase();
-            const singleWeapon = parseWeaponName(weaponName);
-            if (singleWeapon) {
-                return singleWeapon;
+            console.log(`[parseWeaponFromLine] Пробуем распарсить: "${weaponName}" (первое слово)`);
+            apiWeapon = parseWeaponName(weaponName);
+            if (apiWeapon) {
+                console.log(`[parseWeaponFromLine] Найдено оружие (первое слово): "${weaponName}" -> ${apiWeapon}`);
+                return apiWeapon;
             }
         }
         
+        console.log(`[parseWeaponFromLine] Не найдено оружие для: "${line}"`);
         return null;
     }
     
@@ -5815,14 +5986,18 @@ function parseComboFile(text) {
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
         const line = lines[lineIndex];
         
+        console.log(`[parseComboFile] Строка ${lineIndex + 1}/${lines.length}: "${line}" | currentBossName: ${currentBossName || 'null'}, оружий: ${currentWeapons.length}`);
+        
         // Пропускаем разделители и заголовки
         if (isSeparator(line) || isHeader(line)) {
+            console.log(`[parseComboFile] Пропущена строка (разделитель/заголовок): "${line}"`);
             continue;
         }
         
         // Проверяем, является ли строка заголовком комбо
         const headerInfo = parseComboHeader(line);
         if (headerInfo) {
+            console.log(`[parseComboFile] Найден заголовок комбо: ${headerInfo.bossName} (режим: ${headerInfo.comboMode || headerInfo.mode || 'normal'})`);
             // Сохраняем предыдущее комбо, если оно было
             if (currentBossName && currentWeapons.length > 0) {
                 combos.push({
@@ -6008,11 +6183,11 @@ function parseComboFile(text) {
             const weapon = parseWeaponFromLine(line);
             if (weapon) {
                 currentWeapons.push(weapon);
-                console.log(`✓ Распознано оружие: "${line}" -> ${weapon}`);
+                console.log(`✓ Распознано оружие: "${line}" -> ${weapon} (всего оружий: ${currentWeapons.length})`);
             } else {
                 // Если не удалось распарсить, возможно это не оружие
                 // Пропускаем строку (может быть пустая строка или что-то другое)
-                console.warn(`⚠️ Не удалось распарсить оружие из строки: "${line}" (босс: ${currentBossName})`);
+                console.warn(`⚠️ Не удалось распарсить оружие из строки: "${line}" (босс: ${currentBossName}, уже оружий: ${currentWeapons.length})`);
             }
         } else {
             // Нет текущего босса, возможно это начало нового комбо в другом формате
@@ -6059,6 +6234,11 @@ function parseComboFile(text) {
                         currentWeapons = [];
                     }
                 }
+            } else if (parts.length === 1) {
+                // Одно слово - может быть оружие, если есть текущий босс
+                // Но если нет текущего босса, это может быть начало нового комбо с одним словом
+                // В этом случае пропускаем, так как не можем определить, что это
+                // (этот блок не должен выполняться, так как если есть currentBossName, мы попали бы в блок if выше)
             }
         }
     }
@@ -6087,6 +6267,7 @@ function parseWeaponName(weaponName) {
     if (WEAPON_MAPPING[weaponName]) {
         const apiWeapon = WEAPON_MAPPING[weaponName];
         if (['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(apiWeapon)) {
+            console.log(`[parseWeaponName] Найдено точное совпадение: "${weaponName}" -> ${apiWeapon}`);
             return apiWeapon;
         }
     }
@@ -6098,13 +6279,17 @@ function parseWeaponName(weaponName) {
         if (key === weaponName) continue;
         
         // Проверяем, содержит ли weaponName ключ или наоборот
-        if (weaponName.includes(key) || key.includes(weaponName)) {
+        // Но только если это не слишком общее совпадение (например, "я" не должно совпадать с "яд")
+        if ((weaponName.includes(key) && weaponName.length >= key.length * 0.8) || 
+            (key.includes(weaponName) && key.length >= weaponName.length * 0.8)) {
             if (['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(value)) {
+                console.log(`[parseWeaponName] Найдено частичное совпадение: "${weaponName}" -> ${value} (ключ: "${key}")`);
                 return value;
             }
         }
     }
     
+    console.log(`[parseWeaponName] Не найдено совпадение для: "${weaponName}"`);
     return null;
 }
 
