@@ -1916,7 +1916,7 @@ async function loadBossInfo(showLoading = true) {
                 timeSliderHtml = `
                     <div class="boss-time-slider-container">
                         <div class="boss-time-slider" style="position: relative; width: 100%; height: 40px; background: rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden;">
-                            <div class="boss-time-progress" style="position: absolute; top: 0; left: 0; height: 100%; width: ${timePercent}%; background: linear-gradient(90deg, #44ff44, #66ff66); transition: width 0.3s ease; border-radius: 8px;"></div>
+                            <div class="boss-time-progress" style="position: absolute; top: 0; left: 0; height: 100%; width: ${timePercent}%; background: linear-gradient(90deg, #006400, #228B22); transition: width 0.3s ease; border-radius: 8px;"></div>
                             <div class="boss-time-text" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; font-size: 11px; font-weight: 600; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); white-space: nowrap; text-align: center;">
                                 ${remainingTimeStr} / ${endTime}
                             </div>
