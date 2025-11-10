@@ -780,8 +780,8 @@ header h1 {
     height: 40px;
     border-radius: 50%;
     border: none;
-    background: transparent;
-    color: var(--tg-theme-button-color, #3390ec);
+    background: transparent !important;
+    color: #ffffff !important;
     font-size: 20px;
     cursor: pointer;
     z-index: 10;
@@ -789,23 +789,38 @@ header h1 {
     align-items: center;
     justify-content: center;
     transition: all 0.2s;
-    box-shadow: none;
+    box-shadow: none !important;
     user-select: none;
     -webkit-user-select: none;
+    outline: none;
 }
 
 .boss-refresh-btn:hover {
     transform: translate(-50%, -50%) scale(1.1);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #ffffff !important;
 }
 
 .boss-refresh-btn:active {
     transform: translate(-50%, -50%) scale(0.95);
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #ffffff !important;
+}
+
+.boss-refresh-btn:focus {
+    background: transparent !important;
+    box-shadow: none !important;
+    outline: none;
+    color: #ffffff !important;
 }
 
 .boss-refresh-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+    background: transparent !important;
+    color: #ffffff !important;
 }
 
 /* Стили для блока оружий */
