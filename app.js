@@ -5364,19 +5364,72 @@ window.moveBossInOrder = function(index, direction) {
     const newIndex = index + direction;
     if (newIndex < 0 || newIndex >= selectedBosses.length) return;
     
+    // Сохраняем ID текущего босса (если автоатака активна)
+    let currentBossId = null;
+    if (isAttacking && currentBossIndex < selectedBosses.length) {
+        currentBossId = selectedBosses[currentBossIndex].id;
+    }
+    
     [selectedBosses[index], selectedBosses[newIndex]] = [selectedBosses[newIndex], selectedBosses[index]];
     
     // Синхронизируем currentBossIndex при перемещении во время автоатаки
     if (isAttacking) {
+        // Если перемещали текущего босса - обновляем индекс на новую позицию
         if (index === currentBossIndex) {
             currentBossIndex = newIndex;
         } else if (newIndex === currentBossIndex) {
             currentBossIndex = index;
-        } else if (index < currentBossIndex && newIndex >= currentBossIndex) {
-            currentBossIndex--;
-        } else if (index > currentBossIndex && newIndex <= currentBossIndex) {
-            currentBossIndex++;
+        } else {
+            // Если перемещали других боссов - корректируем индекс
+            if (index < currentBossIndex && newIndex >= currentBossIndex) {
+                currentBossIndex--;
+            } else if (index > currentBossIndex && newIndex <= currentBossIndex) {
+                currentBossIndex++;
+            }
         }
+        
+        // После перемещения находим текущего босса по ID и обновляем индекс
+        // Это нужно, если текущий босс был перемещен косвенно (через другие перемещения)
+        if (currentBossId !== null) {
+            const newBossIndex = selectedBosses.findIndex(b => b.id === currentBossId);
+            const currentBoss = selectedBosses[currentBossIndex];
+            
+            if (newBossIndex !== -1) {
+                // Проверяем, находится ли текущий босс на правильной позиции
+                if (currentBoss && currentBoss.id === currentBossId) {
+                    // Текущий босс на месте, индекс правильный
+                    // Но если текущий босс уже был атакован (weaponsUsed > 0), 
+                    // и пользователь переместил других боссов вперед,
+                    // нужно проверить, не нужно ли перейти к следующему боссу
+                    const weaponsUsed = currentBoss.weaponsUsed || 0;
+                    const weaponsCount = currentBoss.weaponsCount || 1;
+                    
+                    // Если все атаки на текущего босса завершены, переходим к следующему
+                    if (weaponsUsed >= weaponsCount) {
+                        // Находим следующего босса в новом порядке
+                        const nextBossIndex = currentBossIndex + 1;
+                        if (nextBossIndex < selectedBosses.length) {
+                            currentBossIndex = nextBossIndex;
+                            console.log(`🔄 [moveBossInOrder] Все атаки на текущего босса завершены, переходим к следующему: ${selectedBosses[currentBossIndex]?.name}`);
+                        }
+                    }
+                } else {
+                    // Текущий босс был перемещен - обновляем индекс на его новую позицию
+                    currentBossIndex = newBossIndex;
+                    console.log(`🔄 [moveBossInOrder] Текущий босс был перемещен, обновляем индекс на ${currentBossIndex}`);
+                }
+            } else {
+                // Текущий босс не найден (возможно, был удален) - переходим к следующему
+                if (currentBossIndex < selectedBosses.length) {
+                    console.log(`🔄 [moveBossInOrder] Текущий босс не найден, остаемся на индексе ${currentBossIndex}`);
+                } else {
+                    currentBossIndex = 0;
+                    console.log(`🔄 [moveBossInOrder] Текущий босс не найден, сбрасываем индекс на 0`);
+                }
+            }
+        }
+        
+        console.log(`🔄 [moveBossInOrder] После перемещения: currentBossIndex = ${currentBossIndex}, текущий босс: ${selectedBosses[currentBossIndex]?.name || 'не найден'}`);
     }
     
     updateOrderCarousel();
@@ -5515,6 +5568,16 @@ async function attackNextBoss() {
     if (!isAttacking || currentBossIndex >= selectedBosses.length) {
         stopBossAutoAttack();
         return;
+    }
+    
+    // Проверяем, что индекс валидный
+    if (currentBossIndex < 0 || currentBossIndex >= selectedBosses.length) {
+        console.warn(`⚠️ [attackNextBoss] Некорректный currentBossIndex: ${currentBossIndex}, длина списка: ${selectedBosses.length}`);
+        currentBossIndex = 0;
+        if (currentBossIndex >= selectedBosses.length) {
+            stopBossAutoAttack();
+            return;
+        }
     }
     
     const boss = selectedBosses[currentBossIndex];
@@ -8196,6 +8259,17 @@ function updateComboStatus(message) {
     }
 }
 
+// Функция обновления статуса покупки ключей
+function updateBuyKeysStatus(message) {
+    const statusDiv = document.getElementById('buy-keys-status');
+    const statusContent = document.getElementById('buy-keys-status-content');
+    if (statusDiv && statusContent) {
+        statusDiv.style.display = 'block';
+        const timestamp = new Date().toLocaleTimeString();
+        statusContent.textContent = `[${timestamp}] ${message}`;
+    }
+}
+
 // Функция покупки ключей для боссов
 window.buyBossKey = async function() {
     const bossSelect = document.getElementById('buy-keys-boss-select');
@@ -8209,6 +8283,7 @@ window.buyBossKey = async function() {
     const bossId = parseInt(bossSelect.value);
     
     if (!bossId) {
+        updateBuyKeysStatus('⚠️ Выберите босса для покупки ключа');
         console.warn('⚠️ Выберите босса для покупки ключа');
         return;
     }
@@ -8228,6 +8303,7 @@ window.buyBossKey = async function() {
     // Блокируем кнопку на время запроса
     buyBtn.disabled = true;
     buyBtn.textContent = '⏳ Покупка...';
+    updateBuyKeysStatus(`🔑 Покупка ключа для ${bossName}...`);
     
     try {
         // Получаем токен
@@ -8271,13 +8347,29 @@ window.buyBossKey = async function() {
             }
         }
         
+        // Читаем ответ
         const data = await response.json();
         
+        // Обработка таймаута 999
+        if (response.status === 999) {
+            const errorMessage = data.message || data.error || 'Не удалось дождаться ответа';
+            updateBuyKeysStatus(`⏱️ ${bossName}: Таймаут (999). ${errorMessage}`);
+            console.warn(`⏱️ Таймаут (999) при покупке ключа для ${bossName}: ${errorMessage}`);
+            return;
+        }
+        
         if (response.ok && data.success) {
+            const added = data.added || 1;
+            const spent = data.spent || 0;
+            const currency = data.currency || 'rubles';
+            const newKeys = data.newKeys || 0;
+            
+            updateBuyKeysStatus(`✅ Ключ куплен на ${bossName}! Добавлено: ${added}, Потрачено: ${spent} ${currency}, Всего ключей: ${newKeys}`);
+            
             console.log(`✅ Ключ успешно куплен на босса: ${bossName} (ID: ${bossId})`);
-            console.log(`   Добавлено ключей: ${data.added || 1}`);
-            console.log(`   Потрачено: ${data.spent || 0} ${data.currency || 'rubles'}`);
-            console.log(`   Новое количество ключей: ${data.newKeys || 0}`);
+            console.log(`   Добавлено ключей: ${added}`);
+            console.log(`   Потрачено: ${spent} ${currency}`);
+            console.log(`   Новое количество ключей: ${newKeys}`);
             console.log(`   visibleBossId: ${data.visibleBossId || bossId}, keyBossId: ${data.keyBossId || bossId}`);
             
             // Обновляем информацию о боссе, если она загружена
@@ -8286,9 +8378,11 @@ window.buyBossKey = async function() {
             }
         } else {
             const errorMessage = data.message || data.error || 'Неизвестная ошибка';
+            updateBuyKeysStatus(`❌ Ошибка при покупке ключа на ${bossName}: ${errorMessage}`);
             console.error(`❌ Ошибка при покупке ключа на босса ${bossName} (ID: ${bossId}): ${errorMessage}`);
         }
     } catch (error) {
+        updateBuyKeysStatus(`❌ Ошибка при покупке ключа на ${bossName}: ${error.message}`);
         console.error(`❌ Ошибка при покупке ключа на босса ${bossName} (ID: ${bossId}):`, error.message);
     } finally {
         // Разблокируем кнопку
