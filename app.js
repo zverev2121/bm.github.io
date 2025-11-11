@@ -8624,9 +8624,18 @@ function displayResources(resources) {
             <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
                 <h3 style="margin: 0 0 10px 0; font-size: 16px; font-weight: 600;">⚔️ Оружие</h3>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 14px;">
-                    <div><strong>Яд:</strong> ${formatNumber(resources.poison_count || 0)}</div>
-                    <div><strong>Самопал:</strong> ${formatNumber(resources.gunshot_count || 0)}</div>
-                    <div><strong>Финка:</strong> ${formatNumber(resources.knife_count || 0)}</div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div><strong>Яд:</strong> ${formatNumber(resources.poison_count || 0)}</div>
+                        <button onclick="buyWeapon('poison', 18)" style="padding: 4px 8px; font-size: 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Купить</button>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div><strong>Самопал:</strong> ${formatNumber(resources.gunshot_count || 0)}</div>
+                        <button onclick="buyWeapon('gunshot', 5)" style="padding: 4px 8px; font-size: 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Купить</button>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div><strong>Финка:</strong> ${formatNumber(resources.knife_count || 0)}</div>
+                        <button onclick="buyWeapon('knife', 4)" style="padding: 4px 8px; font-size: 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Купить</button>
+                    </div>
                 </div>
             </div>
             
@@ -8729,6 +8738,123 @@ window.refreshResources = async function() {
     } finally {
         refreshBtn.disabled = false;
         refreshBtn.textContent = 'Обновить ресурсы';
+    }
+};
+
+// Покупка оружия
+window.buyWeapon = async function(weaponType, pricePerUnit) {
+    const weaponNames = {
+        'poison': 'Яд',
+        'gunshot': 'Самопал',
+        'knife': 'Финка'
+    };
+    
+    const weaponName = weaponNames[weaponType] || weaponType;
+    
+    // Показываем prompt для ввода количества с расчетом
+    const quantityInput = prompt(`Введите количество ${weaponName.toLowerCase()} для покупки:\n\nЦена за единицу: ${pricePerUnit} рублей\n\nПример: 5 шт. = ${5 * pricePerUnit} рублей`);
+    
+    if (quantityInput === null) {
+        // Пользователь отменил
+        return;
+    }
+    
+    const quantity = parseInt(quantityInput);
+    
+    // Валидация
+    if (isNaN(quantity) || quantity <= 0) {
+        if (tg && tg.showAlert) {
+            tg.showAlert('❌ Введите корректное количество (больше 0)');
+        } else {
+            alert('❌ Введите корректное количество (больше 0)');
+        }
+        return;
+    }
+    
+    // Расчет стоимости
+    const totalCost = quantity * pricePerUnit;
+    
+    // Показываем подтверждение с расчетом
+    const confirmMessage = `Покупка ${weaponName}:\n\n` +
+                          `Количество: ${quantity}\n` +
+                          `Цена за единицу: ${pricePerUnit} рублей\n` +
+                          `Итого: ${totalCost} рублей\n\n` +
+                          `Подтвердить покупку?`;
+    
+    let confirmed = false;
+    if (tg && tg.showConfirm) {
+        confirmed = await new Promise((resolve) => {
+            tg.showConfirm(confirmMessage, (result) => {
+                resolve(result);
+            });
+        });
+    } else {
+        confirmed = confirm(confirmMessage);
+    }
+    
+    if (!confirmed) {
+        return;
+    }
+    
+    // Выполняем покупку
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        if (!apiUrl) {
+            throw new Error('API URL не определен');
+        }
+        
+        // Отправляем запрос на покупку оружия
+        let response = await fetch(`${apiUrl}/boss/weapon/buy`, {
+            method: 'POST',
+            headers: await getApiHeaders(),
+            body: JSON.stringify({
+                weaponType: weaponType,
+                count: quantity
+            })
+        });
+        
+        // Обработка 401/403 - обновляем токен через initData из БД
+        if (response.status === 401 || response.status === 403) {
+            const currentInitData = await getCurrentInitData();
+            if (currentInitData && currentInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    // Повторяем запрос с новым токеном
+                    response = await fetch(`${apiUrl}/boss/weapon/buy`, {
+                        method: 'POST',
+                        headers: await getApiHeaders(),
+                        body: JSON.stringify({
+                            weaponType: weaponType,
+                            count: quantity
+                        })
+                    });
+                }
+            }
+        }
+        
+        if (!response.ok) {
+            throw new Error(`Ошибка покупки: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        if (data.success) {
+            if (tg && tg.showAlert) {
+                tg.showAlert(`✅ Успешно куплено ${quantity} ${weaponName.toLowerCase()} за ${totalCost} рублей!`);
+            } else {
+                alert(`✅ Успешно куплено ${quantity} ${weaponName.toLowerCase()} за ${totalCost} рублей!`);
+            }
+            // Обновляем ресурсы
+            await loadResources();
+        } else {
+            throw new Error(data.error || data.message || 'Не удалось купить оружие');
+        }
+    } catch (error) {
+        console.error('Ошибка покупки оружия:', error);
+        if (tg && tg.showAlert) {
+            tg.showAlert(`❌ Ошибка покупки оружия: ${error.message}`);
+        } else {
+            alert(`❌ Ошибка покупки оружия: ${error.message}`);
+        }
     }
 };
 
