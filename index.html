@@ -279,6 +279,14 @@
                                 <div class="weapon-count" data-weapon-count="knife" style="font-size: 10px; color: #888;">-</div>
                             </div>
                         </div>
+                        <!-- Сегментед контрол для множителя атаки -->
+                        <div class="weapon-multiplier-segmented" style="display: flex; justify-content: center; margin-top: 15px; gap: 4px; background: rgba(0,0,0,0.05); border-radius: 8px; padding: 4px;">
+                            <button class="multiplier-btn active" data-multiplier="1" onclick="setWeaponMultiplier(1)" style="flex: 1; padding: 6px 8px; border: none; background: var(--tg-theme-button-color, #3390ec); color: white; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">×1</button>
+                            <button class="multiplier-btn" data-multiplier="10" onclick="setWeaponMultiplier(10)" style="flex: 1; padding: 6px 8px; border: none; background: rgba(0,0,0,0.1); color: var(--tg-theme-text-color, #000000); border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">×10</button>
+                            <button class="multiplier-btn" data-multiplier="100" onclick="setWeaponMultiplier(100)" style="flex: 1; padding: 6px 8px; border: none; background: rgba(0,0,0,0.1); color: var(--tg-theme-text-color, #000000); border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">×100</button>
+                            <button class="multiplier-btn" data-multiplier="1000" onclick="setWeaponMultiplier(1000)" style="flex: 1; padding: 6px 8px; border: none; background: rgba(0,0,0,0.1); color: var(--tg-theme-text-color, #000000); border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">×1000</button>
+                            <button class="multiplier-btn" data-multiplier="10000" onclick="setWeaponMultiplier(10000)" style="flex: 1; padding: 6px 8px; border: none; background: rgba(0,0,0,0.1); color: var(--tg-theme-text-color, #000000); border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">×10000</button>
+                        </div>
                         </div>
                     </div>
                     </div>

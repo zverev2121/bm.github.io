@@ -1552,6 +1552,9 @@ let weaponStatsEffective = null;
 // Глобальная переменная для хранения данных об оружии из /api/boss/weapons
 let weaponWeaponsData = null;
 
+// Глобальная переменная для хранения текущего множителя атаки
+let weaponMultiplier = 1;
+
 // Форматирование чисел в сокращенном виде (70.354кк, 3.123ккк, 7.5к)
 function formatNumberShort(num) {
     if (num >= 1000000000) {
@@ -1573,6 +1576,62 @@ function formatNumberShort(num) {
         const formatted = value.toFixed(3).replace(/\.?0+$/, '');
         return formatted + 'к';
     } else {
+        return num.toString();
+    }
+}
+
+// Форматирование урона с ограничением в 4 символа (например, 10.35к)
+function formatDamageShort(num) {
+    if (num >= 1000000000) {
+        // Миллиарды (ккк) - максимум 4 символа
+        const value = num / 1000000000;
+        // Пробуем разные форматы, чтобы уложиться в 4 символа
+        if (value >= 100) {
+            return Math.floor(value) + 'ккк';
+        } else if (value >= 10) {
+            const formatted = value.toFixed(1);
+            if (formatted.length + 3 <= 4) return formatted + 'ккк';
+            return Math.floor(value) + 'ккк';
+        } else {
+            const formatted = value.toFixed(2);
+            if (formatted.length + 3 <= 4) return formatted + 'ккк';
+            return value.toFixed(1) + 'ккк';
+        }
+    } else if (num >= 1000000) {
+        // Миллионы (кк) - максимум 4 символа
+        const value = num / 1000000;
+        if (value >= 100) {
+            return Math.floor(value) + 'кк';
+        } else if (value >= 10) {
+            const formatted = value.toFixed(1);
+            if (formatted.length + 2 <= 4) return formatted + 'кк';
+            return Math.floor(value) + 'кк';
+        } else {
+            const formatted = value.toFixed(2);
+            if (formatted.length + 2 <= 4) return formatted + 'кк';
+            return value.toFixed(1) + 'кк';
+        }
+    } else if (num >= 1000) {
+        // Тысячи (к) - максимум 4 символа
+        const value = num / 1000;
+        if (value >= 100) {
+            return Math.floor(value) + 'к';
+        } else if (value >= 10) {
+            // Для чисел от 10 до 99.999 - используем 2 знака после запятой
+            const formatted = value.toFixed(2);
+            if (formatted.length + 1 <= 4) return formatted + 'к';
+            // Если не влезает, пробуем 1 знак
+            const formatted1 = value.toFixed(1);
+            if (formatted1.length + 1 <= 4) return formatted1 + 'к';
+            return Math.floor(value) + 'к';
+        } else {
+            // Для чисел от 1 до 9.999 - используем 2 знака после запятой
+            const formatted = value.toFixed(2);
+            if (formatted.length + 1 <= 4) return formatted + 'к';
+            return value.toFixed(1) + 'к';
+        }
+    } else {
+        // Меньше 1000 - просто число
         return num.toString();
     }
 }
@@ -1640,6 +1699,29 @@ function updateWeaponCountsDisplay() {
     }
 }
 
+// Установка множителя атаки
+function setWeaponMultiplier(multiplier) {
+    weaponMultiplier = multiplier;
+    
+    // Обновляем активную кнопку в сегментеде
+    const buttons = document.querySelectorAll('.multiplier-btn');
+    buttons.forEach(btn => {
+        const btnMultiplier = parseInt(btn.getAttribute('data-multiplier'));
+        if (btnMultiplier === multiplier) {
+            btn.classList.add('active');
+            btn.style.background = 'var(--tg-theme-button-color, #3390ec)';
+            btn.style.color = 'white';
+        } else {
+            btn.classList.remove('active');
+            btn.style.background = 'rgba(0,0,0,0.1)';
+            btn.style.color = 'var(--tg-theme-text-color, #000000)';
+        }
+    });
+    
+    // Обновляем отображение урона
+    updateWeaponDamageDisplay();
+}
+
 // Обновление отображения урона оружия
 function updateWeaponDamageDisplay() {
     if (!weaponStatsEffective) return;
@@ -1668,7 +1750,15 @@ function updateWeaponDamageDisplay() {
                 }
             }
             if (damageEl && damage) {
-                damageEl.textContent = formatNumberShort(damage);
+                // Для яд/самопал/финка показываем урон с учетом множителя и используем formatDamageShort
+                const weaponsWithMultiplier = ['poison', 'gunshot', 'knife'];
+                if (weaponsWithMultiplier.includes(weapon)) {
+                    const multipliedDamage = damage * weaponMultiplier;
+                    damageEl.textContent = formatDamageShort(multipliedDamage);
+                } else {
+                    // Для остального оружия показываем обычный урон
+                    damageEl.textContent = formatNumberShort(damage);
+                }
             }
         }
     }
@@ -2227,13 +2317,17 @@ async function attackBossWithWeapon(weapon) {
         const apiUrl = API_SERVER_URL || GAME_API_URL;
         const weaponDisplayName = WEAPON_DISPLAY_NAMES[weapon] || weapon;
         
+        // Определяем количество ударов в зависимости от множителя (только для яд/самопал/финка)
+        const weaponsWithMultiplier = ['poison', 'gunshot', 'knife'];
+        const count = weaponsWithMultiplier.includes(weapon) ? weaponMultiplier : 1;
+        
         // Отправляем запрос
         let response = await fetch(`${apiUrl}/boss/use-weapon`, {
             method: 'POST',
             headers: await getApiHeaders(),
             body: JSON.stringify({
                 weapon: weapon,
-                count: 1
+                count: count
             })
         });
         
@@ -2248,7 +2342,7 @@ async function attackBossWithWeapon(weapon) {
                         headers: await getApiHeaders(),
                         body: JSON.stringify({
                             weapon: weapon,
-                            count: 1
+                            count: count
                         })
                     });
                 }
