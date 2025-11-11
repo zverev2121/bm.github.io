@@ -8600,7 +8600,10 @@ function displayResources(resources) {
                         <img src="images/paper.png" alt="Бумага" style="width: 20px; height: 20px; object-fit: contain;">
                         <div><strong>Бумага:</strong> ${formatNumber(resources.paper || 0)}</div>
                     </div>
-                    <div><strong>Сахар:</strong> ${formatNumber(resources.sugar || 0)}</div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <img src="images/sugar.png" alt="Сахар" style="width: 20px; height: 20px; object-fit: contain;">
+                        <div><strong>Сахар:</strong> ${formatNumber(resources.sugar || 0)}</div>
+                    </div>
                     <div style="display: flex; align-items: center; gap: 6px;">
                         <img src="images/cigarettes.png" alt="Сигареты" style="width: 20px; height: 20px; object-fit: contain;">
                         <div><strong>Сигареты:</strong> ${formatNumber(resources.cigarettes || 0)}</div>
@@ -8609,7 +8612,6 @@ function displayResources(resources) {
                         <img src="images/chefir.png" alt="Чифир" style="width: 20px; height: 20px; object-fit: contain;">
                         <div><strong>Чифир:</strong> ${formatNumber(resources.chefir || 0)}</div>
                     </div>
-                    <div><strong>Чипсы:</strong> ${formatNumber(resources.chips || 0)}</div>
                     <div><strong>Синие спички:</strong> ${formatNumber(resources.blue_matches || 0)}</div>
                     <div style="display: flex; align-items: center; gap: 6px;">
                         <img src="images/condensed_milk.png" alt="Сгущенка" style="width: 20px; height: 20px; object-fit: contain;">
@@ -8696,11 +8698,14 @@ window.refreshResources = async function() {
                         if (retryData.success) {
                             // После обновления загружаем ресурсы из БД (без сообщения о загрузке)
                             await loadResources();
-                            if (tg && tg.showAlert) {
-                                tg.showAlert('✅ Ресурсы успешно обновлены!');
-                            }
                             return;
+                        } else {
+                            // Если retry не успешен, выбрасываем ошибку для обработки в catch
+                            throw new Error(retryData.error || 'Не удалось обновить ресурсы после повторной попытки');
                         }
+                    } else {
+                        // Если retry запрос не успешен, выбрасываем ошибку для обработки в catch
+                        throw new Error(`Ошибка обновления после повторной попытки: ${retryResponse.status}`);
                     }
                 }
             }
@@ -8714,21 +8719,13 @@ window.refreshResources = async function() {
         if (data.success) {
             // После обновления загружаем ресурсы из БД (без сообщения о загрузке)
             await loadResources();
-            if (tg && tg.showAlert) {
-                tg.showAlert('✅ Ресурсы успешно обновлены!');
-            }
         } else {
             throw new Error(data.error || 'Не удалось обновить ресурсы');
         }
     } catch (error) {
         console.error('Ошибка обновления ресурсов:', error);
-        const resourcesContent = document.getElementById('resources-content');
-        if (resourcesContent) {
-            resourcesContent.innerHTML = `<p style="color: #ff6b6b;">Ошибка обновления ресурсов: ${error.message}</p>`;
-        }
-        if (tg && tg.showAlert) {
-            tg.showAlert(`❌ Ошибка обновления ресурсов: ${error.message}`);
-        }
+        // При ошибке показываем старые данные из БД
+        await loadResources();
     } finally {
         refreshBtn.disabled = false;
         refreshBtn.textContent = 'Обновить ресурсы';
