@@ -5528,20 +5528,34 @@ async function attackNextBoss() {
             }
         }
         
+        // Обработка ошибки 999 (таймаут) - перепробуем на того же босса
+        if (response.status === 999) {
+            updateAttackStatus(`⏱️ ${boss.name}: Таймаут (999). Перепробуем через 3 секунды...`);
+            console.warn(`Таймаут 999 при атаке ${boss.name}, перепробуем...`);
+            
+            // Не удаляем босса, перепробуем через 3 секунды
+            setTimeout(() => {
+                attackNextBoss();
+            }, 3000);
+            return;
+        }
+        
         const data = await response.json();
         
         // Обработка 400 с "Session already active"
         if (!response.ok && response.status === 400 && data.message === "Session already active") {
             // Бой еще продолжается, проверяем статус через bootstrap
             // НЕ переходим к следующему боссу, остаемся на текущем индексе
+            // НЕ увеличиваем weaponsUsed, так как мы не начали новую атаку
             const weaponsUsed = boss.weaponsUsed || 0;
             const weaponsCount = boss.weaponsCount || 1;
-            updateAttackStatus(`⚔️ Бой с ${boss.name} уже активен. Проверка статуса через bootstrap... (Атака ${weaponsUsed + 1}/${weaponsCount})`);
+            updateAttackStatus(`⚔️ Бой с ${boss.name} уже активен. Ожидание завершения боя через bootstrap... (Атака ${weaponsUsed + 1}/${weaponsCount})`);
             
+            // Начинаем проверку статуса сразу, чтобы быстрее узнать результат
             bossAttackInterval = setTimeout(() => {
                 // Проверяем статус через bootstrap вместо повторной атаки
                 checkBossBattleStatus(boss.id, boss.mode, null);
-            }, 20000);
+            }, 1000);
             return;
         }
         
@@ -5549,6 +5563,20 @@ async function attackNextBoss() {
         if (!response.ok || !data.success) {
             const errorMessage = data.message || data.error || 'Неизвестная ошибка';
             const lowerMessage = errorMessage.toLowerCase();
+            
+            // Проверяем, является ли это ошибкой 999/internal 999 (таймаут) - перепробуем на того же босса
+            if (response.status === 999 || 
+                lowerMessage.includes('999') || 
+                (lowerMessage.includes('internal') && lowerMessage.includes('999'))) {
+                updateAttackStatus(`⏱️ ${boss.name}: Таймаут (999). Перепробуем через 3 секунды...`);
+                console.warn(`Таймаут 999 при атаке ${boss.name}, перепробуем...`);
+                
+                // Не удаляем босса, перепробуем через 3 секунды
+                setTimeout(() => {
+                    attackNextBoss();
+                }, 3000);
+                return;
+            }
             
             // Проверяем, является ли это ошибкой лимита или нехватки ключей
             if (lowerMessage.includes('limit') || 
@@ -5615,7 +5643,7 @@ async function attackNextBoss() {
                 const weaponsCount = boss.weaponsCount || 1;
                 updateAttackStatus(`⚔️ Бой с ${boss.name} начат. Проверка статуса через bootstrap... (Атака ${weaponsUsed}/${weaponsCount})`);
                 
-                // Проверяем статус через bootstrap через 20 секунд
+                // Проверяем статус через bootstrap каждые 20 секунд
                 bossAttackInterval = setTimeout(() => {
                     checkBossBattleStatus(boss.id, boss.mode, data.sessionId);
                 }, 20000);
@@ -5639,6 +5667,22 @@ async function attackNextBoss() {
         
     } catch (error) {
         console.error('Ошибка атаки босса:', error);
+        const errorMessage = error.message || error.toString();
+        const lowerMessage = errorMessage.toLowerCase();
+        
+        // Проверяем, является ли это ошибкой 999/internal 999 (таймаут) - перепробуем на того же босса
+        if (lowerMessage.includes('999') || 
+            (lowerMessage.includes('internal') && lowerMessage.includes('999'))) {
+            updateAttackStatus(`⏱️ ${boss.name}: Таймаут (999). Перепробуем через 3 секунды...`);
+            console.warn(`Таймаут 999 при атаке ${boss.name}, перепробуем...`);
+            
+            // Не удаляем босса, перепробуем через 3 секунды
+            setTimeout(() => {
+                attackNextBoss();
+            }, 3000);
+            return;
+        }
+        
         updateAttackStatus(`❌ Ошибка атаки ${boss.name}: ${error.message}`);
         
         // Удаляем текущего босса и переходим к следующему при ошибке
@@ -5757,7 +5801,9 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
                 // Показываем модальное окно с наградой
                 showCustomModal(rewardMessageText);
                 
-                // Счетчик weaponsUsed уже увеличен после start-attack, просто проверяем статус
+                // Счетчик weaponsUsed уже увеличен после start-attack (если атака была успешной)
+                // Если босс уже был активен (Session already active), weaponsUsed не был увеличен
+                // В этом случае после сбора награды мы попробуем напасть снова на того же босса
                 if (boss) {
                     const weaponsCount = boss.weaponsCount || 1;
                     const weaponsUsed = boss.weaponsUsed || 0;
@@ -5765,6 +5811,7 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
                     console.log(`Атака ${weaponsUsed}/${weaponsCount} завершена для ${boss.name}`);
                     
                     // Если еще есть атаки для текущего босса, начинаем следующую
+                    // currentBossIndex не изменился, поэтому attackNextBoss() попытается напасть на того же босса
                     if (weaponsUsed < weaponsCount) {
                         updateAttackStatus(`Атака ${weaponsUsed}/${weaponsCount} завершена. Начинаем атаку ${weaponsUsed + 1}/${weaponsCount}...`);
                         // Небольшая задержка перед следующей атакой
