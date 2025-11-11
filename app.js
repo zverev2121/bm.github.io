@@ -1800,7 +1800,7 @@ async function loadBossInfo(showLoading = true) {
         let rewardMessageHtml = '';
         if (data.success && data.hasReward === true) {
             try {
-                const rewardData = await collectBossRewards();
+                const rewardData = await collectBossRewards(true);  // skipCheck = true, так как это не автоатака
                 // Форматируем сообщение о награде
                 const rewardMessageHtmlFormatted = formatRewardMessage(rewardData, 'html');
                 const rewardMessageText = formatRewardMessage(rewardData, 'text');
@@ -2463,7 +2463,7 @@ async function updateBossKeys() {
             if (bootstrapData.success && bootstrapData.hasReward === true) {
                 console.log('💰 Обнаружена награда в bootstrap, собираем...');
                 try {
-                    const rewardData = await collectBossRewards();
+                    const rewardData = await collectBossRewards(true);  // skipCheck = true, так как это не автоатака
                     const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
                     const rewardMessageText = formatRewardMessage(rewardData, 'text');
                     
@@ -4181,6 +4181,7 @@ let bossDataUpdateInterval = null;  // Интервал для обновлен�
 let currentBossIndex = 0;
 let selectedBosses = [];
 let isAttacking = false;
+let isCollectingReward = false;  // Флаг для предотвращения множественных вызовов collectBossRewards
 
 // Структура данных для правил атаки боссов (ключи)
 // Формат: bossId: { requiredKeys: { fromBossId: count } }
@@ -4461,7 +4462,7 @@ window.loadBossList = async function loadBossList() {
             if (bootstrapData.success && bootstrapData.hasReward === true) {
                 console.log('💰 Обнаружена награда в bootstrap (loadBossList), собираем...');
                 try {
-                    const rewardData = await collectBossRewards();
+                    const rewardData = await collectBossRewards(true);  // skipCheck = true, так как это не автоатака
                     const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
                     const rewardMessageText = formatRewardMessage(rewardData, 'text');
                     
@@ -5363,6 +5364,20 @@ window.moveBossInOrder = function(index, direction) {
     if (newIndex < 0 || newIndex >= selectedBosses.length) return;
     
     [selectedBosses[index], selectedBosses[newIndex]] = [selectedBosses[newIndex], selectedBosses[index]];
+    
+    // Синхронизируем currentBossIndex при перемещении во время автоатаки
+    if (isAttacking) {
+        if (index === currentBossIndex) {
+            currentBossIndex = newIndex;
+        } else if (newIndex === currentBossIndex) {
+            currentBossIndex = index;
+        } else if (index < currentBossIndex && newIndex >= currentBossIndex) {
+            currentBossIndex--;
+        } else if (index > currentBossIndex && newIndex <= currentBossIndex) {
+            currentBossIndex++;
+        }
+    }
+    
     updateOrderCarousel();
 }
 
@@ -5370,6 +5385,17 @@ window.moveBossInOrder = function(index, direction) {
 window.removeBossFromOrder = function(index) {
     if (index >= 0 && index < selectedBosses.length) {
         selectedBosses.splice(index, 1);
+        // Синхронизируем currentBossIndex при удалении во время автоатаки
+        if (isAttacking) {
+            if (index < currentBossIndex) {
+                currentBossIndex--;
+            } else if (index === currentBossIndex) {
+                // Если удалили текущего босса, переходим к следующему или первому
+                if (currentBossIndex >= selectedBosses.length) {
+                    currentBossIndex = selectedBosses.length > 0 ? 0 : -1;
+                }
+            }
+        }
         updateOrderCarousel();
     }
 }
@@ -5818,6 +5844,12 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
             
             try {
                 const rewardData = await collectBossRewards();
+                if (!rewardData) {
+                    // Если награда уже собирается другим процессом, просто продолжаем
+                    console.log('⏳ Награда уже собирается, пропускаем...');
+                    return;
+                }
+                
                 const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
                 const rewardMessageText = formatRewardMessage(rewardData, 'text');
                 updateAttackStatus(rewardMessageHtml);
@@ -5833,12 +5865,15 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
                     const bossIndex = selectedBosses.findIndex(b => b.id === bossId);
                     if (bossIndex !== -1) {
                         currentBossIndex = bossIndex;
+                        // Обновляем ссылку на босса из актуального списка
+                        boss = selectedBosses[currentBossIndex];
                     }
                     
                     const weaponsCount = boss.weaponsCount || 1;
                     const weaponsUsed = boss.weaponsUsed || 0;
                     
                     console.log(`Атака ${weaponsUsed}/${weaponsCount} завершена для ${boss.name}`);
+                    console.log(`Проверка: weaponsUsed (${weaponsUsed}) < weaponsCount (${weaponsCount}) = ${weaponsUsed < weaponsCount}`);
                     
                     // Если еще есть атаки для текущего босса, начинаем следующую
                     if (weaponsUsed < weaponsCount) {
@@ -6227,7 +6262,20 @@ function formatRewardMessage(rewardData, format = 'html') {
 }
 
 // Сбор награды с босса
-async function collectBossRewards() {
+async function collectBossRewards(skipCheck = false) {
+    // Предотвращаем множественные вызовы во время автоатаки
+    if (isAttacking && !skipCheck) {
+        if (isCollectingReward) {
+            console.log('⏳ collectBossRewards уже выполняется, пропускаем...');
+            // Ждем завершения текущего сбора награды
+            while (isCollectingReward) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            return null;
+        }
+        isCollectingReward = true;
+    }
+    
     try {
         let token = await getAccessToken();
         if (!token) {
@@ -6270,6 +6318,10 @@ async function collectBossRewards() {
     } catch (error) {
         console.error('Ошибка сбора награды с босса:', error);
         throw error;
+    } finally {
+        if (isAttacking && !skipCheck) {
+            isCollectingReward = false;
+        }
     }
 }
 
