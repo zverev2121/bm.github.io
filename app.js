@@ -8612,7 +8612,9 @@ function displayResources(resources) {
                         <img src="images/chefir.png" alt="Чифир" style="width: 20px; height: 20px; object-fit: contain;">
                         <div><strong>Чифир:</strong> ${formatNumber(resources.chefir || 0)}</div>
                     </div>
+                    <div><strong>Фишки:</strong> ${formatNumber(resources.chips || 0)}</div>
                     <div><strong>Синие спички:</strong> ${formatNumber(resources.blue_matches || 0)}</div>
+                    <div><strong>Розовые спички:</strong> ${formatNumber(resources.pink_matches || 0)}</div>
                     <div style="display: flex; align-items: center; gap: 6px;">
                         <img src="images/condensed_milk.png" alt="Сгущенка" style="width: 20px; height: 20px; object-fit: contain;">
                         <div><strong>Сгущенка:</strong> ${formatNumber(resources.condensed_milk || 0)}</div>
@@ -8751,15 +8753,106 @@ window.buyWeapon = async function(weaponType, pricePerUnit) {
     
     const weaponName = weaponNames[weaponType] || weaponType;
     
-    // Показываем prompt для ввода количества с расчетом
-    const quantityInput = prompt(`Введите количество ${weaponName.toLowerCase()} для покупки:\n\nЦена за единицу: ${pricePerUnit} рублей\n\nПример: 5 шт. = ${5 * pricePerUnit} рублей`);
+    // Создаем кастомный модальный диалог для ввода количества
+    const modalHtml = `
+        <div style="padding: 20px;">
+            <h3 style="margin: 0 0 15px 0; font-size: 18px; font-weight: 600;">Покупка ${weaponName}</h3>
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 8px; font-size: 14px;">Количество:</label>
+                <input type="number" id="weapon-quantity-input" min="1" value="1" 
+                       style="width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;"
+                       oninput="updateWeaponPurchaseTotal('${weaponType}', ${pricePerUnit})"
+                       onkeypress="if(event.key === 'Enter') confirmWeaponPurchase('${weaponType}', ${pricePerUnit})">
+            </div>
+            <div style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.1); border-radius: 4px;">
+                <div style="font-size: 14px; margin-bottom: 5px;">Цена за единицу: <strong>${pricePerUnit} рублей</strong></div>
+                <div style="font-size: 16px; font-weight: 600; color: #4CAF50;">
+                    Итого: <span id="weapon-total-cost">${pricePerUnit}</span> рублей
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button onclick="closeWeaponPurchaseModal()" 
+                        style="padding: 10px 20px; background: #ccc; color: #000; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                    Отмена
+                </button>
+                <button onclick="confirmWeaponPurchase('${weaponType}', ${pricePerUnit})" 
+                        style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                    Купить
+                </button>
+            </div>
+        </div>
+    `;
     
-    if (quantityInput === null) {
-        // Пользователь отменил
+    // Создаем модальное окно, если его еще нет
+    let weaponModal = document.getElementById('weapon-purchase-modal');
+    if (!weaponModal) {
+        weaponModal = document.createElement('div');
+        weaponModal.id = 'weapon-purchase-modal';
+        weaponModal.className = 'custom-modal';
+        weaponModal.style.display = 'none';
+        weaponModal.innerHTML = `
+            <div class="custom-modal-overlay" onclick="closeWeaponPurchaseModal()"></div>
+            <div class="custom-modal-content" style="max-width: 400px;">
+                <div id="weapon-purchase-modal-body"></div>
+            </div>
+        `;
+        document.body.appendChild(weaponModal);
+    }
+    
+    // Заполняем содержимое
+    document.getElementById('weapon-purchase-modal-body').innerHTML = modalHtml;
+    
+    // Показываем модальное окно
+    weaponModal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    
+    // Фокусируемся на инпуте
+    setTimeout(() => {
+        const input = document.getElementById('weapon-quantity-input');
+        if (input) {
+            input.focus();
+            input.select();
+        }
+    }, 100);
+    
+    // Сохраняем данные для использования в других функциях
+    window.currentWeaponPurchase = {
+        weaponType: weaponType,
+        pricePerUnit: pricePerUnit,
+        weaponName: weaponName
+    };
+};
+
+// Обновление общей стоимости при вводе количества
+window.updateWeaponPurchaseTotal = function(weaponType, pricePerUnit) {
+    const input = document.getElementById('weapon-quantity-input');
+    const totalCostSpan = document.getElementById('weapon-total-cost');
+    
+    if (input && totalCostSpan) {
+        const quantity = parseInt(input.value) || 0;
+        const totalCost = quantity * pricePerUnit;
+        totalCostSpan.textContent = totalCost;
+    }
+};
+
+// Закрытие модального окна покупки оружия
+window.closeWeaponPurchaseModal = function() {
+    const weaponModal = document.getElementById('weapon-purchase-modal');
+    if (weaponModal) {
+        weaponModal.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+    window.currentWeaponPurchase = null;
+};
+
+// Подтверждение покупки оружия
+window.confirmWeaponPurchase = async function(weaponType, pricePerUnit) {
+    const input = document.getElementById('weapon-quantity-input');
+    if (!input) {
         return;
     }
     
-    const quantity = parseInt(quantityInput);
+    const quantity = parseInt(input.value);
     
     // Валидация
     if (isNaN(quantity) || quantity <= 0) {
@@ -8771,30 +8864,14 @@ window.buyWeapon = async function(weaponType, pricePerUnit) {
         return;
     }
     
+    // Получаем название оружия
+    const weaponName = window.currentWeaponPurchase?.weaponName || weaponType;
+    
+    // Закрываем модальное окно
+    closeWeaponPurchaseModal();
+    
     // Расчет стоимости
     const totalCost = quantity * pricePerUnit;
-    
-    // Показываем подтверждение с расчетом
-    const confirmMessage = `Покупка ${weaponName}:\n\n` +
-                          `Количество: ${quantity}\n` +
-                          `Цена за единицу: ${pricePerUnit} рублей\n` +
-                          `Итого: ${totalCost} рублей\n\n` +
-                          `Подтвердить покупку?`;
-    
-    let confirmed = false;
-    if (tg && tg.showConfirm) {
-        confirmed = await new Promise((resolve) => {
-            tg.showConfirm(confirmMessage, (result) => {
-                resolve(result);
-            });
-        });
-    } else {
-        confirmed = confirm(confirmMessage);
-    }
-    
-    if (!confirmed) {
-        return;
-    }
     
     // Выполняем покупку
     try {
