@@ -119,10 +119,8 @@ window.switchTab = function switchTab(tabName) {
         if (tabName === 'resources') {
             console.log('🔄 [switchTab] Переключились на вкладку "resources", загружаем ресурсы');
             loadResources();
-            // Инициализируем блок сбора прибыли
-            initBusinessCollect();
-            // Инициализируем блок сбора туалетной бумаги
-            initToiletPaperCollect();
+            // Инициализируем блок сбора
+            initCollect();
         }
     }
     
@@ -8714,7 +8712,7 @@ window.refreshResources = async function() {
                         if (retryData.success) {
                             // Проверяем canClaimToiletPaper из ответа
                             if (retryData.canClaimToiletPaper !== undefined) {
-                                checkToiletPaperClaimable({ canClaimToiletPaper: retryData.canClaimToiletPaper });
+                                await checkToiletPaperClaimable({ canClaimToiletPaper: retryData.canClaimToiletPaper });
                             }
                             // После обновления загружаем ресурсы из БД (без сообщения о загрузке)
                             await loadResources();
@@ -8739,7 +8737,7 @@ window.refreshResources = async function() {
         if (data.success) {
             // Проверяем canClaimToiletPaper из ответа
             if (data.canClaimToiletPaper !== undefined) {
-                checkToiletPaperClaimable({ canClaimToiletPaper: data.canClaimToiletPaper });
+                await checkToiletPaperClaimable({ canClaimToiletPaper: data.canClaimToiletPaper });
             }
             // После обновления загружаем ресурсы из БД (без сообщения о загрузке)
             await loadResources();
@@ -9019,30 +9017,10 @@ function startCollectCountdown(targetTime) {
             countdownTextEl.style.color = '#4CAF50';
             stopCollectCountdown();
             
-            // Если включен автосбор, проверяем, наступило ли время сбора
+            // Если включен автосбор, собираем автоматически
             const autoCollectCheckbox = document.getElementById('auto-collect-checkbox');
             if (autoCollectCheckbox && autoCollectCheckbox.checked) {
-                const timeInput = document.getElementById('auto-collect-time');
-                if (timeInput && timeInput.value) {
-                    const [hours, minutes] = timeInput.value.split(':').map(Number);
-                    const moscowTime = getMoscowTime();
-                    const now = moscowTime.date;
-                    const targetTime = new Date(now);
-                    targetTime.setHours(hours, minutes, 0, 0);
-                    
-                    // Если время уже прошло сегодня, планируем на завтра
-                    if (targetTime <= now) {
-                        targetTime.setDate(targetTime.getDate() + 1);
-                    }
-                    
-                    // Если указанное время уже прошло или наступило, собираем
-                    if (targetTime <= now || Math.abs(targetTime.getTime() - now.getTime()) < 60000) {
-                        collectBusinessProfit();
-                    }
-                } else {
-                    // Если время не указано, собираем сразу
-                    collectBusinessProfit();
-                }
+                collectBusinessProfit();
             }
             return;
         }
@@ -9247,105 +9225,49 @@ async function getNextBusinessCollectTime() {
 }
 
 // Функция для переключения автосбора
-window.toggleAutoCollect = function() {
+window.toggleAutoCollect = async function() {
     const checkbox = document.getElementById('auto-collect-checkbox');
-    const settingsEl = document.getElementById('auto-collect-settings');
-    const timeInput = document.getElementById('auto-collect-time');
     
-    if (!checkbox || !settingsEl) return;
+    if (!checkbox) return;
     
     if (checkbox.checked) {
-        settingsEl.style.display = 'block';
+        // При включении сразу собираем прибыль
+        await collectBusinessProfit();
         
-        // Загружаем сохраненное время
-        const savedTime = localStorage.getItem('auto_collect_time');
-        if (savedTime && timeInput) {
-            timeInput.value = savedTime;
-        }
-        
-        // Запускаем автосбор
-        startAutoCollect();
+        // Запускаем автосбор каждые 8 часов
+        startAutoCollectBusiness();
     } else {
-        settingsEl.style.display = 'none';
-        
         // Останавливаем автосбор
-        stopAutoCollect();
+        stopAutoCollectBusiness();
     }
     
     // Сохраняем состояние
     localStorage.setItem('auto_collect_enabled', checkbox.checked ? 'true' : 'false');
 };
 
-// Функция для запуска автосбора
-function startAutoCollect() {
+// Функция для запуска автосбора прибыли (каждые 8 часов)
+function startAutoCollectBusiness() {
     // Останавливаем предыдущий интервал, если есть
-    stopAutoCollect();
+    stopAutoCollectBusiness();
     
-    const timeInput = document.getElementById('auto-collect-time');
-    if (!timeInput || !timeInput.value) {
-        console.warn('Время автосбора не указано');
-        return;
-    }
-    
-    const [hours, minutes] = timeInput.value.split(':').map(Number);
-    
-    // Функция для проверки времени и сбора
-    const checkAndCollect = () => {
-        const moscowTime = getMoscowTime();
-        const nextTimeEl = document.getElementById('auto-collect-next-time');
-        
-        // Вычисляем следующее время сбора
-        const now = moscowTime.date;
-        const targetTime = new Date(now);
-        targetTime.setHours(hours, minutes, 0, 0);
-        
-        // Если время уже прошло сегодня, планируем на завтра
-        if (targetTime <= now) {
-            targetTime.setDate(targetTime.getDate() + 1);
+    // Проверяем каждую минуту, можно ли собирать
+    autoCollectInterval = setInterval(async () => {
+        const nextTime = await getNextBusinessCollectTime();
+        if (nextTime) {
+            const now = new Date().getTime();
+            const nextTimeMs = parseInt(nextTime);
+            
+            // Если время следующего сбора наступило или прошло, собираем
+            if (now >= nextTimeMs) {
+                console.log('⏰ Время автосбора прибыли наступило, собираем...');
+                await collectBusinessProfit();
+            }
         }
-        
-        // Показываем следующее время сбора
-        if (nextTimeEl) {
-            const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-            const dateStr = targetTime.toLocaleDateString('ru-RU', { 
-                day: '2-digit', 
-                month: '2-digit',
-                year: 'numeric'
-            });
-            nextTimeEl.textContent = `Следующий сбор: ${dateStr} в ${timeStr} МСК`;
-        }
-        
-        // Проверяем, наступило ли время сбора
-        const nowMs = now.getTime();
-        const targetMs = targetTime.getTime();
-        const diff = targetMs - nowMs;
-        
-        // Проверяем, что обратный отсчет закончился (можно собирать)
-        const savedNextTime = localStorage.getItem('next_collect_time');
-        const canCollect = !savedNextTime || parseInt(savedNextTime) <= nowMs;
-        
-        // Если разница меньше 1 секунды и можно собирать, собираем
-        if (diff > 0 && diff < 1000 && canCollect) {
-            console.log('⏰ Время автосбора наступило, собираем прибыль...');
-            collectBusinessProfit();
-        } else if (diff > 0 && diff < 1000 && !canCollect) {
-            // Время наступило, но обратный отсчет еще не закончился
-            const nextCollectTime = parseInt(savedNextTime);
-            const remaining = nextCollectTime - nowMs;
-            const remainingStr = formatCountdownTime(remaining);
-            console.log(`⏰ Время автосбора наступило, но нужно подождать еще ${remainingStr}`);
-        }
-    };
-    
-    // Проверяем каждую секунду
-    autoCollectInterval = setInterval(checkAndCollect, 1000);
-    
-    // Выполняем сразу для отображения следующего времени
-    checkAndCollect();
+    }, 60000); // Проверяем каждую минуту
 }
 
-// Функция для остановки автосбора
-function stopAutoCollect() {
+// Функция для остановки автосбора прибыли
+function stopAutoCollectBusiness() {
     if (autoCollectInterval) {
         clearInterval(autoCollectInterval);
         autoCollectInterval = null;
@@ -9380,23 +9302,8 @@ async function initBusinessCollect() {
     if (checkbox) {
         checkbox.checked = autoCollectEnabled;
         if (autoCollectEnabled) {
-            const settingsEl = document.getElementById('auto-collect-settings');
-            if (settingsEl) {
-                settingsEl.style.display = 'block';
-            }
-            startAutoCollect();
+            startAutoCollectBusiness();
         }
-    }
-    
-    // Сохраняем время при изменении
-    const timeInput = document.getElementById('auto-collect-time');
-    if (timeInput) {
-        timeInput.addEventListener('change', () => {
-            localStorage.setItem('auto_collect_time', timeInput.value);
-            if (checkbox && checkbox.checked) {
-                startAutoCollect();
-            }
-        });
     }
 }
 
@@ -9410,57 +9317,8 @@ if (document.readyState === 'loading') {
 // ==================== ФУНКЦИИ ДЛЯ СБОРА ТУАЛЕТНОЙ БУМАГИ ====================
 
 // Глобальные переменные для сбора туалетной бумаги
-let toiletPaperCountdownInterval = null;
+let autoCollectToiletPaperInterval = null;
 let canClaimToiletPaper = false;
-
-// Функция для запуска обратного отсчета туалетной бумаги
-function startToiletPaperCountdown(targetTime) {
-    // Останавливаем предыдущий таймер, если есть
-    stopToiletPaperCountdown();
-    
-    const countdownEl = document.getElementById('toilet-paper-countdown');
-    const countdownTextEl = document.getElementById('toilet-paper-countdown-text');
-    
-    if (!countdownEl || !countdownTextEl) return;
-    
-    countdownEl.style.display = 'block';
-    
-    // Обновляем каждую секунду
-    toiletPaperCountdownInterval = setInterval(() => {
-        const now = new Date().getTime();
-        const remaining = targetTime - now;
-        
-        if (remaining <= 0) {
-            countdownTextEl.textContent = 'Готово к сбору!';
-            countdownTextEl.style.color = '#4CAF50';
-            stopToiletPaperCountdown();
-            canClaimToiletPaper = true;
-            
-            // Если включен автосбор, собираем автоматически
-            const autoCollectCheckbox = document.getElementById('auto-collect-toilet-paper-checkbox');
-            if (autoCollectCheckbox && autoCollectCheckbox.checked) {
-                collectToiletPaper();
-            }
-            return;
-        }
-        
-        countdownTextEl.textContent = formatCountdownTime(remaining);
-        countdownTextEl.style.color = '#4CAF50';
-    }, 1000);
-    
-    // Обновляем сразу
-    const now = new Date().getTime();
-    const remaining = targetTime - now;
-    countdownTextEl.textContent = formatCountdownTime(remaining);
-}
-
-// Функция для остановки обратного отсчета туалетной бумаги
-function stopToiletPaperCountdown() {
-    if (toiletPaperCountdownInterval) {
-        clearInterval(toiletPaperCountdownInterval);
-        toiletPaperCountdownInterval = null;
-    }
-}
 
 // Функция для сбора туалетной бумаги
 window.collectToiletPaper = async function() {
@@ -9541,9 +9399,8 @@ function handleToiletPaperResponse(data) {
     statusContentEl.innerHTML = statusHtml;
     statusEl.style.display = 'block';
     
-    // Устанавливаем обратный отсчет на 24 часа от текущего времени
+    // Сохраняем время следующего сбора в БД (24 часа от текущего времени)
     const nextCollect = new Date(Date.now() + (24 * 60 * 60 * 1000));
-    startToiletPaperCountdown(nextCollect.getTime());
     canClaimToiletPaper = false;
     
     // Сохраняем время следующего сбора в БД
@@ -9567,10 +9424,9 @@ function handleToiletPaperError(data) {
     statusContentEl.innerHTML = `<div style="color: #ff9800;">⚠️ ${message}</div>`;
     statusEl.style.display = 'block';
     
-    // Если canClaimToiletPaper: false, устанавливаем обратный отсчет на 24 часа
+    // Если canClaimToiletPaper: false, сохраняем время следующего сбора (24 часа)
     if (data.canClaimToiletPaper === false) {
         const nextCollect = new Date(Date.now() + (24 * 60 * 60 * 1000));
-        startToiletPaperCountdown(nextCollect.getTime());
         canClaimToiletPaper = false;
         saveNextToiletPaperCollectTime(nextCollect.getTime());
     }
@@ -9620,77 +9476,76 @@ window.toggleAutoCollectToiletPaper = function() {
     // Сохраняем состояние
     localStorage.setItem('auto_collect_toilet_paper_enabled', checkbox.checked ? 'true' : 'false');
     
-    // Если включен автосбор и можно собирать, собираем сразу
-    if (checkbox.checked && canClaimToiletPaper) {
-        collectToiletPaper();
+    if (checkbox.checked) {
+        // Запускаем автосбор каждые 24 часа
+        startAutoCollectToiletPaper();
+    } else {
+        // Останавливаем автосбор
+        stopAutoCollectToiletPaper();
     }
 };
 
-// Инициализация при загрузке страницы
-async function initToiletPaperCollect() {
-    // Загружаем сохраненное время следующего сбора из БД
-    const savedNextTime = await getNextToiletPaperCollectTime();
-    if (savedNextTime) {
-        const nextTime = parseInt(savedNextTime);
-        const now = new Date().getTime();
-        
-        if (nextTime > now) {
-            startToiletPaperCountdown(nextTime);
-            canClaimToiletPaper = false;
-        } else {
-            // Время прошло, можно собирать
-            const countdownEl = document.getElementById('toilet-paper-countdown');
-            const countdownTextEl = document.getElementById('toilet-paper-countdown-text');
-            if (countdownEl && countdownTextEl) {
-                countdownEl.style.display = 'block';
-                countdownTextEl.textContent = 'Готово к сбору!';
-                countdownTextEl.style.color = '#4CAF50';
-            }
-            canClaimToiletPaper = true;
-        }
-    }
+// Функция для запуска автосбора туалетной бумаги (каждые 24 часа)
+function startAutoCollectToiletPaper() {
+    // Останавливаем предыдущий интервал, если есть
+    stopAutoCollectToiletPaper();
     
-    // Загружаем состояние автосбора
+    // Проверяем каждую минуту, можно ли собирать
+    autoCollectToiletPaperInterval = setInterval(async () => {
+        const nextTime = await getNextToiletPaperCollectTime();
+        if (nextTime) {
+            const now = new Date().getTime();
+            const nextTimeMs = parseInt(nextTime);
+            
+            // Если время следующего сбора наступило или прошло, собираем
+            if (now >= nextTimeMs) {
+                console.log('⏰ Время автосбора туалетной бумаги наступило, собираем...');
+                await collectToiletPaper();
+            }
+        }
+    }, 60000); // Проверяем каждую минуту
+}
+
+// Функция для остановки автосбора туалетной бумаги
+function stopAutoCollectToiletPaper() {
+    if (autoCollectToiletPaperInterval) {
+        clearInterval(autoCollectToiletPaperInterval);
+        autoCollectToiletPaperInterval = null;
+    }
+}
+
+// Объединенная инициализация блока сбора
+async function initCollect() {
+    // Инициализация сбора прибыли
+    await initBusinessCollect();
+    
+    // Инициализация сбора туалетной бумаги
     const autoCollectEnabled = localStorage.getItem('auto_collect_toilet_paper_enabled') === 'true';
     const checkbox = document.getElementById('auto-collect-toilet-paper-checkbox');
     if (checkbox) {
         checkbox.checked = autoCollectEnabled;
-        
-        // Если включен автосбор и можно собирать, собираем сразу
-        if (autoCollectEnabled && canClaimToiletPaper) {
-            collectToiletPaper();
+        if (autoCollectEnabled) {
+            startAutoCollectToiletPaper();
         }
     }
 }
 
 // Функция для проверки canClaimToiletPaper из ресурсов
-function checkToiletPaperClaimable(resources) {
+async function checkToiletPaperClaimable(resources) {
     if (resources && resources.canClaimToiletPaper === true) {
         canClaimToiletPaper = true;
+        
+        // Запоминаем время следующего сбора (24 часа от текущего времени)
+        const nextCollect = new Date(Date.now() + (24 * 60 * 60 * 1000));
+        await saveNextToiletPaperCollectTime(nextCollect.getTime());
         
         // Если включен автосбор, собираем сразу
         const checkbox = document.getElementById('auto-collect-toilet-paper-checkbox');
         if (checkbox && checkbox.checked) {
-            collectToiletPaper();
-        } else {
-            // Показываем, что можно собирать
-            const countdownEl = document.getElementById('toilet-paper-countdown');
-            const countdownTextEl = document.getElementById('toilet-paper-countdown-text');
-            if (countdownEl && countdownTextEl) {
-                countdownEl.style.display = 'block';
-                countdownTextEl.textContent = 'Готово к сбору!';
-                countdownTextEl.style.color = '#4CAF50';
-            }
+            await collectToiletPaper();
         }
     } else {
         canClaimToiletPaper = false;
     }
-}
-
-// Запускаем инициализацию при загрузке DOM
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initToiletPaperCollect);
-} else {
-    initToiletPaperCollect();
 }
 

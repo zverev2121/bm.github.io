@@ -401,14 +401,16 @@
                     </div>
                 </section>
 
-                <!-- Раздел сбора прибыли -->
-                <section class="card" id="business-collect-section">
-                    <h2 class="section-header">
-                        <span>💼 Сбор прибыли</span>
-                        <button class="collapse-btn" onclick="toggleSection('business-collect-section', event)" aria-label="Свернуть/развернуть">▼</button>
+                <!-- Раздел сбора -->
+                <section class="card" id="collect-section">
+                    <h2 class="section-header" onclick="toggleSection('collect-section', event)" style="cursor: pointer;">
+                        <span>📦 Сбор</span>
+                        <button class="collapse-btn" onclick="event.stopPropagation(); toggleSection('collect-section', event)" aria-label="Свернуть/развернуть">▼</button>
                     </h2>
                     <div class="section-content">
-                        <div id="business-collect-content">
+                        <!-- Сбор прибыли -->
+                        <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                            <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 10px;">💼 Сбор прибыли</h3>
                             <div style="margin-bottom: 15px;">
                                 <button class="btn btn-success" onclick="collectBusinessProfit()" id="collect-profit-btn" style="width: 100%;">
                                     💰 Собрать прибыль
@@ -426,35 +428,17 @@
                                 </div>
                             </div>
                             
-                            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                            <div style="margin-top: 15px;">
                                 <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;">
                                     <input type="checkbox" id="auto-collect-checkbox" onchange="toggleAutoCollect()" style="width: 20px; height: 20px; cursor: pointer;">
-                                    <span style="font-size: 14px; font-weight: 600;">🔄 Автосбор</span>
+                                    <span style="font-size: 14px; font-weight: 600;">🔄 Автосбор (каждые 8 часов)</span>
                                 </label>
-                                
-                                <div id="auto-collect-settings" style="margin-top: 10px; display: none;">
-                                    <div class="form-group" style="margin-bottom: 10px;">
-                                        <label for="auto-collect-time" style="display: block; margin-bottom: 5px; font-size: 13px;">Время сбора (МСК):</label>
-                                        <input type="time" id="auto-collect-time" style="width: 100%; padding: 8px; font-size: 14px; border: 1px solid #555; border-radius: 4px; background: rgba(0,0,0,0.3); color: #ffffff;">
-                                        <small class="form-hint" style="display: block; margin-top: 5px; font-size: 11px; color: #aaa;">
-                                            Укажите время по МСК, когда нужно собирать прибыль автоматически
-                                        </small>
-                                    </div>
-                                    <div id="auto-collect-next-time" style="font-size: 12px; color: #aaa; margin-top: 5px;"></div>
-                                </div>
                             </div>
                         </div>
-                    </div>
-                </section>
-
-                <!-- Раздел сбора туалетной бумаги -->
-                <section class="card" id="toilet-paper-section">
-                    <h2 class="section-header">
-                        <span>🧻 Ежедневная туалетная бумага</span>
-                        <button class="collapse-btn" onclick="toggleSection('toilet-paper-section', event)" aria-label="Свернуть/развернуть">▼</button>
-                    </h2>
-                    <div class="section-content">
-                        <div id="toilet-paper-content">
+                        
+                        <!-- Сбор туалетной бумаги -->
+                        <div>
+                            <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 10px;">🧻 Ежедневная туалетная бумага</h3>
                             <div style="margin-bottom: 15px;">
                                 <button class="btn btn-success" onclick="collectToiletPaper()" id="collect-toilet-paper-btn" style="width: 100%;">
                                     🧻 Собрать туалетную бумагу
@@ -465,17 +449,10 @@
                                 <div id="toilet-paper-status-content" style="padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; font-size: 14px;"></div>
                             </div>
                             
-                            <div id="toilet-paper-countdown" style="display: none; margin-bottom: 15px;">
-                                <div style="padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px;">
-                                    <div style="font-size: 14px; font-weight: 600; margin-bottom: 5px;">⏱️ До следующего сбора:</div>
-                                    <div id="toilet-paper-countdown-text" style="font-size: 16px; font-weight: 700; color: #4CAF50;"></div>
-                                </div>
-                            </div>
-                            
-                            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                            <div style="margin-top: 15px;">
                                 <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;">
                                     <input type="checkbox" id="auto-collect-toilet-paper-checkbox" onchange="toggleAutoCollectToiletPaper()" style="width: 20px; height: 20px; cursor: pointer;">
-                                    <span style="font-size: 14px; font-weight: 600;">🔄 Автосбор</span>
+                                    <span style="font-size: 14px; font-weight: 600;">🔄 Автосбор (каждые 24 часа)</span>
                                 </label>
                             </div>
                         </div>
