@@ -5815,13 +5815,194 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
             await updateBossKeys();
         }
         
-        // Проверяем hasReward в bootstrap
+        // Проверяем hasReward и наличие активной сессии в bootstrap
         const hasReward = data.success && data.hasReward === true;
+        const hasActiveSession = data.success && data.session && data.session.bossId;
+        
         // Ищем босса по bossId, а не по currentBossIndex, так как индекс может измениться
         let boss = selectedBosses.find(b => b.id === bossId);
         // Если не нашли по bossId, пробуем по индексу (для обратной совместимости)
         if (!boss) {
             boss = selectedBosses[currentBossIndex];
+        }
+        
+        // Если сессии нет, значит бой завершен (независимо от hasReward)
+        // Это может быть случай, когда награда уже собрана или бой завершен без награды
+        if (!hasActiveSession) {
+            console.log('🔍 Активной сессии нет, бой завершен. Проверяем награду...');
+            
+            // Если есть награда - собираем её
+            if (hasReward) {
+                const bossName = boss ? boss.name : 'босса';
+                console.log('💰 Награда готова, собираем...');
+                updateAttackStatus(`✅ ${bossName} побежден! Сбор награды...`);
+                
+                // Очищаем интервал проверки статуса перед сбором награды
+                if (bossAttackInterval) {
+                    clearTimeout(bossAttackInterval);
+                    bossAttackInterval = null;
+                }
+                
+                try {
+                    const rewardData = await collectBossRewards();
+                    if (!rewardData) {
+                        console.log('⏳ Награда уже собирается, пропускаем...');
+                        return;
+                    }
+                    
+                    const rewardMessageHtml = formatRewardMessage(rewardData, 'html');
+                    const rewardMessageText = formatRewardMessage(rewardData, 'text');
+                    updateAttackStatus(rewardMessageHtml);
+                    
+                    // Показываем модальное окно с наградой
+                    showCustomModal(rewardMessageText);
+                    
+                    // После сбора награды продолжаем атаку
+                    if (boss) {
+                        const bossIndex = selectedBosses.findIndex(b => b.id === bossId);
+                        if (bossIndex !== -1) {
+                            currentBossIndex = bossIndex;
+                            boss = selectedBosses[currentBossIndex];
+                        }
+                        
+                        const weaponsCount = boss.weaponsCount || 1;
+                        const weaponsUsed = boss.weaponsUsed || 0;
+                        
+                        console.log(`Атака ${weaponsUsed}/${weaponsCount} завершена для ${boss.name}`);
+                        console.log(`Проверка: weaponsUsed (${weaponsUsed}) < weaponsCount (${weaponsCount}) = ${weaponsUsed < weaponsCount}`);
+                        
+                        if (weaponsUsed < weaponsCount) {
+                            updateAttackStatus(`Атака ${weaponsUsed}/${weaponsCount} завершена. Начинаем атаку ${weaponsUsed + 1}/${weaponsCount}...`);
+                            setTimeout(() => {
+                                attackNextBoss();
+                            }, 1000);
+                        } else {
+                            // Все атаки использованы - удаляем босса и переходим к следующему
+                            updateAttackStatus(`✅ Все атаки (${weaponsCount}) завершены для ${boss.name}. Переход к следующему боссу...`);
+                            
+                            if (currentBossIndex < selectedBosses.length && selectedBosses[currentBossIndex].id === bossId) {
+                                selectedBosses.splice(currentBossIndex, 1);
+                                updateOrderCarousel();
+                            } else {
+                                const indexToRemove = selectedBosses.findIndex(b => b.id === bossId);
+                                if (indexToRemove !== -1) {
+                                    selectedBosses.splice(indexToRemove, 1);
+                                    updateOrderCarousel();
+                                    if (indexToRemove < currentBossIndex) {
+                                        currentBossIndex--;
+                                    }
+                                }
+                            }
+                            
+                            if (selectedBosses.length === 0) {
+                                updateAttackStatus(`✅ Все боссы обработаны. Автоатака завершена.`);
+                                stopBossAutoAttack();
+                            } else {
+                                if (currentBossIndex >= selectedBosses.length) {
+                                    currentBossIndex = 0;
+                                }
+                                setTimeout(() => {
+                                    attackNextBoss();
+                                }, 1000);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Ошибка сбора награды:', error);
+                    const bossName = boss ? boss.name : 'босса';
+                    updateAttackStatus(`⚠️ Не удалось собрать награду с ${bossName}: ${error.message}`);
+                    // При ошибке продолжаем атаку
+                    if (boss) {
+                        const bossIndex = selectedBosses.findIndex(b => b.id === bossId);
+                        if (bossIndex !== -1) {
+                            currentBossIndex = bossIndex;
+                        }
+                        const weaponsCount = boss.weaponsCount || 1;
+                        const weaponsUsed = boss.weaponsUsed || 0;
+                        if (weaponsUsed < weaponsCount) {
+                            setTimeout(() => {
+                                attackNextBoss();
+                            }, 2000);
+                        } else {
+                            // Удаляем босса и переходим к следующему
+                            const indexToRemove = selectedBosses.findIndex(b => b.id === bossId);
+                            if (indexToRemove !== -1) {
+                                selectedBosses.splice(indexToRemove, 1);
+                                updateOrderCarousel();
+                                if (indexToRemove < currentBossIndex) {
+                                    currentBossIndex--;
+                                }
+                            }
+                            if (selectedBosses.length === 0) {
+                                updateAttackStatus(`✅ Все боссы обработаны. Автоатака завершена.`);
+                                stopBossAutoAttack();
+                            } else {
+                                if (currentBossIndex >= selectedBosses.length) {
+                                    currentBossIndex = 0;
+                                }
+                                setTimeout(() => {
+                                    attackNextBoss();
+                                }, 2000);
+                            }
+                        }
+                    }
+                }
+                return;
+            } else {
+                // Сессии нет и награды нет - бой завершен, переходим к следующей атаке
+                console.log('🔍 Бой завершен, награды нет. Переходим к следующей атаке...');
+                const bossName = boss ? boss.name : 'босса';
+                updateAttackStatus(`✅ ${bossName} побежден. Переход к следующей атаке...`);
+                
+                // Очищаем интервал проверки статуса
+                if (bossAttackInterval) {
+                    clearTimeout(bossAttackInterval);
+                    bossAttackInterval = null;
+                }
+                
+                if (boss) {
+                    const bossIndex = selectedBosses.findIndex(b => b.id === bossId);
+                    if (bossIndex !== -1) {
+                        currentBossIndex = bossIndex;
+                        boss = selectedBosses[currentBossIndex];
+                    }
+                    
+                    const weaponsCount = boss.weaponsCount || 1;
+                    const weaponsUsed = boss.weaponsUsed || 0;
+                    
+                    if (weaponsUsed < weaponsCount) {
+                        updateAttackStatus(`Атака ${weaponsUsed}/${weaponsCount} завершена. Начинаем атаку ${weaponsUsed + 1}/${weaponsCount}...`);
+                        setTimeout(() => {
+                            attackNextBoss();
+                        }, 1000);
+                    } else {
+                        // Все атаки использованы
+                        updateAttackStatus(`✅ Все атаки (${weaponsCount}) завершены для ${boss.name}. Переход к следующему боссу...`);
+                        
+                        const indexToRemove = selectedBosses.findIndex(b => b.id === bossId);
+                        if (indexToRemove !== -1) {
+                            selectedBosses.splice(indexToRemove, 1);
+                            updateOrderCarousel();
+                            if (indexToRemove < currentBossIndex) {
+                                currentBossIndex--;
+                            }
+                        }
+                        
+                        if (selectedBosses.length === 0) {
+                            updateAttackStatus(`✅ Все боссы обработаны. Автоатака завершена.`);
+                            stopBossAutoAttack();
+                        } else {
+                            if (currentBossIndex >= selectedBosses.length) {
+                                currentBossIndex = 0;
+                            }
+                            setTimeout(() => {
+                                attackNextBoss();
+                            }, 1000);
+                        }
+                    }
+                }
+                return;
+            }
         }
         
         if (hasReward) {
