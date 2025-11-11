@@ -502,7 +502,8 @@ const COLLAPSIBLE_SECTIONS = [
     'boss-section',
     'boss-select-section',
     'boss-combo-section',
-    'boss-weapons-section'
+    'boss-weapons-section',
+    'buy-keys-section'
 ];
 
 // Загрузка состояний блоков из БД
@@ -8194,4 +8195,105 @@ function updateComboStatus(message) {
         statusContent.innerHTML = `<p><strong>[${timestamp}]</strong> ${message}</p>`;
     }
 }
+
+// Функция покупки ключей для боссов
+window.buyBossKey = async function() {
+    const bossSelect = document.getElementById('buy-keys-boss-select');
+    const buyBtn = document.getElementById('buy-keys-btn');
+    
+    if (!bossSelect || !buyBtn) {
+        console.error('❌ Элементы интерфейса для покупки ключей не найдены');
+        return;
+    }
+    
+    const bossId = parseInt(bossSelect.value);
+    
+    if (!bossId) {
+        console.warn('⚠️ Выберите босса для покупки ключа');
+        return;
+    }
+    
+    // Названия боссов для вывода в консоль
+    const bossNames = {
+        2: 'Сизовый',
+        3: 'Махно',
+        4: 'Лютый',
+        10: 'Циклоп',
+        11: 'Раиса',
+        12: 'Бес'
+    };
+    
+    const bossName = bossNames[bossId] || `Босс ${bossId}`;
+    
+    // Блокируем кнопку на время запроса
+    buyBtn.disabled = true;
+    buyBtn.textContent = '⏳ Покупка...';
+    
+    try {
+        // Получаем токен
+        const token = await getAccessToken();
+        if (!token) {
+            throw new Error('Токен не найден');
+        }
+        
+        // Используем прокси если есть
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        if (!apiUrl) {
+            throw new Error('API URL не определен');
+        }
+        
+        console.log(`🔑 Покупка ключа для босса: ${bossName} (ID: ${bossId})`);
+        
+        // Отправляем запрос на покупку ключа
+        let response = await fetch(`${apiUrl}/boss/buy-keys`, {
+            method: 'POST',
+            headers: await getApiHeaders(),
+            body: JSON.stringify({
+                bossId: bossId
+            })
+        });
+        
+        // Обработка 401/403 - обновляем токен через initData из БД
+        if (response.status === 401 || response.status === 403) {
+            const currentInitData = await getCurrentInitData();
+            if (currentInitData && currentInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    // Повторяем запрос с новым токеном
+                    response = await fetch(`${apiUrl}/boss/buy-keys`, {
+                        method: 'POST',
+                        headers: await getApiHeaders(),
+                        body: JSON.stringify({
+                            bossId: bossId
+                        })
+                    });
+                }
+            }
+        }
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            console.log(`✅ Ключ успешно куплен на босса: ${bossName} (ID: ${bossId})`);
+            console.log(`   Добавлено ключей: ${data.added || 1}`);
+            console.log(`   Потрачено: ${data.spent || 0} ${data.currency || 'rubles'}`);
+            console.log(`   Новое количество ключей: ${data.newKeys || 0}`);
+            console.log(`   visibleBossId: ${data.visibleBossId || bossId}, keyBossId: ${data.keyBossId || bossId}`);
+            
+            // Обновляем информацию о боссе, если она загружена
+            if (window.loadBossInfo) {
+                await loadBossInfo();
+            }
+        } else {
+            const errorMessage = data.message || data.error || 'Неизвестная ошибка';
+            console.error(`❌ Ошибка при покупке ключа на босса ${bossName} (ID: ${bossId}): ${errorMessage}`);
+        }
+    } catch (error) {
+        console.error(`❌ Ошибка при покупке ключа на босса ${bossName} (ID: ${bossId}):`, error.message);
+    } finally {
+        // Разблокируем кнопку
+        buyBtn.disabled = false;
+        buyBtn.textContent = '🔑 Купить ключ';
+    }
+};
 

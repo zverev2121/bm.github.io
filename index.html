@@ -351,6 +351,33 @@
                     </div>
                     </div>
                 </section>
+
+                <!-- Раздел покупки ключей -->
+                <section class="card" id="buy-keys-section">
+                    <h2 class="section-header">
+                        <span>Купить ключи</span>
+                        <button class="collapse-btn" onclick="toggleSection('buy-keys-section', event)" aria-label="Свернуть/развернуть">▼</button>
+                    </h2>
+                    <div class="section-content">
+                    <div class="buy-keys-controls">
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label for="buy-keys-boss-select" style="display: block; margin-bottom: 8px; font-weight: 600;">Выберите босса:</label>
+                            <select id="buy-keys-boss-select" style="width: 100%; padding: 10px; font-size: 14px; border: 1px solid #555; border-radius: 4px; background: rgba(0,0,0,0.3); color: #ffffff;">
+                                <option value="">-- Выберите босса --</option>
+                                <option value="2">Сизовый</option>
+                                <option value="3">Махно</option>
+                                <option value="4">Лютый</option>
+                                <option value="10">Циклоп</option>
+                                <option value="11">Раиса</option>
+                                <option value="12">Бес</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" onclick="buyBossKey()" id="buy-keys-btn" style="width: 100%; margin-top: 10px;">
+                            🔑 Купить ключ
+                        </button>
+                    </div>
+                    </div>
+                </section>
             </div>
         </main>
         
