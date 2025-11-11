@@ -8572,8 +8572,14 @@ function displayResources(resources) {
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 14px;">
                     <div><strong>Никнейм:</strong> ${resources.nickname || '-'}</div>
                     <div><strong>Уровень:</strong> ${resources.level || 0}</div>
-                    <div><strong>Авторитет:</strong> ${formatNumber(resources.authority || 0)}</div>
-                    <div><strong>Бицепс:</strong> ${formatNumber(resources.biceps || 0)}</div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <img src="images/Avtoritet.png" alt="Авторитет" style="width: 20px; height: 20px; object-fit: contain;">
+                        <div><strong>Авторитет:</strong> ${formatNumber(resources.authority || 0)}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <img src="images/bitseps.png" alt="Бицуха" style="width: 20px; height: 20px; object-fit: contain;">
+                        <div><strong>Бицуха:</strong> ${formatNumber(resources.biceps || 0)}</div>
+                    </div>
                     <div><strong>Энергия:</strong> ${resources.energy || 0} / ${resources.max_energy || 0}</div>
                 </div>
             </div>
