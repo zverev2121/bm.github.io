@@ -5324,7 +5324,7 @@ function updateOrderCarousel() {
                     <div style="font-size: 11px; color: #e0e0e0; margin-bottom: 4px;">HP: ${currentHp.toLocaleString()}</div>
                     <div style="font-size: 11px; color: #ffd700; margin-bottom: 4px; font-weight: 600;">Режим: ${modeName} ${modeMultiplier}</div>
                     ${comboModeName ? `<div style="font-size: 10px; color: ${comboModeColor}; margin-bottom: 4px; font-weight: 600;">Комбо: ${comboModeName}</div>` : '<div style="font-size: 10px; color: #888; margin-bottom: 4px;">Комбо: нет</div>'}
-                    <div style="font-size: 10px; color: #ff6b6b; margin-bottom: 8px; font-weight: 600;">Атак: ${boss.weaponsCount || 1}</div>
+                    <div style="font-size: 10px; color: #ff6b6b; margin-bottom: 8px; font-weight: 600;">Атак: ${Math.max(0, (boss.weaponsCount || 1) - (boss.weaponsUsed || 0))}</div>
                 </div>
                 <div style="display: flex; gap: 5px; margin-top: 8px; justify-content: center;">
                     <button onclick="moveBossInOrder(${index}, -1); event.stopPropagation();" 
@@ -5590,13 +5590,19 @@ async function attackNextBoss() {
         }
         
         if (data.success) {
+            // Успешно начали атаку - уменьшаем счетчик сразу
+            // Увеличиваем weaponsUsed сразу после успешного start-attack
+            boss.weaponsUsed = (boss.weaponsUsed || 0) + 1;
+            // Обновляем карусель, чтобы показать уменьшенное количество атак
+            updateOrderCarousel();
+            
             // После успешного start-attack всегда проверяем bootstrap для отслеживания статуса
             // Не проверяем isOver здесь, так как статус будем проверять через bootstrap
             if (data.isOver) {
                 // Если бой уже завершен сразу после start-attack, проверяем награду через bootstrap
                 const weaponsUsed = boss.weaponsUsed || 0;
                 const weaponsCount = boss.weaponsCount || 1;
-                updateAttackStatus(`⚔️ Бой с ${boss.name} завершен. Проверка награды через bootstrap... (Атака ${weaponsUsed + 1}/${weaponsCount})`);
+                updateAttackStatus(`⚔️ Бой с ${boss.name} завершен. Проверка награды через bootstrap... (Атака ${weaponsUsed}/${weaponsCount})`);
                 
                 // Проверяем статус через bootstrap сразу
                 bossAttackInterval = setTimeout(() => {
@@ -5607,7 +5613,7 @@ async function attackNextBoss() {
                 // НЕ переходим к следующему боссу, остаемся на текущем
                 const weaponsUsed = boss.weaponsUsed || 0;
                 const weaponsCount = boss.weaponsCount || 1;
-                updateAttackStatus(`⚔️ Бой с ${boss.name} начат. Проверка статуса через bootstrap... (Атака ${weaponsUsed + 1}/${weaponsCount})`);
+                updateAttackStatus(`⚔️ Бой с ${boss.name} начат. Проверка статуса через bootstrap... (Атака ${weaponsUsed}/${weaponsCount})`);
                 
                 // Проверяем статус через bootstrap через 20 секунд
                 bossAttackInterval = setTimeout(() => {
@@ -5751,9 +5757,8 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
                 // Показываем модальное окно с наградой
                 showCustomModal(rewardMessageText);
                 
-                // Увеличиваем счетчик использованных оружий
+                // Счетчик weaponsUsed уже увеличен после start-attack, просто проверяем статус
                 if (boss) {
-                    boss.weaponsUsed = (boss.weaponsUsed || 0) + 1;
                     const weaponsCount = boss.weaponsCount || 1;
                     const weaponsUsed = boss.weaponsUsed || 0;
                     
@@ -5815,8 +5820,8 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
                 console.error('Ошибка сбора награды:', error);
                 updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
                 // При ошибке сбора награды все равно переходим к следующей атаке или боссу
+                // Счетчик weaponsUsed уже увеличен после start-attack
                 if (boss) {
-                    boss.weaponsUsed = (boss.weaponsUsed || 0) + 1;
                     const weaponsCount = boss.weaponsCount || 1;
                     const weaponsUsed = boss.weaponsUsed || 0;
                     
