@@ -114,6 +114,12 @@ window.switchTab = function switchTab(tabName) {
             console.log('🔄 [switchTab] Переключились на вкладку "main", загружаем сохраненные комбо');
             loadSavedCombosAndDisplay();
         }
+        
+        // Если переключились на вкладку "Ресурсы", загружаем ресурсы из БД
+        if (tabName === 'resources') {
+            console.log('🔄 [switchTab] Переключились на вкладку "resources", загружаем ресурсы');
+            loadResources();
+        }
     }
     
     // Добавляем активный класс к выбранной кнопке
@@ -503,7 +509,8 @@ const COLLAPSIBLE_SECTIONS = [
     'boss-select-section',
     'boss-combo-section',
     'boss-weapons-section',
-    'buy-keys-section'
+    'buy-keys-section',
+    'resources-section'
 ];
 
 // Загрузка состояний блоков из БД
@@ -8364,7 +8371,12 @@ window.buyBossKey = async function() {
             const currency = data.currency || 'rubles';
             const newKeys = data.newKeys || 0;
             
-            updateBuyKeysStatus(`✅ Ключ куплен на ${bossName}! Добавлено: ${added}, Потрачено: ${spent} ${currency}, Всего ключей: ${newKeys}`);
+            // Преобразуем название валюты для отображения
+            const currencyDisplay = currency === 'paper' ? 'бумага' : 
+                                   currency === 'rubles' ? 'рублей' : 
+                                   currency;
+            
+            updateBuyKeysStatus(`✅ Ключ куплен на ${bossName}! Добавлено: ${added}, Потрачено: ${spent} ${currencyDisplay}, Всего ключей: ${newKeys}`);
             
             console.log(`✅ Ключ успешно куплен на босса: ${bossName} (ID: ${bossId})`);
             console.log(`   Добавлено ключей: ${added}`);
@@ -8388,6 +8400,193 @@ window.buyBossKey = async function() {
         // Разблокируем кнопку
         buyBtn.disabled = false;
         buyBtn.textContent = '🔑 Купить ключ';
+    }
+};
+
+// ==================== ФУНКЦИИ ДЛЯ РАБОТЫ С РЕСУРСАМИ ====================
+
+// Загрузка ресурсов из БД
+async function loadResources() {
+    const resourcesContent = document.getElementById('resources-content');
+    if (!resourcesContent) return;
+    
+    try {
+        resourcesContent.innerHTML = '<p>Загрузка ресурсов...</p>';
+        
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        const response = await fetch(`${apiUrl}/player/resources`, {
+            method: 'GET',
+            headers: await getApiHeaders()
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Ошибка загрузки: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        if (data.success && data.resources) {
+            displayResources(data.resources);
+        } else {
+            resourcesContent.innerHTML = '<p style="color: #ff6b6b;">Не удалось загрузить ресурсы. Нажмите "Обновить ресурсы" для получения данных с сервера.</p>';
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки ресурсов:', error);
+        resourcesContent.innerHTML = `<p style="color: #ff6b6b;">Ошибка загрузки ресурсов: ${error.message}</p>`;
+    }
+}
+
+// Отображение ресурсов
+function displayResources(resources) {
+    const resourcesContent = document.getElementById('resources-content');
+    if (!resourcesContent) return;
+    
+    const combatStats = resources.combat_stats || {};
+    
+    let html = `
+        <div style="display: grid; gap: 15px;">
+            <!-- Основная информация -->
+            <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+                <h3 style="margin: 0 0 10px 0; font-size: 16px; font-weight: 600;">👤 Основная информация</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 14px;">
+                    <div><strong>Никнейм:</strong> ${resources.nickname || '-'}</div>
+                    <div><strong>Уровень:</strong> ${resources.level || 0}</div>
+                    <div><strong>Авторитет:</strong> ${formatNumber(resources.authority || 0)}</div>
+                    <div><strong>Бицепс:</strong> ${formatNumber(resources.biceps || 0)}</div>
+                    <div><strong>Энергия:</strong> ${resources.energy || 0} / ${resources.max_energy || 0}</div>
+                </div>
+            </div>
+            
+            <!-- Валюты -->
+            <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+                <h3 style="margin: 0 0 10px 0; font-size: 16px; font-weight: 600;">💰 Валюты</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 14px;">
+                    <div><strong>Рубли:</strong> ${formatNumber(resources.rubles || 0)}</div>
+                    <div><strong>Мыло:</strong> ${formatNumber(resources.soap || 0)}</div>
+                    <div><strong>Бумага:</strong> ${formatNumber(resources.paper || 0)}</div>
+                    <div><strong>Сахар:</strong> ${formatNumber(resources.sugar || 0)}</div>
+                    <div><strong>Сигареты:</strong> ${formatNumber(resources.cigarettes || 0)}</div>
+                    <div><strong>Чефир:</strong> ${formatNumber(resources.chefir || 0)}</div>
+                    <div><strong>Борщ:</strong> ${formatNumber(resources.stew || 0)}</div>
+                    <div><strong>Чипсы:</strong> ${formatNumber(resources.chips || 0)}</div>
+                    <div><strong>Синие спички:</strong> ${formatNumber(resources.blue_matches || 0)}</div>
+                    <div><strong>Розовые спички:</strong> ${formatNumber(resources.pink_matches || 0)}</div>
+                    <div><strong>Сгущенка:</strong> ${formatNumber(resources.condensed_milk || 0)}</div>
+                    <div><strong>Билеты удачи:</strong> ${formatNumber(resources.fortune_tickets || 0)}</div>
+                </div>
+            </div>
+            
+            <!-- Оружие -->
+            <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+                <h3 style="margin: 0 0 10px 0; font-size: 16px; font-weight: 600;">⚔️ Оружие</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 14px;">
+                    <div><strong>Яд:</strong> ${formatNumber(resources.poison_count || 0)}</div>
+                    <div><strong>Самопал:</strong> ${formatNumber(resources.gunshot_count || 0)}</div>
+                    <div><strong>Финка:</strong> ${formatNumber(resources.knife_count || 0)}</div>
+                </div>
+            </div>
+            
+            <!-- Боевая статистика -->
+            <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+                <h3 style="margin: 0 0 10px 0; font-size: 16px; font-weight: 600;">📊 Боевая статистика</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 14px;">
+                    <div><strong>Яд (урон):</strong> ${formatNumber(combatStats.poison || 0)}</div>
+                    <div><strong>Яд (крит):</strong> ${((combatStats.poisonCrit || 0) * 100).toFixed(1)}%</div>
+                    <div><strong>Самопал (урон):</strong> ${formatNumber(combatStats.gunshot || 0)}</div>
+                    <div><strong>Самопал (крит):</strong> ${((combatStats.gunshotCrit || 0) * 100).toFixed(1)}%</div>
+                    <div><strong>Финка (урон):</strong> ${formatNumber(combatStats.knife || 0)}</div>
+                    <div><strong>Финка (крит):</strong> ${((combatStats.knifeCrit || 0) * 100).toFixed(1)}%</div>
+                    <div><strong>Грудь (урон):</strong> ${formatNumber(combatStats.punchChest || 0)}</div>
+                    <div><strong>Грудь (крит):</strong> ${((combatStats.punchChestCrit || 0) * 100).toFixed(1)}%</div>
+                    <div><strong>Пах (урон):</strong> ${formatNumber(combatStats.kickBalls || 0)}</div>
+                    <div><strong>Пах (крит):</strong> ${((combatStats.kickBallsCrit || 0) * 100).toFixed(1)}%</div>
+                    <div><strong>Глаз (урон):</strong> ${formatNumber(combatStats.pokeEyes || 0)}</div>
+                    <div><strong>Глаз (крит):</strong> ${((combatStats.pokeEyesCrit || 0) * 100).toFixed(1)}%</div>
+                    <div><strong>Колено (урон):</strong> ${formatNumber(combatStats.kneeEar || 0)}</div>
+                    <div><strong>Колено (крит):</strong> ${((combatStats.kneeEarCrit || 0) * 100).toFixed(1)}%</div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    resourcesContent.innerHTML = html;
+}
+
+// Форматирование чисел с разделителями тысяч
+function formatNumber(num) {
+    if (num === null || num === undefined) return '0';
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
+
+// Обновление ресурсов через /api/player/init
+window.refreshResources = async function() {
+    const refreshBtn = document.getElementById('refresh-resources-btn');
+    const resourcesContent = document.getElementById('resources-content');
+    
+    if (!refreshBtn || !resourcesContent) return;
+    
+    try {
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = '⏳ Обновление...';
+        resourcesContent.innerHTML = '<p>Обновление ресурсов с сервера...</p>';
+        
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        const response = await fetch(`${apiUrl}/player/init`, {
+            method: 'POST',
+            headers: await getApiHeaders(),
+            body: JSON.stringify({})
+        });
+        
+        // Обработка 401/403 - обновляем токен через initData из БД
+        if (response.status === 401 || response.status === 403) {
+            const currentInitData = await getCurrentInitData();
+            if (currentInitData && currentInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    // Повторяем запрос с новым токеном
+                    const retryResponse = await fetch(`${apiUrl}/player/init`, {
+                        method: 'POST',
+                        headers: await getApiHeaders(),
+                        body: JSON.stringify({})
+                    });
+                    
+                    if (retryResponse.ok) {
+                        const retryData = await retryResponse.json();
+                        if (retryData.success) {
+                            // После обновления загружаем ресурсы из БД
+                            await loadResources();
+                            if (tg && tg.showAlert) {
+                                tg.showAlert('✅ Ресурсы успешно обновлены!');
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (!response.ok) {
+            throw new Error(`Ошибка обновления: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        if (data.success) {
+            // После обновления загружаем ресурсы из БД
+            await loadResources();
+            if (tg && tg.showAlert) {
+                tg.showAlert('✅ Ресурсы успешно обновлены!');
+            }
+        } else {
+            throw new Error(data.error || 'Не удалось обновить ресурсы');
+        }
+    } catch (error) {
+        console.error('Ошибка обновления ресурсов:', error);
+        resourcesContent.innerHTML = `<p style="color: #ff6b6b;">Ошибка обновления ресурсов: ${error.message}</p>`;
+        if (tg && tg.showAlert) {
+            tg.showAlert(`❌ Ошибка обновления ресурсов: ${error.message}`);
+        }
+    } finally {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = '🔄 Обновить ресурсы';
     }
 };
 

@@ -382,6 +382,25 @@
                     </div>
                 </section>
             </div>
+
+            <!-- Вкладка: Ресурсы -->
+            <div class="tab-content" id="tab-resources" style="display: none;">
+                <section class="card" id="resources-section">
+                    <h2 class="section-header">
+                        <span>💰 Ресурсы</span>
+                        <button class="collapse-btn" onclick="toggleSection('resources-section', event)" aria-label="Свернуть/развернуть">▼</button>
+                    </h2>
+                    <div class="section-content">
+                        <button class="btn btn-primary" onclick="refreshResources()" id="refresh-resources-btn" style="width: 100%; margin-bottom: 15px;">
+                            🔄 Обновить ресурсы
+                        </button>
+                        
+                        <div id="resources-content">
+                            <p>Нажмите "Обновить ресурсы" для загрузки данных</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
         </main>
         
         <!-- Кнопка настроек внизу экрана -->
@@ -399,6 +418,10 @@
         <button class="tab-button active" id="tab-btn-boss-attack" type="button">
             <span class="tab-icon">⚔️</span>
             <span class="tab-label">Атака боссов</span>
+        </button>
+        <button class="tab-button" id="tab-btn-resources" type="button">
+            <span class="tab-icon">💰</span>
+            <span class="tab-label">Ресурсы</span>
         </button>
     </div>
 
