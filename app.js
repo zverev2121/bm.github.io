@@ -5302,6 +5302,35 @@ function updateOrderCarousel() {
     const orderCarousel = document.getElementById('carousel-order');
     if (!orderCarousel) return;
     
+    // Удаляем боссов с 0 оставшихся атак перед отображением
+    const bossesToRemove = [];
+    selectedBosses.forEach((boss, index) => {
+        const weaponsCount = boss.weaponsCount || 1;
+        const weaponsUsed = boss.weaponsUsed || 0;
+        const remainingAttacks = weaponsCount - weaponsUsed;
+        if (remainingAttacks <= 0) {
+            bossesToRemove.push(index);
+        }
+    });
+    
+    // Удаляем боссов с конца, чтобы не сбить индексы
+    for (let i = bossesToRemove.length - 1; i >= 0; i--) {
+        const indexToRemove = bossesToRemove[i];
+        // Синхронизируем currentBossIndex при удалении во время автоатаки
+        if (isAttacking) {
+            if (indexToRemove < currentBossIndex) {
+                currentBossIndex--;
+            } else if (indexToRemove === currentBossIndex) {
+                // Если удалили текущего босса, переходим к следующему или первому
+                if (currentBossIndex >= selectedBosses.length - 1) {
+                    currentBossIndex = selectedBosses.length > 1 ? 0 : -1;
+                }
+            }
+        }
+        selectedBosses.splice(indexToRemove, 1);
+        console.log(`🗑️ [updateOrderCarousel] Удален босс с индексом ${indexToRemove} (0 оставшихся атак)`);
+    }
+    
     if (selectedBosses.length === 0) {
         orderCarousel.innerHTML = `
             <div style="padding: 20px; text-align: center; color: var(--tg-theme-hint-color, #999);">
@@ -5405,31 +5434,101 @@ window.moveBossInOrder = function(index, direction) {
                 // Проверяем, находится ли текущий босс на правильной позиции
                 if (currentBoss && currentBoss.id === currentBossId) {
                     // Текущий босс на месте, индекс правильный
-                    // Но если текущий босс уже был атакован (weaponsUsed > 0), 
-                    // и пользователь переместил других боссов вперед,
-                    // нужно проверить, не нужно ли перейти к следующему боссу
                     const weaponsUsed = currentBoss.weaponsUsed || 0;
                     const weaponsCount = currentBoss.weaponsCount || 1;
                     
-                    // Если все атаки на текущего босса завершены, переходим к следующему
+                    // Если все атаки на текущего босса завершены, переходим к следующему неатакованному
+                    // в новом порядке
                     if (weaponsUsed >= weaponsCount) {
-                        // Находим следующего босса в новом порядке
-                        const nextBossIndex = currentBossIndex + 1;
-                        if (nextBossIndex < selectedBosses.length) {
+                        // Ищем следующего босса с оставшимися атаками, начиная с позиции после текущего
+                        let nextBossIndex = -1;
+                        for (let i = currentBossIndex + 1; i < selectedBosses.length; i++) {
+                            const boss = selectedBosses[i];
+                            const bossWeaponsUsed = boss.weaponsUsed || 0;
+                            const bossWeaponsCount = boss.weaponsCount || 1;
+                            if (bossWeaponsUsed < bossWeaponsCount) {
+                                nextBossIndex = i;
+                                break;
+                            }
+                        }
+                        
+                        // Если не нашли после текущего, ищем с начала списка
+                        if (nextBossIndex === -1) {
+                            for (let i = 0; i < currentBossIndex; i++) {
+                                const boss = selectedBosses[i];
+                                const bossWeaponsUsed = boss.weaponsUsed || 0;
+                                const bossWeaponsCount = boss.weaponsCount || 1;
+                                if (bossWeaponsUsed < bossWeaponsCount) {
+                                    nextBossIndex = i;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // Если нашли следующего босса с оставшимися атаками, переходим к нему
+                        if (nextBossIndex !== -1) {
                             currentBossIndex = nextBossIndex;
-                            console.log(`🔄 [moveBossInOrder] Все атаки на текущего босса завершены, переходим к следующему: ${selectedBosses[currentBossIndex]?.name}`);
+                            console.log(`🔄 [moveBossInOrder] Все атаки на текущего босса завершены, переходим к следующему неатакованному: ${selectedBosses[currentBossIndex]?.name} (индекс ${currentBossIndex})`);
+                        } else {
+                            // Если не нашли следующего, просто переходим к следующему по индексу
+                            const nextBossIndex = currentBossIndex + 1;
+                            if (nextBossIndex < selectedBosses.length) {
+                                currentBossIndex = nextBossIndex;
+                                console.log(`🔄 [moveBossInOrder] Все атаки на текущего босса завершены, переходим к следующему: ${selectedBosses[currentBossIndex]?.name}`);
+                            }
                         }
                     }
+                    // Если текущий босс еще не завершен (weaponsUsed < weaponsCount),
+                    // остаемся на нем, чтобы продолжить атаку
                 } else {
                     // Текущий босс был перемещен - обновляем индекс на его новую позицию
                     currentBossIndex = newBossIndex;
                     console.log(`🔄 [moveBossInOrder] Текущий босс был перемещен, обновляем индекс на ${currentBossIndex}`);
+                    
+                    // После обновления индекса проверяем, не нужно ли перейти к следующему неатакованному
+                    const movedBoss = selectedBosses[currentBossIndex];
+                    if (movedBoss) {
+                        const weaponsUsed = movedBoss.weaponsUsed || 0;
+                        const weaponsCount = movedBoss.weaponsCount || 1;
+                        
+                        // Если перемещенный босс уже был атакован, ищем следующего неатакованного
+                        if (weaponsUsed > 0 && weaponsUsed >= weaponsCount) {
+                            // Ищем следующего босса с оставшимися атаками
+                            let nextBossIndex = -1;
+                            for (let i = currentBossIndex + 1; i < selectedBosses.length; i++) {
+                                const boss = selectedBosses[i];
+                                const bossWeaponsUsed = boss.weaponsUsed || 0;
+                                const bossWeaponsCount = boss.weaponsCount || 1;
+                                if (bossWeaponsUsed < bossWeaponsCount) {
+                                    nextBossIndex = i;
+                                    break;
+                                }
+                            }
+                            
+                            if (nextBossIndex !== -1) {
+                                currentBossIndex = nextBossIndex;
+                                console.log(`🔄 [moveBossInOrder] Перемещенный босс уже завершен, переходим к следующему: ${selectedBosses[currentBossIndex]?.name}`);
+                            }
+                        }
+                    }
                 }
             } else {
-                // Текущий босс не найден (возможно, был удален) - переходим к следующему
-                if (currentBossIndex < selectedBosses.length) {
-                    console.log(`🔄 [moveBossInOrder] Текущий босс не найден, остаемся на индексе ${currentBossIndex}`);
-                } else {
+                // Текущий босс не найден (возможно, был удален) - ищем следующего неатакованного
+                let nextBossIndex = -1;
+                for (let i = 0; i < selectedBosses.length; i++) {
+                    const boss = selectedBosses[i];
+                    const bossWeaponsUsed = boss.weaponsUsed || 0;
+                    const bossWeaponsCount = boss.weaponsCount || 1;
+                    if (bossWeaponsUsed < bossWeaponsCount) {
+                        nextBossIndex = i;
+                        break;
+                    }
+                }
+                
+                if (nextBossIndex !== -1) {
+                    currentBossIndex = nextBossIndex;
+                    console.log(`🔄 [moveBossInOrder] Текущий босс не найден, переходим к следующему неатакованному: ${selectedBosses[currentBossIndex]?.name}`);
+                } else if (currentBossIndex >= selectedBosses.length) {
                     currentBossIndex = 0;
                     console.log(`🔄 [moveBossInOrder] Текущий босс не найден, сбрасываем индекс на 0`);
                 }
@@ -8359,7 +8458,12 @@ window.buyBossKey = async function() {
         
         // Обработка таймаута 999
         if (response.status === 999) {
-            const errorMessage = data.message || data.error || 'Не удалось дождаться ответа';
+            let errorMessage = data.message || data.error || 'Не удалось дождаться ответа';
+            
+            // Заменяем названия валют на русские в сообщениях об ошибках
+            // Заменяем "paper" как отдельное слово
+            errorMessage = errorMessage.replace(/\bpaper\b/gi, 'бумага');
+            
             updateBuyKeysStatus(`⏱️ ${bossName}: Таймаут (999). ${errorMessage}`);
             console.warn(`⏱️ Таймаут (999) при покупке ключа для ${bossName}: ${errorMessage}`);
             return;
@@ -8389,13 +8493,24 @@ window.buyBossKey = async function() {
                 await loadBossInfo();
             }
         } else {
-            const errorMessage = data.message || data.error || 'Неизвестная ошибка';
+            let errorMessage = data.message || data.error || 'Неизвестная ошибка';
+            
+            // Заменяем названия валют на русские в сообщениях об ошибках
+            // Заменяем "paper" как отдельное слово
+            errorMessage = errorMessage.replace(/\bpaper\b/gi, 'бумага');
+            
             updateBuyKeysStatus(`❌ Ошибка при покупке ключа на ${bossName}: ${errorMessage}`);
             console.error(`❌ Ошибка при покупке ключа на босса ${bossName} (ID: ${bossId}): ${errorMessage}`);
         }
     } catch (error) {
-        updateBuyKeysStatus(`❌ Ошибка при покупке ключа на ${bossName}: ${error.message}`);
-        console.error(`❌ Ошибка при покупке ключа на босса ${bossName} (ID: ${bossId}):`, error.message);
+        let errorMessage = error.message || 'Неизвестная ошибка';
+        
+        // Заменяем названия валют на русские в сообщениях об ошибках
+        // Заменяем "paper" как отдельное слово
+        errorMessage = errorMessage.replace(/\bpaper\b/gi, 'бумага');
+        
+        updateBuyKeysStatus(`❌ Ошибка при покупке ключа на ${bossName}: ${errorMessage}`);
+        console.error(`❌ Ошибка при покупке ключа на босса ${bossName} (ID: ${bossId}):`, errorMessage);
     } finally {
         // Разблокируем кнопку
         buyBtn.disabled = false;
@@ -8411,7 +8526,14 @@ async function loadResources() {
     if (!resourcesContent) return;
     
     try {
-        resourcesContent.innerHTML = '<p>Загрузка ресурсов...</p>';
+        // Не показываем сообщение о загрузке, если уже есть данные
+        const hasContent = resourcesContent.innerHTML.trim() && 
+                           !resourcesContent.innerHTML.includes('Нажмите') &&
+                           !resourcesContent.innerHTML.includes('Ошибка');
+        
+        if (!hasContent) {
+            resourcesContent.innerHTML = '<p>Загрузка ресурсов...</p>';
+        }
         
         const apiUrl = API_SERVER_URL || GAME_API_URL;
         const response = await fetch(`${apiUrl}/player/resources`, {
@@ -8460,18 +8582,33 @@ function displayResources(resources) {
             <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
                 <h3 style="margin: 0 0 10px 0; font-size: 16px; font-weight: 600;">💰 Валюты</h3>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 14px;">
-                    <div><strong>Рубли:</strong> ${formatNumber(resources.rubles || 0)}</div>
-                    <div><strong>Мыло:</strong> ${formatNumber(resources.soap || 0)}</div>
-                    <div><strong>Бумага:</strong> ${formatNumber(resources.paper || 0)}</div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <img src="images/rubles.png" alt="Рубли" style="width: 20px; height: 20px; object-fit: contain;">
+                        <div><strong>Рубли:</strong> ${formatNumber(resources.rubles || 0)}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <img src="images/soap.png" alt="Мыло" style="width: 20px; height: 20px; object-fit: contain;">
+                        <div><strong>Мыло:</strong> ${formatNumber(resources.soap || 0)}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <img src="images/paper.png" alt="Бумага" style="width: 20px; height: 20px; object-fit: contain;">
+                        <div><strong>Бумага:</strong> ${formatNumber(resources.paper || 0)}</div>
+                    </div>
                     <div><strong>Сахар:</strong> ${formatNumber(resources.sugar || 0)}</div>
-                    <div><strong>Сигареты:</strong> ${formatNumber(resources.cigarettes || 0)}</div>
-                    <div><strong>Чефир:</strong> ${formatNumber(resources.chefir || 0)}</div>
-                    <div><strong>Борщ:</strong> ${formatNumber(resources.stew || 0)}</div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <img src="images/cigarettes.png" alt="Сигареты" style="width: 20px; height: 20px; object-fit: contain;">
+                        <div><strong>Сигареты:</strong> ${formatNumber(resources.cigarettes || 0)}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <img src="images/chefir.png" alt="Чифир" style="width: 20px; height: 20px; object-fit: contain;">
+                        <div><strong>Чифир:</strong> ${formatNumber(resources.chefir || 0)}</div>
+                    </div>
                     <div><strong>Чипсы:</strong> ${formatNumber(resources.chips || 0)}</div>
                     <div><strong>Синие спички:</strong> ${formatNumber(resources.blue_matches || 0)}</div>
-                    <div><strong>Розовые спички:</strong> ${formatNumber(resources.pink_matches || 0)}</div>
-                    <div><strong>Сгущенка:</strong> ${formatNumber(resources.condensed_milk || 0)}</div>
-                    <div><strong>Билеты удачи:</strong> ${formatNumber(resources.fortune_tickets || 0)}</div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <img src="images/condensed_milk.png" alt="Сгущенка" style="width: 20px; height: 20px; object-fit: contain;">
+                        <div><strong>Сгущенка:</strong> ${formatNumber(resources.condensed_milk || 0)}</div>
+                    </div>
                 </div>
             </div>
             
@@ -8526,8 +8663,7 @@ window.refreshResources = async function() {
     
     try {
         refreshBtn.disabled = true;
-        refreshBtn.textContent = '⏳ Обновление...';
-        resourcesContent.innerHTML = '<p>Обновление ресурсов с сервера...</p>';
+        refreshBtn.textContent = 'Обновление...';
         
         const apiUrl = API_SERVER_URL || GAME_API_URL;
         const response = await fetch(`${apiUrl}/player/init`, {
@@ -8552,7 +8688,7 @@ window.refreshResources = async function() {
                     if (retryResponse.ok) {
                         const retryData = await retryResponse.json();
                         if (retryData.success) {
-                            // После обновления загружаем ресурсы из БД
+                            // После обновления загружаем ресурсы из БД (без сообщения о загрузке)
                             await loadResources();
                             if (tg && tg.showAlert) {
                                 tg.showAlert('✅ Ресурсы успешно обновлены!');
@@ -8570,7 +8706,7 @@ window.refreshResources = async function() {
         
         const data = await response.json();
         if (data.success) {
-            // После обновления загружаем ресурсы из БД
+            // После обновления загружаем ресурсы из БД (без сообщения о загрузке)
             await loadResources();
             if (tg && tg.showAlert) {
                 tg.showAlert('✅ Ресурсы успешно обновлены!');
@@ -8580,13 +8716,16 @@ window.refreshResources = async function() {
         }
     } catch (error) {
         console.error('Ошибка обновления ресурсов:', error);
-        resourcesContent.innerHTML = `<p style="color: #ff6b6b;">Ошибка обновления ресурсов: ${error.message}</p>`;
+        const resourcesContent = document.getElementById('resources-content');
+        if (resourcesContent) {
+            resourcesContent.innerHTML = `<p style="color: #ff6b6b;">Ошибка обновления ресурсов: ${error.message}</p>`;
+        }
         if (tg && tg.showAlert) {
             tg.showAlert(`❌ Ошибка обновления ресурсов: ${error.message}`);
         }
     } finally {
         refreshBtn.disabled = false;
-        refreshBtn.textContent = '🔄 Обновить ресурсы';
+        refreshBtn.textContent = 'Обновить ресурсы';
     }
 };
 
