@@ -119,6 +119,10 @@ window.switchTab = function switchTab(tabName) {
         if (tabName === 'resources') {
             console.log('🔄 [switchTab] Переключились на вкладку "resources", загружаем ресурсы');
             loadResources();
+            // Инициализируем блок сбора прибыли
+            initBusinessCollect();
+            // Инициализируем блок сбора туалетной бумаги
+            initToiletPaperCollect();
         }
     }
     
@@ -8613,6 +8617,7 @@ function displayResources(resources) {
                         <div><strong>Чифир:</strong> ${formatNumber(resources.chefir || 0)}</div>
                     </div>
                     <div><strong>Фишки:</strong> ${formatNumber(resources.chips || 0)}</div>
+                    <div><strong>Тушенка:</strong> ${formatNumber(resources.stew || 0)}</div>
                     <div><strong>Синие спички:</strong> ${formatNumber(resources.blue_matches || 0)}</div>
                     <div><strong>Розовые спички:</strong> ${formatNumber(resources.pink_matches || 0)}</div>
                     <div style="display: flex; align-items: center; gap: 6px;">
@@ -8707,6 +8712,10 @@ window.refreshResources = async function() {
                     if (retryResponse.ok) {
                         const retryData = await retryResponse.json();
                         if (retryData.success) {
+                            // Проверяем canClaimToiletPaper из ответа
+                            if (retryData.canClaimToiletPaper !== undefined) {
+                                checkToiletPaperClaimable({ canClaimToiletPaper: retryData.canClaimToiletPaper });
+                            }
                             // После обновления загружаем ресурсы из БД (без сообщения о загрузке)
                             await loadResources();
                             return;
@@ -8728,6 +8737,10 @@ window.refreshResources = async function() {
         
         const data = await response.json();
         if (data.success) {
+            // Проверяем canClaimToiletPaper из ответа
+            if (data.canClaimToiletPaper !== undefined) {
+                checkToiletPaperClaimable({ canClaimToiletPaper: data.canClaimToiletPaper });
+            }
             // После обновления загружаем ресурсы из БД (без сообщения о загрузке)
             await loadResources();
         } else {
@@ -8934,4 +8947,750 @@ window.confirmWeaponPurchase = async function(weaponType, pricePerUnit) {
         }
     }
 };
+
+// ==================== ФУНКЦИИ ДЛЯ СБОРА ПРИБЫЛИ ====================
+
+// Глобальные переменные для сбора прибыли
+let collectCountdownInterval = null;
+let autoCollectInterval = null;
+let nextCollectTime = null;
+
+// Функция для форматирования времени обратного отсчета
+function formatCountdownTime(ms) {
+    if (ms <= 0) return '0:00:00';
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+// Функция для получения текущего времени в МСК
+function getMoscowTime() {
+    const now = new Date();
+    try {
+        // Используем Intl API для правильной конвертации в МСК
+        const formatter = new Intl.DateTimeFormat('ru-RU', {
+            timeZone: 'Europe/Moscow',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        });
+        
+        const parts = formatter.formatToParts(now);
+        const hours = parseInt(parts.find(p => p.type === 'hour').value);
+        const minutes = parseInt(parts.find(p => p.type === 'minute').value);
+        const seconds = parseInt(parts.find(p => p.type === 'second').value);
+        
+        return { hours, minutes, seconds, date: now };
+    } catch (e) {
+        // Fallback: МСК = UTC+3
+        const moscowTime = new Date(now.getTime() + (3 * 60 * 60 * 1000));
+        return {
+            hours: moscowTime.getUTCHours(),
+            minutes: moscowTime.getUTCMinutes(),
+            seconds: moscowTime.getUTCSeconds(),
+            date: now
+        };
+    }
+}
+
+// Функция для запуска обратного отсчета
+function startCollectCountdown(targetTime) {
+    // Останавливаем предыдущий таймер, если есть
+    stopCollectCountdown();
+    
+    nextCollectTime = targetTime;
+    const countdownEl = document.getElementById('collect-countdown');
+    const countdownTextEl = document.getElementById('countdown-text');
+    
+    if (!countdownEl || !countdownTextEl) return;
+    
+    countdownEl.style.display = 'block';
+    
+    // Обновляем каждую секунду
+    collectCountdownInterval = setInterval(() => {
+        const now = new Date().getTime();
+        const remaining = targetTime - now;
+        
+        if (remaining <= 0) {
+            countdownTextEl.textContent = 'Готово к сбору!';
+            countdownTextEl.style.color = '#4CAF50';
+            stopCollectCountdown();
+            
+            // Если включен автосбор, проверяем, наступило ли время сбора
+            const autoCollectCheckbox = document.getElementById('auto-collect-checkbox');
+            if (autoCollectCheckbox && autoCollectCheckbox.checked) {
+                const timeInput = document.getElementById('auto-collect-time');
+                if (timeInput && timeInput.value) {
+                    const [hours, minutes] = timeInput.value.split(':').map(Number);
+                    const moscowTime = getMoscowTime();
+                    const now = moscowTime.date;
+                    const targetTime = new Date(now);
+                    targetTime.setHours(hours, minutes, 0, 0);
+                    
+                    // Если время уже прошло сегодня, планируем на завтра
+                    if (targetTime <= now) {
+                        targetTime.setDate(targetTime.getDate() + 1);
+                    }
+                    
+                    // Если указанное время уже прошло или наступило, собираем
+                    if (targetTime <= now || Math.abs(targetTime.getTime() - now.getTime()) < 60000) {
+                        collectBusinessProfit();
+                    }
+                } else {
+                    // Если время не указано, собираем сразу
+                    collectBusinessProfit();
+                }
+            }
+            return;
+        }
+        
+        countdownTextEl.textContent = formatCountdownTime(remaining);
+        countdownTextEl.style.color = '#4CAF50';
+    }, 1000);
+    
+    // Обновляем сразу
+    const now = new Date().getTime();
+    const remaining = targetTime - now;
+    countdownTextEl.textContent = formatCountdownTime(remaining);
+}
+
+// Функция для остановки обратного отсчета
+function stopCollectCountdown() {
+    if (collectCountdownInterval) {
+        clearInterval(collectCountdownInterval);
+        collectCountdownInterval = null;
+    }
+}
+
+// Функция для сбора прибыли
+window.collectBusinessProfit = async function() {
+    const collectBtn = document.getElementById('collect-profit-btn');
+    const statusEl = document.getElementById('collect-status');
+    const statusContentEl = document.getElementById('collect-status-content');
+    
+    if (!collectBtn || !statusEl || !statusContentEl) return;
+    
+    try {
+        collectBtn.disabled = true;
+        collectBtn.textContent = '⏳ Сбор...';
+        
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        const response = await fetch(`${apiUrl}/player/business/collect`, {
+            method: 'POST',
+            headers: await getApiHeaders()
+        });
+        
+        // Обработка 401/403 - обновляем токен
+        if (response.status === 401 || response.status === 403) {
+            const currentInitData = await getCurrentInitData();
+            if (currentInitData && currentInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    // Повторяем запрос с новым токеном
+                    const retryResponse = await fetch(`${apiUrl}/player/business/collect`, {
+                        method: 'POST',
+                        headers: await getApiHeaders()
+                    });
+                    
+                    if (retryResponse.ok) {
+                        const retryData = await retryResponse.json();
+                        handleCollectResponse(retryData, retryResponse.status);
+                        return;
+                    } else {
+                        const retryError = await retryResponse.json();
+                        handleCollectError(retryError, retryResponse.status);
+                        return;
+                    }
+                }
+            }
+        }
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            handleCollectResponse(data, response.status);
+        } else {
+            handleCollectError(data, response.status);
+        }
+    } catch (error) {
+        console.error('Ошибка сбора прибыли:', error);
+        statusEl.style.display = 'block';
+        statusContentEl.innerHTML = `<div style="color: #ff6b6b;">❌ Ошибка: ${error.message}</div>`;
+    } finally {
+        collectBtn.disabled = false;
+        collectBtn.textContent = '💰 Собрать прибыль';
+    }
+};
+
+// Обработка успешного ответа (200)
+function handleCollectResponse(data, status) {
+    const statusEl = document.getElementById('collect-status');
+    const statusContentEl = document.getElementById('collect-status-content');
+    
+    if (!statusEl || !statusContentEl) return;
+    
+    const rewards = data.rewards || {};
+    const lastCollectTime = data.lastCollectTime;
+    
+    // Формируем сообщение о наградах
+    let rewardsHtml = '<div style="color: #4CAF50; font-weight: 600; margin-bottom: 10px;">✅ Прибыль собрана!</div>';
+    rewardsHtml += '<div style="font-size: 13px; margin-top: 8px;">';
+    
+    if (rewards.cigarettes !== undefined && rewards.cigarettes > 0) {
+        rewardsHtml += `<div>🚬 Папиросы: +${formatNumber(rewards.cigarettes)}</div>`;
+    }
+    if (rewards.authority !== undefined && rewards.authority > 0) {
+        rewardsHtml += `<div>👑 Авторитет: +${formatNumber(rewards.authority)}</div>`;
+    }
+    if (rewards.respectByPrison) {
+        const respectEntries = Object.entries(rewards.respectByPrison);
+        if (respectEntries.length > 0) {
+            rewardsHtml += '<div style="margin-top: 5px;"><strong>Уважение по тюрьмам:</strong></div>';
+            respectEntries.forEach(([prisonId, respect]) => {
+                rewardsHtml += `<div style="margin-left: 10px;">Тюрьма ${prisonId}: +${formatNumber(respect)}</div>`;
+            });
+        }
+    }
+    
+    rewardsHtml += '</div>';
+    
+    statusContentEl.innerHTML = rewardsHtml;
+    statusEl.style.display = 'block';
+    
+    // Устанавливаем обратный отсчет на 8 часов от текущего времени
+    if (lastCollectTime) {
+        const lastCollect = new Date(lastCollectTime);
+        const nextCollect = new Date(lastCollect.getTime() + (8 * 60 * 60 * 1000));
+        startCollectCountdown(nextCollect.getTime());
+        
+        // Сохраняем время следующего сбора в БД
+        saveNextBusinessCollectTime(nextCollect.getTime());
+    } else {
+        // Если lastCollectTime не пришел, используем текущее время + 8 часов
+        const nextCollect = new Date(Date.now() + (8 * 60 * 60 * 1000));
+        startCollectCountdown(nextCollect.getTime());
+        saveNextBusinessCollectTime(nextCollect.getTime());
+    }
+    
+    // Обновляем ресурсы
+    setTimeout(() => {
+        loadResources();
+    }, 500);
+}
+
+// Обработка ошибки (400)
+function handleCollectError(data, status) {
+    const statusEl = document.getElementById('collect-status');
+    const statusContentEl = document.getElementById('collect-status-content');
+    
+    if (!statusEl || !statusContentEl) return;
+    
+    const error = data.error || 'Неизвестная ошибка';
+    const timeLeft = data.timeLeft;
+    
+    statusContentEl.innerHTML = `<div style="color: #ff9800;">⚠️ ${error}</div>`;
+    statusEl.style.display = 'block';
+    
+    // Устанавливаем обратный отсчет из timeLeft
+    if (timeLeft && (timeLeft.hours !== undefined || timeLeft.minutes !== undefined)) {
+        const hours = timeLeft.hours || 0;
+        const minutes = timeLeft.minutes || 0;
+        const seconds = timeLeft.seconds || 0;
+        
+        const now = new Date().getTime();
+        const remainingMs = (hours * 60 * 60 * 1000) + (minutes * 60 * 1000) + (seconds * 1000);
+        const nextCollect = new Date(now + remainingMs);
+        
+        startCollectCountdown(nextCollect.getTime());
+        
+        // Сохраняем время следующего сбора в БД
+        saveNextBusinessCollectTime(nextCollect.getTime());
+    }
+}
+
+// Функция для сохранения времени следующего сбора прибыли в БД
+async function saveNextBusinessCollectTime(nextTime) {
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        await fetch(`${apiUrl}/collect/business-time`, {
+            method: 'POST',
+            headers: await getApiHeaders(),
+            body: JSON.stringify({ next_collect_time: nextTime })
+        });
+    } catch (error) {
+        console.error('Ошибка сохранения времени следующего сбора прибыли:', error);
+    }
+}
+
+// Функция для получения времени следующего сбора прибыли из БД
+async function getNextBusinessCollectTime() {
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        const response = await fetch(`${apiUrl}/collect/business-time`, {
+            method: 'GET',
+            headers: await getApiHeaders()
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.next_collect_time !== null && data.next_collect_time !== undefined) {
+                return parseInt(data.next_collect_time);
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка получения времени следующего сбора прибыли:', error);
+    }
+    return null;
+}
+
+// Функция для переключения автосбора
+window.toggleAutoCollect = function() {
+    const checkbox = document.getElementById('auto-collect-checkbox');
+    const settingsEl = document.getElementById('auto-collect-settings');
+    const timeInput = document.getElementById('auto-collect-time');
+    
+    if (!checkbox || !settingsEl) return;
+    
+    if (checkbox.checked) {
+        settingsEl.style.display = 'block';
+        
+        // Загружаем сохраненное время
+        const savedTime = localStorage.getItem('auto_collect_time');
+        if (savedTime && timeInput) {
+            timeInput.value = savedTime;
+        }
+        
+        // Запускаем автосбор
+        startAutoCollect();
+    } else {
+        settingsEl.style.display = 'none';
+        
+        // Останавливаем автосбор
+        stopAutoCollect();
+    }
+    
+    // Сохраняем состояние
+    localStorage.setItem('auto_collect_enabled', checkbox.checked ? 'true' : 'false');
+};
+
+// Функция для запуска автосбора
+function startAutoCollect() {
+    // Останавливаем предыдущий интервал, если есть
+    stopAutoCollect();
+    
+    const timeInput = document.getElementById('auto-collect-time');
+    if (!timeInput || !timeInput.value) {
+        console.warn('Время автосбора не указано');
+        return;
+    }
+    
+    const [hours, minutes] = timeInput.value.split(':').map(Number);
+    
+    // Функция для проверки времени и сбора
+    const checkAndCollect = () => {
+        const moscowTime = getMoscowTime();
+        const nextTimeEl = document.getElementById('auto-collect-next-time');
+        
+        // Вычисляем следующее время сбора
+        const now = moscowTime.date;
+        const targetTime = new Date(now);
+        targetTime.setHours(hours, minutes, 0, 0);
+        
+        // Если время уже прошло сегодня, планируем на завтра
+        if (targetTime <= now) {
+            targetTime.setDate(targetTime.getDate() + 1);
+        }
+        
+        // Показываем следующее время сбора
+        if (nextTimeEl) {
+            const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+            const dateStr = targetTime.toLocaleDateString('ru-RU', { 
+                day: '2-digit', 
+                month: '2-digit',
+                year: 'numeric'
+            });
+            nextTimeEl.textContent = `Следующий сбор: ${dateStr} в ${timeStr} МСК`;
+        }
+        
+        // Проверяем, наступило ли время сбора
+        const nowMs = now.getTime();
+        const targetMs = targetTime.getTime();
+        const diff = targetMs - nowMs;
+        
+        // Проверяем, что обратный отсчет закончился (можно собирать)
+        const savedNextTime = localStorage.getItem('next_collect_time');
+        const canCollect = !savedNextTime || parseInt(savedNextTime) <= nowMs;
+        
+        // Если разница меньше 1 секунды и можно собирать, собираем
+        if (diff > 0 && diff < 1000 && canCollect) {
+            console.log('⏰ Время автосбора наступило, собираем прибыль...');
+            collectBusinessProfit();
+        } else if (diff > 0 && diff < 1000 && !canCollect) {
+            // Время наступило, но обратный отсчет еще не закончился
+            const nextCollectTime = parseInt(savedNextTime);
+            const remaining = nextCollectTime - nowMs;
+            const remainingStr = formatCountdownTime(remaining);
+            console.log(`⏰ Время автосбора наступило, но нужно подождать еще ${remainingStr}`);
+        }
+    };
+    
+    // Проверяем каждую секунду
+    autoCollectInterval = setInterval(checkAndCollect, 1000);
+    
+    // Выполняем сразу для отображения следующего времени
+    checkAndCollect();
+}
+
+// Функция для остановки автосбора
+function stopAutoCollect() {
+    if (autoCollectInterval) {
+        clearInterval(autoCollectInterval);
+        autoCollectInterval = null;
+    }
+}
+
+// Инициализация при загрузке страницы
+async function initBusinessCollect() {
+    // Загружаем сохраненное время следующего сбора из БД
+    const savedNextTime = await getNextBusinessCollectTime();
+    if (savedNextTime) {
+        const nextTime = parseInt(savedNextTime);
+        const now = new Date().getTime();
+        
+        if (nextTime > now) {
+            startCollectCountdown(nextTime);
+        } else {
+            // Время прошло, можно собирать
+            const countdownEl = document.getElementById('collect-countdown');
+            const countdownTextEl = document.getElementById('countdown-text');
+            if (countdownEl && countdownTextEl) {
+                countdownEl.style.display = 'block';
+                countdownTextEl.textContent = 'Готово к сбору!';
+                countdownTextEl.style.color = '#4CAF50';
+            }
+        }
+    }
+    
+    // Загружаем состояние автосбора
+    const autoCollectEnabled = localStorage.getItem('auto_collect_enabled') === 'true';
+    const checkbox = document.getElementById('auto-collect-checkbox');
+    if (checkbox) {
+        checkbox.checked = autoCollectEnabled;
+        if (autoCollectEnabled) {
+            const settingsEl = document.getElementById('auto-collect-settings');
+            if (settingsEl) {
+                settingsEl.style.display = 'block';
+            }
+            startAutoCollect();
+        }
+    }
+    
+    // Сохраняем время при изменении
+    const timeInput = document.getElementById('auto-collect-time');
+    if (timeInput) {
+        timeInput.addEventListener('change', () => {
+            localStorage.setItem('auto_collect_time', timeInput.value);
+            if (checkbox && checkbox.checked) {
+                startAutoCollect();
+            }
+        });
+    }
+}
+
+// Запускаем инициализацию при загрузке DOM
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initBusinessCollect);
+} else {
+    initBusinessCollect();
+}
+
+// ==================== ФУНКЦИИ ДЛЯ СБОРА ТУАЛЕТНОЙ БУМАГИ ====================
+
+// Глобальные переменные для сбора туалетной бумаги
+let toiletPaperCountdownInterval = null;
+let canClaimToiletPaper = false;
+
+// Функция для запуска обратного отсчета туалетной бумаги
+function startToiletPaperCountdown(targetTime) {
+    // Останавливаем предыдущий таймер, если есть
+    stopToiletPaperCountdown();
+    
+    const countdownEl = document.getElementById('toilet-paper-countdown');
+    const countdownTextEl = document.getElementById('toilet-paper-countdown-text');
+    
+    if (!countdownEl || !countdownTextEl) return;
+    
+    countdownEl.style.display = 'block';
+    
+    // Обновляем каждую секунду
+    toiletPaperCountdownInterval = setInterval(() => {
+        const now = new Date().getTime();
+        const remaining = targetTime - now;
+        
+        if (remaining <= 0) {
+            countdownTextEl.textContent = 'Готово к сбору!';
+            countdownTextEl.style.color = '#4CAF50';
+            stopToiletPaperCountdown();
+            canClaimToiletPaper = true;
+            
+            // Если включен автосбор, собираем автоматически
+            const autoCollectCheckbox = document.getElementById('auto-collect-toilet-paper-checkbox');
+            if (autoCollectCheckbox && autoCollectCheckbox.checked) {
+                collectToiletPaper();
+            }
+            return;
+        }
+        
+        countdownTextEl.textContent = formatCountdownTime(remaining);
+        countdownTextEl.style.color = '#4CAF50';
+    }, 1000);
+    
+    // Обновляем сразу
+    const now = new Date().getTime();
+    const remaining = targetTime - now;
+    countdownTextEl.textContent = formatCountdownTime(remaining);
+}
+
+// Функция для остановки обратного отсчета туалетной бумаги
+function stopToiletPaperCountdown() {
+    if (toiletPaperCountdownInterval) {
+        clearInterval(toiletPaperCountdownInterval);
+        toiletPaperCountdownInterval = null;
+    }
+}
+
+// Функция для сбора туалетной бумаги
+window.collectToiletPaper = async function() {
+    const collectBtn = document.getElementById('collect-toilet-paper-btn');
+    const statusEl = document.getElementById('toilet-paper-status');
+    const statusContentEl = document.getElementById('toilet-paper-status-content');
+    
+    if (!collectBtn || !statusEl || !statusContentEl) return;
+    
+    try {
+        collectBtn.disabled = true;
+        collectBtn.textContent = '⏳ Сбор...';
+        
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        const response = await fetch(`${apiUrl}/daily/toilet-paper`, {
+            method: 'POST',
+            headers: await getApiHeaders()
+        });
+        
+        // Обработка 401/403 - обновляем токен
+        if (response.status === 401 || response.status === 403) {
+            const currentInitData = await getCurrentInitData();
+            if (currentInitData && currentInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    // Повторяем запрос с новым токеном
+                    const retryResponse = await fetch(`${apiUrl}/daily/toilet-paper`, {
+                        method: 'POST',
+                        headers: await getApiHeaders()
+                    });
+                    
+                    if (retryResponse.ok) {
+                        const retryData = await retryResponse.json();
+                        handleToiletPaperResponse(retryData);
+                        return;
+                    } else {
+                        const retryError = await retryResponse.json();
+                        handleToiletPaperError(retryError);
+                        return;
+                    }
+                }
+            }
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            handleToiletPaperResponse(data);
+        } else {
+            handleToiletPaperError(data);
+        }
+    } catch (error) {
+        console.error('Ошибка сбора туалетной бумаги:', error);
+        statusEl.style.display = 'block';
+        statusContentEl.innerHTML = `<div style="color: #ff6b6b;">❌ Ошибка: ${error.message}</div>`;
+    } finally {
+        collectBtn.disabled = false;
+        collectBtn.textContent = '🧻 Собрать туалетную бумагу';
+    }
+};
+
+// Обработка успешного ответа
+function handleToiletPaperResponse(data) {
+    const statusEl = document.getElementById('toilet-paper-status');
+    const statusContentEl = document.getElementById('toilet-paper-status-content');
+    
+    if (!statusEl || !statusContentEl) return;
+    
+    const message = data.message || 'Туалетная бумага собрана!';
+    const balance = data.balance;
+    
+    // Формируем сообщение
+    let statusHtml = `<div style="color: #4CAF50; font-weight: 600; margin-bottom: 10px;">✅ ${message}</div>`;
+    if (balance !== undefined) {
+        statusHtml += `<div style="font-size: 13px; margin-top: 8px;">📄 Бумага: ${formatNumber(balance)}</div>`;
+    }
+    
+    statusContentEl.innerHTML = statusHtml;
+    statusEl.style.display = 'block';
+    
+    // Устанавливаем обратный отсчет на 24 часа от текущего времени
+    const nextCollect = new Date(Date.now() + (24 * 60 * 60 * 1000));
+    startToiletPaperCountdown(nextCollect.getTime());
+    canClaimToiletPaper = false;
+    
+    // Сохраняем время следующего сбора в БД
+    saveNextToiletPaperCollectTime(nextCollect.getTime());
+    
+    // Обновляем ресурсы
+    setTimeout(() => {
+        loadResources();
+    }, 500);
+}
+
+// Обработка ошибки
+function handleToiletPaperError(data) {
+    const statusEl = document.getElementById('toilet-paper-status');
+    const statusContentEl = document.getElementById('toilet-paper-status-content');
+    
+    if (!statusEl || !statusContentEl) return;
+    
+    const message = data.message || data.error || 'Не удалось собрать туалетную бумагу';
+    
+    statusContentEl.innerHTML = `<div style="color: #ff9800;">⚠️ ${message}</div>`;
+    statusEl.style.display = 'block';
+    
+    // Если canClaimToiletPaper: false, устанавливаем обратный отсчет на 24 часа
+    if (data.canClaimToiletPaper === false) {
+        const nextCollect = new Date(Date.now() + (24 * 60 * 60 * 1000));
+        startToiletPaperCountdown(nextCollect.getTime());
+        canClaimToiletPaper = false;
+        saveNextToiletPaperCollectTime(nextCollect.getTime());
+    }
+}
+
+// Функция для сохранения времени следующего сбора туалетной бумаги в БД
+async function saveNextToiletPaperCollectTime(nextTime) {
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        await fetch(`${apiUrl}/collect/toilet-paper-time`, {
+            method: 'POST',
+            headers: await getApiHeaders(),
+            body: JSON.stringify({ next_collect_time: nextTime })
+        });
+    } catch (error) {
+        console.error('Ошибка сохранения времени следующего сбора туалетной бумаги:', error);
+    }
+}
+
+// Функция для получения времени следующего сбора туалетной бумаги из БД
+async function getNextToiletPaperCollectTime() {
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        const response = await fetch(`${apiUrl}/collect/toilet-paper-time`, {
+            method: 'GET',
+            headers: await getApiHeaders()
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.next_collect_time !== null && data.next_collect_time !== undefined) {
+                return parseInt(data.next_collect_time);
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка получения времени следующего сбора туалетной бумаги:', error);
+    }
+    return null;
+}
+
+// Функция для переключения автосбора туалетной бумаги
+window.toggleAutoCollectToiletPaper = function() {
+    const checkbox = document.getElementById('auto-collect-toilet-paper-checkbox');
+    
+    if (!checkbox) return;
+    
+    // Сохраняем состояние
+    localStorage.setItem('auto_collect_toilet_paper_enabled', checkbox.checked ? 'true' : 'false');
+    
+    // Если включен автосбор и можно собирать, собираем сразу
+    if (checkbox.checked && canClaimToiletPaper) {
+        collectToiletPaper();
+    }
+};
+
+// Инициализация при загрузке страницы
+async function initToiletPaperCollect() {
+    // Загружаем сохраненное время следующего сбора из БД
+    const savedNextTime = await getNextToiletPaperCollectTime();
+    if (savedNextTime) {
+        const nextTime = parseInt(savedNextTime);
+        const now = new Date().getTime();
+        
+        if (nextTime > now) {
+            startToiletPaperCountdown(nextTime);
+            canClaimToiletPaper = false;
+        } else {
+            // Время прошло, можно собирать
+            const countdownEl = document.getElementById('toilet-paper-countdown');
+            const countdownTextEl = document.getElementById('toilet-paper-countdown-text');
+            if (countdownEl && countdownTextEl) {
+                countdownEl.style.display = 'block';
+                countdownTextEl.textContent = 'Готово к сбору!';
+                countdownTextEl.style.color = '#4CAF50';
+            }
+            canClaimToiletPaper = true;
+        }
+    }
+    
+    // Загружаем состояние автосбора
+    const autoCollectEnabled = localStorage.getItem('auto_collect_toilet_paper_enabled') === 'true';
+    const checkbox = document.getElementById('auto-collect-toilet-paper-checkbox');
+    if (checkbox) {
+        checkbox.checked = autoCollectEnabled;
+        
+        // Если включен автосбор и можно собирать, собираем сразу
+        if (autoCollectEnabled && canClaimToiletPaper) {
+            collectToiletPaper();
+        }
+    }
+}
+
+// Функция для проверки canClaimToiletPaper из ресурсов
+function checkToiletPaperClaimable(resources) {
+    if (resources && resources.canClaimToiletPaper === true) {
+        canClaimToiletPaper = true;
+        
+        // Если включен автосбор, собираем сразу
+        const checkbox = document.getElementById('auto-collect-toilet-paper-checkbox');
+        if (checkbox && checkbox.checked) {
+            collectToiletPaper();
+        } else {
+            // Показываем, что можно собирать
+            const countdownEl = document.getElementById('toilet-paper-countdown');
+            const countdownTextEl = document.getElementById('toilet-paper-countdown-text');
+            if (countdownEl && countdownTextEl) {
+                countdownEl.style.display = 'block';
+                countdownTextEl.textContent = 'Готово к сбору!';
+                countdownTextEl.style.color = '#4CAF50';
+            }
+        }
+    } else {
+        canClaimToiletPaper = false;
+    }
+}
+
+// Запускаем инициализацию при загрузке DOM
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initToiletPaperCollect);
+} else {
+    initToiletPaperCollect();
+}
 
