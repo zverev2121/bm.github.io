@@ -86,7 +86,19 @@ window.switchTab = function switchTab(tabName) {
             // Если список боссов еще не загружен, загружаем его
             if (!window.bossCategoriesData || Object.keys(window.bossCategoriesData).length === 0) {
                 console.log('📋 Переключились на вкладку атаки боссов, загружаем список...');
-                loadBossList();
+                loadBossList().then(() => {
+                    // После загрузки списка боссов обновляем отображение комбо боссов
+                    if (loadedCombos && loadedCombos.length > 0) {
+                        console.log('🔄 [switchTab] Обновляем отображение комбо боссов после загрузки списка');
+                        displayComboBossSelection();
+                    }
+                });
+            } else {
+                // Если список боссов уже загружен, обновляем отображение комбо боссов
+                if (loadedCombos && loadedCombos.length > 0) {
+                    console.log('🔄 [switchTab] Обновляем отображение комбо боссов');
+                    displayComboBossSelection();
+                }
             }
             
             // Запускаем автообновление босса
@@ -5779,12 +5791,24 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
         
         // Проверяем hasReward в bootstrap
         const hasReward = data.success && data.hasReward === true;
-        const boss = selectedBosses[currentBossIndex];
+        // Ищем босса по bossId, а не по currentBossIndex, так как индекс может измениться
+        let boss = selectedBosses.find(b => b.id === bossId);
+        // Если не нашли по bossId, пробуем по индексу (для обратной совместимости)
+        if (!boss) {
+            boss = selectedBosses[currentBossIndex];
+        }
         
         if (hasReward) {
             // Награда готова - собираем её
+            // Убеждаемся, что автоатака все еще активна
+            if (!isAttacking) {
+                console.log('⚠️ Автоатака остановлена, прекращаем проверку статуса');
+                return;
+            }
+            
+            const bossName = boss ? boss.name : 'босса';
             console.log('💰 Награда готова, собираем...');
-            updateAttackStatus(`✅ ${boss.name} побежден! Сбор награды...`);
+            updateAttackStatus(`✅ ${bossName} побежден! Сбор награды...`);
             
             // Очищаем интервал проверки статуса перед сбором награды
             if (bossAttackInterval) {
@@ -5805,13 +5829,18 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
                 // Если босс уже был активен (Session already active), weaponsUsed не был увеличен
                 // В этом случае после сбора награды мы попробуем напасть снова на того же босса
                 if (boss) {
+                    // Обновляем currentBossIndex на основе найденного босса
+                    const bossIndex = selectedBosses.findIndex(b => b.id === bossId);
+                    if (bossIndex !== -1) {
+                        currentBossIndex = bossIndex;
+                    }
+                    
                     const weaponsCount = boss.weaponsCount || 1;
                     const weaponsUsed = boss.weaponsUsed || 0;
                     
                     console.log(`Атака ${weaponsUsed}/${weaponsCount} завершена для ${boss.name}`);
                     
                     // Если еще есть атаки для текущего босса, начинаем следующую
-                    // currentBossIndex не изменился, поэтому attackNextBoss() попытается напасть на того же босса
                     if (weaponsUsed < weaponsCount) {
                         updateAttackStatus(`Атака ${weaponsUsed}/${weaponsCount} завершена. Начинаем атаку ${weaponsUsed + 1}/${weaponsCount}...`);
                         // Небольшая задержка перед следующей атакой
@@ -5822,10 +5851,21 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
                         // Все атаки использованы - удаляем босса и переходим к следующему
                         updateAttackStatus(`✅ Все атаки (${weaponsCount}) завершены для ${boss.name}. Переход к следующему боссу...`);
                         
-                        // Удаляем текущего босса из очереди
-                        if (currentBossIndex < selectedBosses.length) {
+                        // Удаляем текущего босса из очереди по индексу
+                        if (currentBossIndex < selectedBosses.length && selectedBosses[currentBossIndex].id === bossId) {
                             selectedBosses.splice(currentBossIndex, 1);
                             updateOrderCarousel();
+                        } else {
+                            // Если индекс не совпадает, ищем и удаляем по bossId
+                            const indexToRemove = selectedBosses.findIndex(b => b.id === bossId);
+                            if (indexToRemove !== -1) {
+                                selectedBosses.splice(indexToRemove, 1);
+                                updateOrderCarousel();
+                                // Обновляем currentBossIndex, если удалили босса до текущего индекса
+                                if (indexToRemove < currentBossIndex) {
+                                    currentBossIndex--;
+                                }
+                            }
                         }
                         
                         // Проверяем, есть ли еще боссы
@@ -5865,10 +5905,17 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
                 }
             } catch (error) {
                 console.error('Ошибка сбора награды:', error);
-                updateAttackStatus(`⚠️ Не удалось собрать награду с ${boss.name}: ${error.message}`);
+                const bossName = boss ? boss.name : 'босса';
+                updateAttackStatus(`⚠️ Не удалось собрать награду с ${bossName}: ${error.message}`);
                 // При ошибке сбора награды все равно переходим к следующей атаке или боссу
                 // Счетчик weaponsUsed уже увеличен после start-attack
                 if (boss) {
+                    // Обновляем currentBossIndex на основе найденного босса
+                    const bossIndex = selectedBosses.findIndex(b => b.id === bossId);
+                    if (bossIndex !== -1) {
+                        currentBossIndex = bossIndex;
+                    }
+                    
                     const weaponsCount = boss.weaponsCount || 1;
                     const weaponsUsed = boss.weaponsUsed || 0;
                     
@@ -5878,9 +5925,20 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
                         }, 2000);
                     } else {
                         // Удаляем текущего босса из очереди
-                        if (currentBossIndex < selectedBosses.length) {
+                        if (currentBossIndex < selectedBosses.length && selectedBosses[currentBossIndex].id === bossId) {
                             selectedBosses.splice(currentBossIndex, 1);
                             updateOrderCarousel();
+                        } else {
+                            // Если индекс не совпадает, ищем и удаляем по bossId
+                            const indexToRemove = selectedBosses.findIndex(b => b.id === bossId);
+                            if (indexToRemove !== -1) {
+                                selectedBosses.splice(indexToRemove, 1);
+                                updateOrderCarousel();
+                                // Обновляем currentBossIndex, если удалили босса до текущего индекса
+                                if (indexToRemove < currentBossIndex) {
+                                    currentBossIndex--;
+                                }
+                            }
                         }
                         
                         // Проверяем, есть ли еще боссы
@@ -5919,9 +5977,16 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
             }
         } else {
             // Награда еще не готова - проверяем снова через 20 секунд
+            // Убеждаемся, что автоатака все еще активна
+            if (!isAttacking) {
+                console.log('⚠️ Автоатака остановлена, прекращаем проверку статуса');
+                return;
+            }
+            
             const weaponsUsed = boss ? (boss.weaponsUsed || 0) : 0;
             const weaponsCount = boss ? (boss.weaponsCount || 1) : 1;
-            updateAttackStatus(`⚔️ Бой с ${boss.name} продолжается... (Атака ${weaponsUsed + 1}/${weaponsCount})`);
+            const bossName = boss ? boss.name : 'босса';
+            updateAttackStatus(`⚔️ Бой с ${bossName} продолжается... (Атака ${weaponsUsed + 1}/${weaponsCount})`);
             
             bossAttackInterval = setTimeout(() => {
                 checkBossBattleStatus(bossId, mode, sessionId);
@@ -5930,7 +5995,17 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
         
     } catch (error) {
         console.error('Ошибка проверки статуса боя:', error);
-        const boss = selectedBosses[currentBossIndex];
+        // Убеждаемся, что автоатака все еще активна
+        if (!isAttacking) {
+            console.log('⚠️ Автоатака остановлена, прекращаем проверку статуса');
+            return;
+        }
+        
+        // Ищем босса по bossId, а не по currentBossIndex
+        let boss = selectedBosses.find(b => b.id === bossId);
+        if (!boss) {
+            boss = selectedBosses[currentBossIndex];
+        }
         
         // Проверяем, это таймаут?
         const errorMessage = error.message || error.toString();
@@ -5957,21 +6032,38 @@ async function checkBossBattleStatus(bossId, mode, sessionId, retryCount = 0) {
         // Удаляем текущего босса и переходим к следующему только если это не таймаут
         // При таймауте продолжаем проверку статуса
         if (!isTimeout) {
-            if (currentBossIndex < selectedBosses.length) {
+            // Ищем индекс босса по bossId
+            const bossIndex = selectedBosses.findIndex(b => b.id === bossId);
+            if (bossIndex !== -1) {
+                selectedBosses.splice(bossIndex, 1);
+                updateOrderCarousel();
+                // Обновляем currentBossIndex, если удалили босса до текущего индекса
+                if (bossIndex < currentBossIndex) {
+                    currentBossIndex--;
+                }
+            } else if (currentBossIndex < selectedBosses.length) {
                 selectedBosses.splice(currentBossIndex, 1);
                 updateOrderCarousel();
             }
+            
             if (currentBossIndex >= selectedBosses.length) {
                 currentBossIndex = 0;
             }
-            setTimeout(() => {
-                attackNextBoss();
-            }, 2000);
+            
+            // Продолжаем автоатаку, если есть еще боссы
+            if (selectedBosses.length > 0) {
+                setTimeout(() => {
+                    attackNextBoss();
+                }, 2000);
+            } else {
+                updateAttackStatus(`✅ Все боссы обработаны. Автоатака завершена.`);
+                stopBossAutoAttack();
+            }
         } else {
-            // При таймауте после всех попыток продолжаем проверку через 5 секунд
-            const boss = selectedBosses[currentBossIndex];
+            // При таймауте после всех попыток продолжаем проверку через 20 секунд
             const weaponsUsed = boss ? (boss.weaponsUsed || 0) : 0;
             const weaponsCount = boss ? (boss.weaponsCount || 1) : 1;
+            const bossName = boss ? boss.name : 'босса';
             updateAttackStatus(`⚠️ Таймаут после ${maxRetries} попыток. Повторная проверка через 20 секунд... (Атака ${weaponsUsed + 1}/${weaponsCount})`);
             
             bossAttackInterval = setTimeout(() => {
