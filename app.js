@@ -512,7 +512,8 @@ const COLLAPSIBLE_SECTIONS = [
     'boss-combo-section',
     'boss-weapons-section',
     'buy-keys-section',
-    'resources-section'
+    'resources-section',
+    'collect-section'
 ];
 
 // Загрузка состояний блоков из БД
@@ -7088,6 +7089,12 @@ function parseComboFile(text) {
                /^(беспредельщики|вертухаи|боссы)/i.test(line);
     }
     
+    // Функция для проверки, является ли строка информацией о восстановлении (не комбо)
+    function isRestoreInfo(line) {
+        // Строки типа "Потрачено на восстановление : 3 рубля" или "Потрачено на восстановление: 6 рубля"
+        return /^потрачено\s+на\s+восстановление/i.test(line);
+    }
+    
     // Функция для парсинга оружия из строки
     function parseWeaponFromLine(line) {
         // Убираем нумерацию в начале (1.пах, 1. пах, 1 пах, 1)пах)
@@ -7213,6 +7220,12 @@ function parseComboFile(text) {
         const line = lines[lineIndex];
         
         console.log(`[parseComboFile] Строка ${lineIndex + 1}/${lines.length}: "${line}" | currentBossName: ${currentBossName || 'null'}, оружий: ${currentWeapons.length}`);
+        
+        // Проверяем, является ли строка информацией о восстановлении (проверяем первым, чтобы точно пропустить)
+        if (isRestoreInfo(line)) {
+            console.log(`[parseComboFile] Пропущена строка (восстановление): "${line}"`);
+            continue;
+        }
         
         // Проверяем, является ли строка заголовком комбо (это проверяем первым, чтобы не пропустить заголовки)
         const headerInfo = parseComboHeader(line);
@@ -7586,58 +7599,18 @@ function displayLoadedCombos() {
         combosByBoss[combo.bossName].push(combo);
     });
     
-    let html = '<div style="text-align: left;">';
-    const bossNames = Object.keys(combosByBoss);
-    bossNames.forEach((bossName, bossIndex) => {
+    let html = '<ul style="text-align: left; padding-left: 20px;">';
+    Object.keys(combosByBoss).forEach(bossName => {
         const combos = combosByBoss[bossName];
-        combos.forEach((combo, comboIndex) => {
-            // Форматируем имя босса (первая буква каждого слова заглавная)
-            const formattedBossName = bossName.split(' ').map(word => 
-                word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-            ).join(' ');
-            const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : '';
+        html += `<li><strong>${bossName}</strong>:`;
+        combos.forEach((combo) => {
+            const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : 'не указан';
             const maxCost = calculateComboCost(combo.weapons);
-            
-            // Создаем уникальный ID для кнопки и сохраняем данные комбо
-            const comboKey = `${bossName}-${comboIndex}`;
-            if (!window.comboDataForCopy) {
-                window.comboDataForCopy = {};
-            }
-            window.comboDataForCopy[comboKey] = {
-                bossName: formattedBossName,
-                comboModeName: comboModeName,
-                weapons: combo.weapons,
-                maxCost: maxCost
-            };
-            
-            html += `
-                <div style="margin-bottom: 20px; padding: 10px; border: 1px solid #555; border-radius: 4px; background: rgba(0,0,0,0.2);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <div style="font-weight: 600; font-size: 14px;">${formattedBossName}${comboModeName ? ' ' + comboModeName : ''}</div>
-                        ${bossName ? `<button onclick="copyComboToClipboard('${comboKey}')" 
-                                style="padding: 4px 8px; font-size: 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                            📋 Скопировать комбо
-                        </button>` : ''}
-                    </div>
-                    <div style="font-family: monospace; font-size: 12px; line-height: 1.6;">
-                        ${combo.weapons.map((weapon, index) => {
-                            const weaponDisplayName = WEAPON_DISPLAY_NAMES[weapon] || weapon;
-                            return `${index + 1} ${weaponDisplayName}`;
-                        }).join('<br>')}
-                    </div>
-                    <div style="margin-top: 10px; font-size: 12px; color: #FFA500;">
-                        Потрачено на восстановление : ${maxCost} рубля
-                    </div>
-                </div>
-            `;
-            
-            // Добавляем разделитель между комбо (но не после последнего)
-            if (comboIndex < combos.length - 1 || bossIndex < bossNames.length - 1) {
-                html += '<div style="margin: 10px 0; border-top: 1px solid #555;"></div>';
-            }
+            html += `<br>&nbsp;&nbsp;• ${comboModeName} - Ударов: ${combo.weapons.length}, Восст: ${maxCost} ₽`;
         });
+        html += '</li>';
     });
-    html += '</div>';
+    html += '</ul>';
     
     container.innerHTML = html;
     listContainer.style.display = 'block';
@@ -8501,49 +8474,6 @@ function updateComboStatus(message) {
     }
 }
 
-// Копирование комбо в буфер обмена
-window.copyComboToClipboard = function(comboKey) {
-    if (!window.comboDataForCopy || !window.comboDataForCopy[comboKey]) {
-        console.error('Данные комбо не найдены для ключа:', comboKey);
-        return;
-    }
-    
-    const comboData = window.comboDataForCopy[comboKey];
-    
-    // Формируем текст комбо
-    let comboText = `${comboData.bossName}${comboData.comboModeName ? ' ' + comboData.comboModeName : ''}\n`;
-    comboData.weapons.forEach((weapon, index) => {
-        const weaponDisplayName = WEAPON_DISPLAY_NAMES[weapon] || weapon;
-        comboText += `${index + 1} ${weaponDisplayName}\n`;
-    });
-    comboText += `\nПотрачено на восстановление : ${comboData.maxCost} рубля`;
-    
-    // Копируем в буфер обмена
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(comboText).then(() => {
-            // Показываем уведомление об успешном копировании
-            const button = document.querySelector(`button[onclick*="${comboKey}"]`);
-            if (button) {
-                const originalText = button.innerHTML;
-                button.innerHTML = '✓ Скопировано!';
-                button.style.background = '#28a745';
-                setTimeout(() => {
-                    button.innerHTML = originalText;
-                    button.style.background = '#4CAF50';
-                }, 2000);
-            }
-            console.log('Комбо скопировано в буфер обмена');
-        }).catch(err => {
-            console.error('Ошибка копирования в буфер обмена:', err);
-            // Fallback для старых браузеров
-            fallbackCopyTextToClipboard(comboText);
-        });
-    } else {
-        // Fallback для старых браузеров
-        fallbackCopyTextToClipboard(comboText);
-    }
-}
-
 // Fallback функция для копирования в буфер обмена (для старых браузеров)
 function fallbackCopyTextToClipboard(text) {
     const textArea = document.createElement('textarea');
@@ -8572,6 +8502,78 @@ function fallbackCopyTextToClipboard(text) {
     }
     
     document.body.removeChild(textArea);
+}
+
+// Копирование всех комбо в буфер обмена
+window.copyAllCombosToClipboard = function() {
+    if (!loadedCombos || loadedCombos.length === 0) {
+        if (window.tg && window.tg.showAlert) {
+            window.tg.showAlert('Нет комбо для копирования');
+        } else {
+            alert('Нет комбо для копирования');
+        }
+        return;
+    }
+    
+    // Группируем комбо по боссу
+    const combosByBoss = {};
+    loadedCombos.forEach((combo) => {
+        if (!combosByBoss[combo.bossName]) {
+            combosByBoss[combo.bossName] = [];
+        }
+        combosByBoss[combo.bossName].push(combo);
+    });
+    
+    // Формируем текст всех комбо
+    let allCombosText = '';
+    const bossNames = Object.keys(combosByBoss);
+    
+    bossNames.forEach((bossName, bossIndex) => {
+        const combos = combosByBoss[bossName];
+        
+        combos.forEach((combo, comboIndex) => {
+            // Форматируем имя босса (первая буква каждого слова заглавная)
+            const formattedBossName = bossName.split(' ').map(word => 
+                word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+            ).join(' ');
+            const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : '';
+            const maxCost = calculateComboCost(combo.weapons);
+            
+            // Добавляем название комбо
+            allCombosText += `${formattedBossName}${comboModeName ? ' ' + comboModeName : ''}\n`;
+            
+            // Добавляем список оружий
+            combo.weapons.forEach((weapon, index) => {
+                const weaponDisplayName = WEAPON_DISPLAY_NAMES[weapon] || weapon;
+                allCombosText += `${index + 1} ${weaponDisplayName}\n`;
+            });
+            
+            // Добавляем информацию о восстановлении
+            allCombosText += `\nПотрачено на восстановление : ${maxCost} рубля\n`;
+            
+            // Добавляем разделитель между комбо (но не после последнего)
+            if (comboIndex < combos.length - 1 || bossIndex < bossNames.length - 1) {
+                allCombosText += '---------------------------\n---------------------------\n';
+            }
+        });
+    });
+    
+    // Копируем в буфер обмена
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(allCombosText).then(() => {
+            console.log('Все комбо скопированы в буфер обмена');
+            if (window.tg && window.tg.showAlert) {
+                window.tg.showAlert('Все комбо скопированы в буфер обмена');
+            } else {
+                alert('Все комбо скопированы в буфер обмена');
+            }
+        }).catch(err => {
+            console.error('Ошибка копирования в буфер обмена:', err);
+            fallbackCopyTextToClipboard(allCombosText);
+        });
+    } else {
+        fallbackCopyTextToClipboard(allCombosText);
+    }
 }
 
 // Функция обновления статуса покупки ключей
@@ -9448,9 +9450,45 @@ window.toggleAutoCollect = async function() {
         stopAutoCollectBusiness();
     }
     
-    // Сохраняем состояние
-    localStorage.setItem('auto_collect_enabled', checkbox.checked ? 'true' : 'false');
+    // Сохраняем состояние в БД
+    await saveAutoCollectBusinessEnabled(checkbox.checked);
 };
+
+// Функция для сохранения состояния автосбора прибыли в БД
+async function saveAutoCollectBusinessEnabled(enabled) {
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        await fetch(`${apiUrl}/collect/auto-business`, {
+            method: 'POST',
+            headers: await getApiHeaders(),
+            body: JSON.stringify({ enabled: enabled })
+        });
+        console.log(`✓ Состояние автосбора прибыли сохранено: enabled=${enabled}`);
+    } catch (error) {
+        console.error('Ошибка сохранения состояния автосбора прибыли:', error);
+    }
+}
+
+// Функция для получения состояния автосбора прибыли из БД
+async function getAutoCollectBusinessEnabled() {
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        const response = await fetch(`${apiUrl}/collect/auto-business`, {
+            method: 'GET',
+            headers: await getApiHeaders()
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                return data.enabled || false;
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка получения состояния автосбора прибыли:', error);
+    }
+    return false;
+}
 
 // Функция для запуска автосбора прибыли (каждые 8 часов)
 function startAutoCollectBusiness() {
@@ -9503,8 +9541,8 @@ async function initBusinessCollect() {
         }
     }
     
-    // Загружаем состояние автосбора
-    const autoCollectEnabled = localStorage.getItem('auto_collect_enabled') === 'true';
+    // Загружаем состояние автосбора из БД
+    const autoCollectEnabled = await getAutoCollectBusinessEnabled();
     const checkbox = document.getElementById('auto-collect-checkbox');
     if (checkbox) {
         checkbox.checked = autoCollectEnabled;
@@ -9675,13 +9713,13 @@ async function getNextToiletPaperCollectTime() {
 }
 
 // Функция для переключения автосбора туалетной бумаги
-window.toggleAutoCollectToiletPaper = function() {
+window.toggleAutoCollectToiletPaper = async function() {
     const checkbox = document.getElementById('auto-collect-toilet-paper-checkbox');
     
     if (!checkbox) return;
     
-    // Сохраняем состояние
-    localStorage.setItem('auto_collect_toilet_paper_enabled', checkbox.checked ? 'true' : 'false');
+    // Сохраняем состояние в БД
+    await saveAutoCollectToiletPaperEnabled(checkbox.checked);
     
     if (checkbox.checked) {
         // Запускаем автосбор каждые 24 часа
@@ -9691,6 +9729,42 @@ window.toggleAutoCollectToiletPaper = function() {
         stopAutoCollectToiletPaper();
     }
 };
+
+// Функция для сохранения состояния автосбора туалетной бумаги в БД
+async function saveAutoCollectToiletPaperEnabled(enabled) {
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        await fetch(`${apiUrl}/collect/auto-toilet-paper`, {
+            method: 'POST',
+            headers: await getApiHeaders(),
+            body: JSON.stringify({ enabled: enabled })
+        });
+        console.log(`✓ Состояние автосбора туалетной бумаги сохранено: enabled=${enabled}`);
+    } catch (error) {
+        console.error('Ошибка сохранения состояния автосбора туалетной бумаги:', error);
+    }
+}
+
+// Функция для получения состояния автосбора туалетной бумаги из БД
+async function getAutoCollectToiletPaperEnabled() {
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        const response = await fetch(`${apiUrl}/collect/auto-toilet-paper`, {
+            method: 'GET',
+            headers: await getApiHeaders()
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                return data.enabled || false;
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка получения состояния автосбора туалетной бумаги:', error);
+    }
+    return false;
+}
 
 // Функция для запуска автосбора туалетной бумаги (каждые 24 часа)
 function startAutoCollectToiletPaper() {
@@ -9727,7 +9801,7 @@ async function initCollect() {
     await initBusinessCollect();
     
     // Инициализация сбора туалетной бумаги
-    const autoCollectEnabled = localStorage.getItem('auto_collect_toilet_paper_enabled') === 'true';
+    const autoCollectEnabled = await getAutoCollectToiletPaperEnabled();
     const checkbox = document.getElementById('auto-collect-toilet-paper-checkbox');
     if (checkbox) {
         checkbox.checked = autoCollectEnabled;

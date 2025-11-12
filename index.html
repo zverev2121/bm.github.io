@@ -339,7 +339,12 @@
                             </button>
                         </div>
                         <div id="combo-list-container" style="margin-top: 15px; display: none;">
-                            <h4>Загруженные комбо:</h4>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <h4 style="margin: 0;">Загруженные комбо:</h4>
+                                <button class="btn btn-primary" onclick="copyAllCombosToClipboard()" style="padding: 4px 12px; font-size: 12px;">
+                                    📋 Скопировать все комбо
+                                </button>
+                            </div>
                             <div id="combo-list-content"></div>
                         </div>
                         <div id="combo-boss-select" style="margin-top: 15px; display: none;">
@@ -411,9 +416,9 @@
 
                 <!-- Раздел сбора -->
                 <section class="card" id="collect-section">
-                    <h2 class="section-header" onclick="toggleSection('collect-section', event)" style="cursor: pointer;">
+                    <h2 class="section-header">
                         <span>📦 Сбор</span>
-                        <button class="collapse-btn" onclick="event.stopPropagation(); toggleSection('collect-section', event)" aria-label="Свернуть/развернуть">▼</button>
+                        <button class="collapse-btn" onclick="toggleSection('collect-section', event)" aria-label="Свернуть/развернуть">▼</button>
                     </h2>
                     <div class="section-content">
                         <!-- Сбор прибыли -->
