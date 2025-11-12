@@ -1942,8 +1942,28 @@ async function loadBossInfo(showLoading = true) {
                 timeInfo += `<br>Окончание боя: <strong>${endTime}</strong>`;
             }
             
-            // Получаем нанесенный урон из talentState
-            const currentDamage = (data.success && data.talentState && data.talentState.currentDamage) ? data.talentState.currentDamage : 0;
+            // Получаем нанесенный урон из friendDamage.items по userId
+            let currentDamage = 0;
+            if (data.success && data.friendDamage && data.friendDamage.items && Array.isArray(data.friendDamage.items)) {
+                // Получаем userId из localStorage (который был сохранен из БД)
+                let userId = localStorage.getItem('game_user_id');
+                // Fallback: если userId не найден в localStorage, пробуем взять из weaponStatsEffective
+                if (!userId && data.weaponStatsEffective && data.weaponStatsEffective.userId) {
+                    userId = data.weaponStatsEffective.userId.toString();
+                }
+                if (userId) {
+                    const userIdNum = parseInt(userId);
+                    // Ищем себя в списке друзей по userId
+                    const myDamageData = data.friendDamage.items.find(item => item.userId === userIdNum);
+                    if (myDamageData && myDamageData.totalDamage !== undefined) {
+                        currentDamage = myDamageData.totalDamage;
+                    }
+                }
+            }
+            // Fallback на talentState.currentDamage, если не нашли в friendDamage
+            if (currentDamage === 0 && data.success && data.talentState && data.talentState.currentDamage) {
+                currentDamage = data.talentState.currentDamage;
+            }
             const currentDamageFormatted = formatNumberShort(currentDamage);
             
             // Получаем иконку босса напрямую из session, без ожидания загрузки всех боссов
