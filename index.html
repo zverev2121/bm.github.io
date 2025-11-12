@@ -279,14 +279,6 @@
                                 <div class="weapon-count" data-weapon-count="knife" style="font-size: 10px; color: #888;">-</div>
                             </div>
                         </div>
-                        <!-- Сегментед контрол для множителя атаки -->
-                        <div class="weapon-multiplier-segmented" style="display: flex; justify-content: center; margin-top: 15px; gap: 4px; background: rgba(0,0,0,0.05); border-radius: 8px; padding: 4px;">
-                            <button class="multiplier-btn active" data-multiplier="1" onclick="setWeaponMultiplier(1)" style="flex: 1; padding: 6px 8px; border: none; background: var(--tg-theme-button-color, #3390ec); color: white; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">×1</button>
-                            <button class="multiplier-btn" data-multiplier="10" onclick="setWeaponMultiplier(10)" style="flex: 1; padding: 6px 8px; border: none; background: rgba(0,0,0,0.1); color: var(--tg-theme-text-color, #000000); border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">×10</button>
-                            <button class="multiplier-btn" data-multiplier="100" onclick="setWeaponMultiplier(100)" style="flex: 1; padding: 6px 8px; border: none; background: rgba(0,0,0,0.1); color: var(--tg-theme-text-color, #000000); border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">×100</button>
-                            <button class="multiplier-btn" data-multiplier="1000" onclick="setWeaponMultiplier(1000)" style="flex: 1; padding: 6px 8px; border: none; background: rgba(0,0,0,0.1); color: var(--tg-theme-text-color, #000000); border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">×1000</button>
-                            <button class="multiplier-btn" data-multiplier="10000" onclick="setWeaponMultiplier(10000)" style="flex: 1; padding: 6px 8px; border: none; background: rgba(0,0,0,0.1); color: var(--tg-theme-text-color, #000000); border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">×10000</button>
-                        </div>
                         </div>
                     </div>
                     </div>
@@ -331,7 +323,7 @@
                         <div class="form-group">
                             <label for="combo-text-input">✏️ Введите комбо текстом:</label>
                             <textarea id="combo-text-input" 
-                                      placeholder="Махно авто&#10;1 пах&#10;2 яд&#10;3 самопал&#10;4 грудь&#10;5 глаз&#10;6 ухо&#10;7 финка" 
+                                      placeholder="махно авто фин пал грудь ухо пах фин пах фин яд глаз пах пал фин пал яд; палыч авто фин пал грудь ухо пах фин пах фин пах пал фин пал яд; палыч яд глаз пах пал фин пал яд" 
                                       rows="4" 
                                       style="width: 100%; padding: 8px; font-size: 12px; border: 1px solid #555; border-radius: 4px; background: rgba(0,0,0,0.3); color: #ffffff; font-family: monospace; resize: vertical;"></textarea>
                             <button class="btn btn-primary" onclick="parseComboFromText()" style="margin-top: 10px;">
@@ -339,12 +331,7 @@
                             </button>
                         </div>
                         <div id="combo-list-container" style="margin-top: 15px; display: none;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                                <h4 style="margin: 0;">Загруженные комбо:</h4>
-                                <button class="btn btn-primary" onclick="copyAllCombosToClipboard()" style="padding: 4px 12px; font-size: 12px;">
-                                    📋 Скопировать все комбо
-                                </button>
-                            </div>
+                            <h4>Загруженные комбо:</h4>
                             <div id="combo-list-content"></div>
                         </div>
                         <div id="combo-boss-select" style="margin-top: 15px; display: none;">
@@ -416,9 +403,9 @@
 
                 <!-- Раздел сбора -->
                 <section class="card" id="collect-section">
-                    <h2 class="section-header">
+                    <h2 class="section-header" onclick="toggleSection('collect-section', event)" style="cursor: pointer;">
                         <span>📦 Сбор</span>
-                        <button class="collapse-btn" onclick="toggleSection('collect-section', event)" aria-label="Свернуть/развернуть">▼</button>
+                        <button class="collapse-btn" onclick="event.stopPropagation(); toggleSection('collect-section', event)" aria-label="Свернуть/развернуть">▼</button>
                     </h2>
                     <div class="section-content">
                         <!-- Сбор прибыли -->
@@ -509,13 +496,6 @@
         </div>
     </div>
 
-    <!-- Модули в правильном порядке зависимостей -->
-    <!-- Добавлен параметр версии для принудительного обновления кэша -->
-    <script src="telegram.js?v=2.0.1"></script>
-    <script src="api.js?v=2.0.1"></script>
-    <script src="utils.js?v=2.0.1"></script>
-    <script src="ui.js?v=2.0.1"></script>
-    <script src="auth.js?v=2.0.1"></script>
-    <script src="app.js?v=2.0.1"></script>
+    <script src="app.js"></script>
 </body>
 </html>
