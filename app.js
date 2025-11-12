@@ -721,7 +721,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
     
-    updateStatus(false);
+    window.updateStatus(false);
     
     // ВАЖНО: Очищаем все возможные старые значения initData из localStorage при загрузке
     // initData НЕ должен храниться в localStorage, только в БД
@@ -821,7 +821,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Токен первые 20 символов:', token.substring(0, 20) + '...');
         
         // Устанавливаем статус "Подключено" если токен найден (значит login был успешным ранее)
-        updateStatus(true);
+        window.updateStatus(true);
         
         // Показываем все секции
         // Примечание: boss-section теперь на вкладке "Атака боссов", управляется через switchTab
@@ -895,7 +895,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             setInterval(loadStats, 30000);
         } else {
             console.error('❌ Авторизация не удалась и токен не найден');
-            updateStatus(false);
+            window.updateStatus(false);
             
             // Показываем секции, но с ошибкой
             // Примечание: boss-section теперь на вкладке "Атака боссов", управляется через switchTab
@@ -1415,8 +1415,8 @@ function initInteractionTypeSelector() {
     }
 }
 
-// Используем updateStatus из ui.js
-const updateStatus = window.updateStatus;
+// Используем updateStatus из ui.js напрямую через window
+// Не создаем локальную переменную, чтобы избежать конфликтов
 
 // Используем функции из utils.js
 const decodeMode = window.decodeMode || function(mode) {
@@ -1998,7 +1998,7 @@ async function loadBossInfo(showLoading = true) {
                     </div>
                 </div>
             `;
-            updateStatus(true);
+            window.updateStatus(true);
             
             // Показываем блок с оружиями, так как босс активен (но он будет свернут по умолчанию)
             const bossWeaponsWrapper = document.getElementById('boss-weapons-wrapper');
@@ -2028,7 +2028,7 @@ async function loadBossInfo(showLoading = true) {
             }
         } else {
             bossInfo.innerHTML = '<p>Информация о боссе недоступна</p>';
-            updateStatus(false);
+            window.updateStatus(false);
             
             // Останавливаем обновление слайдера времени
             stopBossTimeSliderUpdate();
@@ -2056,7 +2056,7 @@ async function loadBossInfo(showLoading = true) {
         } else {
             bossInfo.innerHTML = `<p class="error">❌ Ошибка подключения:<br>${error.message}</p>`;
         }
-        updateStatus(false);
+        window.updateStatus(false);
         
         // Останавливаем обновление слайдера времени
         stopBossTimeSliderUpdate();
@@ -3668,7 +3668,7 @@ async function loginWithInitData() {
             const errorText = await response.text();
             console.error(`Ошибка авторизации: ${response.status}`, errorText);
             // Устанавливаем статус "Отключено" если запрос login обвалился
-            updateStatus(false);
+            window.updateStatus(false);
             
             // Пробуем распарсить как JSON
             try {
@@ -3799,18 +3799,18 @@ async function loginWithInitData() {
             // ВАЖНО: Возвращаем токен напрямую из ответа сервера
             // Токен уже сохранен в БД на сервере
             // Устанавливаем статус "Подключено" при успешном получении access_token
-            updateStatus(true);
+            window.updateStatus(true);
             return data.accessToken;
         } else {
             console.error('Ошибка авторизации: нет токена в ответе', data);
             // Устанавливаем статус "Отключено" если login обвалился (нет токена в ответе)
-            updateStatus(false);
+            window.updateStatus(false);
             return null;
         }
     } catch (error) {
         console.error('Ошибка авторизации:', error);
         // Устанавливаем статус "Отключено" если запрос login обвалился
-        updateStatus(false);
+        window.updateStatus(false);
         console.error('Тип ошибки:', error.name);
         console.error('Сообщение:', error.message);
         console.error('Стек:', error.stack);
