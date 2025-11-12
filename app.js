@@ -7655,10 +7655,32 @@ function parseWeaponName(weaponName) {
         // Пропускаем ключи, которые уже были проверены как точное совпадение
         if (key === weaponName) continue;
         
+        // Пропускаем режимы комбо (не оружия)
+        if (['blotnoy', 'pacansky', 'avtoritetny'].includes(value)) continue;
+        
         // Проверяем, содержит ли weaponName ключ или наоборот
-        // Но только если это не слишком общее совпадение (например, "я" не должно совпадать с "яд")
-        if ((weaponName.includes(key) && weaponName.length >= key.length * 0.8) || 
-            (key.includes(weaponName) && key.length >= weaponName.length * 0.8)) {
+        // Но только если это не слишком общее совпадение
+        // Для коротких ключей (меньше 4 символов) требуем более строгое совпадение:
+        // слово не должно быть намного длиннее ключа (не более чем в 1.3 раза)
+        // Это предотвращает ложные срабатывания типа "палыч" -> "пал"
+        if (weaponName.includes(key)) {
+            // Если ключ короткий, проверяем более строго
+            if (key.length < 4) {
+                const lengthRatio = weaponName.length / key.length;
+                // Для коротких ключей слово не должно быть намного длиннее
+                if (lengthRatio > 1.3) {
+                    continue; // Пропускаем, так как это может быть другое слово (например, "палыч" содержит "пал", но это не оружие)
+                }
+            }
+            
+            // Проверяем минимальную длину совпадения
+            if (weaponName.length >= key.length * 0.8) {
+                if (['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(value)) {
+                    console.log(`[parseWeaponName] Найдено частичное совпадение: "${weaponName}" -> ${value} (ключ: "${key}")`);
+                    return value;
+                }
+            }
+        } else if (key.includes(weaponName) && key.length >= weaponName.length * 0.8) {
             if (['knife', 'gunshot', 'poison', 'punchchest', 'kneeear', 'pokeeyes', 'kickballs'].includes(value)) {
                 console.log(`[parseWeaponName] Найдено частичное совпадение: "${weaponName}" -> ${value} (ключ: "${key}")`);
                 return value;
