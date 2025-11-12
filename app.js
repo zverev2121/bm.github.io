@@ -9125,10 +9125,28 @@ function handleStewResponse(data, isOk) {
     }
 }
 
-// Форматирование чисел с разделителями тысяч
+// Форматирование чисел с модификаторами "к" и "кк"
 function formatNumber(num) {
     if (num === null || num === undefined) return '0';
-    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    
+    // Если число >= 1 миллиона, показываем с "кк"
+    if (num >= 1000000) {
+        const value = num / 1000000;
+        // Округляем до 3 знаков после точки, убираем лишние нули
+        const formatted = value.toFixed(3).replace(/\.?0+$/, '');
+        return formatted + 'кк';
+    }
+    
+    // Если число >= 1000, показываем с "к"
+    if (num >= 1000) {
+        const value = num / 1000;
+        // Округляем до 3 знаков после точки, убираем лишние нули
+        const formatted = value.toFixed(3).replace(/\.?0+$/, '');
+        return formatted + 'к';
+    }
+    
+    // Для чисел меньше 1000 показываем как есть
+    return num.toString();
 }
 
 // Обновление ресурсов через /api/player/init
