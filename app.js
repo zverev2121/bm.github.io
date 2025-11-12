@@ -95,8 +95,9 @@ window.switchTab = function switchTab(tabName) {
 }
 
 // Используем глобальные переменные из api.js
-const API_SERVER_URL = window.API_SERVER_URL;
-const GAME_API_URL = window.GAME_API_URL;
+// Создаем локальные ссылки для удобства использования
+var API_SERVER_URL = window.API_SERVER_URL;
+var GAME_API_URL = window.GAME_API_URL;
 
 // Функции для работы с настройками
 async function loadSettings() {
@@ -188,8 +189,11 @@ async function loadSettings() {
         }
     }
     
-    API_SERVER_URL = getApiServerUrl();
-    GAME_API_URL = getGameApiUrl();
+    API_SERVER_URL = window.getApiServerUrl();
+    GAME_API_URL = window.getGameApiUrl();
+    // Обновляем глобальные переменные
+    window.API_SERVER_URL = API_SERVER_URL;
+    window.GAME_API_URL = GAME_API_URL;
     
     updateSettingsDisplay();
 }
@@ -212,8 +216,11 @@ async function saveSettings() {
     }
     
     // Обновляем URL API перед использованием
-    API_SERVER_URL = getApiServerUrl();
-    GAME_API_URL = getGameApiUrl();
+    API_SERVER_URL = window.getApiServerUrl();
+    GAME_API_URL = window.getGameApiUrl();
+    // Обновляем глобальные переменные
+    window.API_SERVER_URL = API_SERVER_URL;
+    window.GAME_API_URL = GAME_API_URL;
     
     // Если введен initData, выполняем login для получения токена
     // ВАЖНО: initData НЕ сохраняется в localStorage, только отправляется на сервер для сохранения в БД
@@ -340,8 +347,11 @@ function resetSettings() {
         if (initDataInput) initDataInput.value = '';
         
         // Обновляем переменные
-        API_SERVER_URL = getApiServerUrl();
-        GAME_API_URL = getGameApiUrl();
+        API_SERVER_URL = window.getApiServerUrl();
+        GAME_API_URL = window.getGameApiUrl();
+        // Обновляем глобальные переменные
+        window.API_SERVER_URL = API_SERVER_URL;
+        window.GAME_API_URL = GAME_API_URL;
         
         console.log('✓ Все настройки очищены из localStorage');
         console.log('✓ Поля ввода очищены');
@@ -795,8 +805,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     // Обновляем URL API перед авторизацией
-    API_SERVER_URL = getApiServerUrl();
-    GAME_API_URL = getGameApiUrl();
+    API_SERVER_URL = window.getApiServerUrl();
+    GAME_API_URL = window.getGameApiUrl();
+    // Обновляем глобальные переменные
+    window.API_SERVER_URL = API_SERVER_URL;
+    window.GAME_API_URL = GAME_API_URL;
     
     // loadSettings() уже выполнила поиск по username и заполнила поля
     // Получаем токен из БД
