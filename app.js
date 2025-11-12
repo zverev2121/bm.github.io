@@ -1998,6 +1998,10 @@ async function loadBossInfo(showLoading = true) {
                 return `${minutes}:${seconds.toString().padStart(2, '0')}`;
             }
             
+            // Получаем нанесенный урон из talentState
+            const currentDamage = (data.success && data.talentState && data.talentState.currentDamage) ? data.talentState.currentDamage : 0;
+            const currentDamageFormatted = formatNumberShort(currentDamage);
+            
             // Слайдер HP
             const currentHpShort = formatNumberShort(session.currentHp);
             const maxHpShort = formatNumberShort(session.maxHp);
@@ -2009,6 +2013,7 @@ async function loadBossInfo(showLoading = true) {
                             ${currentHpShort} / ${maxHpShort} (${hpPercent}%)
                         </div>
                     </div>
+                    ${currentDamage > 0 ? `<div style="text-align: center; margin-top: 4px; font-size: 11px; color: var(--tg-theme-hint-color, #999);">Нанесено урона: ${currentDamageFormatted}</div>` : ''}
                 </div>
             `;
             
@@ -2310,6 +2315,30 @@ async function attackBossWithWeapon(weapon) {
         }
     }
     
+    // Проверяем, нужен ли подтверждающий алерт для яд/самопал/финка при больших множителях
+    const weaponsWithMultiplier = ['poison', 'gunshot', 'knife'];
+    const count = weaponsWithMultiplier.includes(weapon) ? weaponMultiplier : 1;
+    const requiresConfirmation = weaponsWithMultiplier.includes(weapon) && (weaponMultiplier === 100 || weaponMultiplier === 1000);
+    
+    if (requiresConfirmation) {
+        const weaponDisplayName = WEAPON_DISPLAY_NAMES[weapon] || weapon;
+        const multiplierText = `x${weaponMultiplier}`;
+        const confirmMessage = `Ударить босса ${weaponDisplayName} ${multiplierText} раз?`;
+        
+        let confirmed = false;
+        if (window.tg && window.tg.showConfirm) {
+            confirmed = await new Promise(resolve => {
+                window.tg.showConfirm(confirmMessage, resolve);
+            });
+        } else {
+            confirmed = confirm(confirmMessage);
+        }
+        
+        if (!confirmed) {
+            return;
+        }
+    }
+    
     // Блокируем кнопку на время запроса
     weaponItem.style.pointerEvents = 'none';
     weaponItem.style.opacity = '0.6';
@@ -2317,10 +2346,6 @@ async function attackBossWithWeapon(weapon) {
     try {
         const apiUrl = API_SERVER_URL || GAME_API_URL;
         const weaponDisplayName = WEAPON_DISPLAY_NAMES[weapon] || weapon;
-        
-        // Определяем количество ударов в зависимости от множителя (только для яд/самопал/финка)
-        const weaponsWithMultiplier = ['poison', 'gunshot', 'knife'];
-        const count = weaponsWithMultiplier.includes(weapon) ? weaponMultiplier : 1;
         
         // Отправляем запрос
         let response = await fetch(`${apiUrl}/boss/use-weapon`, {
@@ -4995,11 +5020,11 @@ function renderBossList(categoriesData) {
     
     // Карусель для порядка атаки
     html += `
-        <div class="boss-category-section" style="margin-top: 30px; margin-bottom: 20px;">
-            <h3 class="category-title" style="margin-bottom: 15px; color: var(--tg-theme-text-color, #000000); font-size: 18px; font-weight: 600;">Порядок атаки</h3>
-            <div class="boss-carousel-container" data-category-id="order">
-                <div class="boss-carousel" id="carousel-order">
-                    <div style="padding: 8px; text-align: center; color: var(--tg-theme-hint-color, #999); font-size: 13px;">
+        <div class="boss-category-section" id="order-section" style="margin-top: 5px; margin-bottom: 5px;">
+            <h3 class="category-title" style="margin-bottom: 5px; color: var(--tg-theme-text-color, #000000); font-size: 16px; font-weight: 600;">Порядок атаки</h3>
+            <div class="boss-carousel-container" data-category-id="order" style="padding: 0;">
+                <div class="boss-carousel" id="carousel-order" style="padding: 4px 8px;">
+                    <div style="padding: 4px; text-align: center; color: var(--tg-theme-hint-color, #999); font-size: 13px;">
                         Выберите боссов для атаки
                     </div>
                 </div>
@@ -5430,20 +5455,27 @@ function updateOrderCarousel() {
     
     if (selectedBosses.length === 0) {
         orderCarousel.innerHTML = `
-            <div style="padding: 8px; text-align: center; color: var(--tg-theme-hint-color, #999); font-size: 13px;">
+            <div style="padding: 4px; text-align: center; color: var(--tg-theme-hint-color, #999); font-size: 13px;">
                 Выберите боссов для атаки
             </div>
         `;
         // Уменьшаем отступы секции, когда боссов нет
         const categorySection = orderCarousel.closest('.boss-category-section');
         if (categorySection) {
-            categorySection.style.marginTop = '15px';
-            categorySection.style.marginBottom = '10px';
+            categorySection.style.marginTop = '5px';
+            categorySection.style.marginBottom = '5px';
         }
         const categoryTitle = categorySection?.querySelector('.category-title');
         if (categoryTitle) {
-            categoryTitle.style.marginBottom = '8px';
+            categoryTitle.style.marginBottom = '5px';
+            categoryTitle.style.fontSize = '16px';
         }
+        // Уменьшаем отступы контейнера карусели
+        const carouselContainer = orderCarousel.closest('.boss-carousel-container');
+        if (carouselContainer) {
+            carouselContainer.style.padding = '0';
+        }
+        orderCarousel.style.padding = '4px 8px';
         return;
     }
     
@@ -5508,7 +5540,14 @@ function updateOrderCarousel() {
     const categoryTitle = categorySection?.querySelector('.category-title');
     if (categoryTitle) {
         categoryTitle.style.marginBottom = '15px';
+        categoryTitle.style.fontSize = '18px';
     }
+    // Восстанавливаем отступы контейнера карусели
+    const carouselContainer = orderCarousel.closest('.boss-carousel-container');
+    if (carouselContainer) {
+        carouselContainer.style.padding = '';
+    }
+    orderCarousel.style.padding = '10px 16px';
 }
 
 // Перемещение босса в порядке атаки по индексу
@@ -7681,12 +7720,7 @@ function displayLoadedCombos() {
     let html = '<ul style="text-align: left; padding-left: 20px;">';
     Object.keys(combosByBoss).forEach(bossName => {
         const combos = combosByBoss[bossName];
-        html += `<li><strong>${bossName}</strong>:`;
-        combos.forEach((combo) => {
-            const comboModeName = combo.comboMode ? (COMBO_MODE_INFO[combo.comboMode]?.name || combo.comboMode) : 'не указан';
-            const maxCost = calculateComboCost(combo.weapons);
-            html += `<br>&nbsp;&nbsp;• ${comboModeName} - Ударов: ${combo.weapons.length}, Восст: ${maxCost} ₽`;
-        });
+        html += `<li><strong>${bossName}</strong>`;
         html += '</li>';
     });
     html += '</ul>';
@@ -8944,7 +8978,10 @@ function displayResources(resources) {
                         <div><strong>Чифир:</strong> ${formatNumber(resources.chefir || 0)}</div>
                     </div>
                     <div><strong>Фишки:</strong> ${formatNumber(resources.chips || 0)}</div>
-                    <div><strong>Тушенка:</strong> ${formatNumber(resources.stew || 0)}</div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div><strong>Тушенка:</strong> ${formatNumber(resources.stew || 0)}</div>
+                        ${(resources.stew || 0) > 0 ? `<button onclick="openStew()" style="padding: 4px 12px; font-size: 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Открыть</button>` : ''}
+                    </div>
                     <div><strong>Синие спички:</strong> ${formatNumber(resources.blue_matches || 0)}</div>
                     <div><strong>Розовые спички:</strong> ${formatNumber(resources.pink_matches || 0)}</div>
                     <div style="display: flex; align-items: center; gap: 6px;">
@@ -8997,6 +9034,98 @@ function displayResources(resources) {
     `;
     
     resourcesContent.innerHTML = html;
+}
+
+// Открытие тушенки
+window.openStew = async function openStew() {
+    try {
+        const apiUrl = API_SERVER_URL || GAME_API_URL;
+        const response = await fetch(`${apiUrl}/stew/open`, {
+            method: 'POST',
+            headers: await getApiHeaders()
+        });
+        
+        // Обработка 401/403
+        if (response.status === 401 || response.status === 403) {
+            const currentInitData = await getCurrentInitData();
+            if (currentInitData && currentInitData.trim()) {
+                const newToken = await loginWithInitData();
+                if (newToken) {
+                    const retryResponse = await fetch(`${apiUrl}/stew/open`, {
+                        method: 'POST',
+                        headers: await getApiHeaders()
+                    });
+                    const retryData = await retryResponse.json();
+                    handleStewResponse(retryData, retryResponse.ok);
+                    return;
+                }
+            }
+        }
+        
+        const data = await response.json();
+        handleStewResponse(data, response.ok);
+        
+        // Обновляем ресурсы после открытия
+        if (response.ok && data.success) {
+            await loadResources();
+        }
+    } catch (error) {
+        console.error('Ошибка открытия тушенки:', error);
+        if (window.tg && window.tg.showAlert) {
+            window.tg.showAlert(`Ошибка: ${error.message}`);
+        } else {
+            alert(`Ошибка: ${error.message}`);
+        }
+    }
+};
+
+// Обработка ответа открытия тушенки
+function handleStewResponse(data, isOk) {
+    if (!isOk || !data.success) {
+        const errorMessage = data.error || 'Ошибка открытия тушенки';
+        if (window.tg && window.tg.showAlert) {
+            window.tg.showAlert(`Ошибка: ${errorMessage}`);
+        } else {
+            alert(`Ошибка: ${errorMessage}`);
+        }
+        return;
+    }
+    
+    // Формируем сообщение о наградах
+    let message = '🎁 Выпало из тушенки:\n\n';
+    
+    if (data.rewards) {
+        const rewards = data.rewards;
+        if (rewards.cigarettes) message += `🚬 Сигареты: ${formatNumber(rewards.cigarettes)}\n`;
+        if (rewards.sugar) message += `🍬 Сахар: ${formatNumber(rewards.sugar)}\n`;
+        if (rewards.rubles) message += `💰 Рубли: ${formatNumber(rewards.rubles)}\n`;
+        if (rewards.paper) message += `🧻 Туалетная бумага: ${formatNumber(rewards.paper)}\n`;
+    }
+    
+    if (data.hides && data.hides.length > 0) {
+        message += `\n📸 Найдено скрытых предметов: ${data.hides.length}\n`;
+    }
+    
+    if (data.clothing) {
+        message += `\n👕 Одежда: ${data.clothing.name || 'Получена'}\n`;
+    }
+    
+    if (data.newAchievements && data.newAchievements.length > 0) {
+        message += `\n🏆 Новые достижения:\n`;
+        data.newAchievements.forEach(achievement => {
+            message += `  • ${achievement.name || achievement.title}\n`;
+        });
+    }
+    
+    if (data.stewLeft !== undefined) {
+        message += `\n📦 Осталось тушенки: ${formatNumber(data.stewLeft)}`;
+    }
+    
+    if (window.tg && window.tg.showAlert) {
+        window.tg.showAlert(message);
+    } else {
+        alert(message);
+    }
 }
 
 // Форматирование чисел с разделителями тысяч
