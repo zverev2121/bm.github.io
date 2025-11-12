@@ -1942,6 +1942,10 @@ async function loadBossInfo(showLoading = true) {
                 timeInfo += `<br>Окончание боя: <strong>${endTime}</strong>`;
             }
             
+            // Получаем нанесенный урон из talentState
+            const currentDamage = (data.success && data.talentState && data.talentState.currentDamage) ? data.talentState.currentDamage : 0;
+            const currentDamageFormatted = formatNumberShort(currentDamage);
+            
             // Получаем иконку босса напрямую из session, без ожидания загрузки всех боссов
             let bossImageHtml = '';
             const bossId = session.bossId || session.id || null;
@@ -1954,15 +1958,18 @@ async function loadBossInfo(showLoading = true) {
                 const localImagePath = bossId ? `images/${bossId}.png` : '';
                 
                 bossImageHtml = `
-                    <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
-                        <img src="${imgSrc}" 
-                             alt="${session.title || 'Босс'}" 
-                             data-fallback="${fallbackSrc}"
-                             data-local="${localImagePath}"
-                             style="max-width: 100%; max-height: 100%; object-fit: contain;"
-                             onerror="const img = this; if(img.dataset.fallback && img.dataset.fallback !== '' && img.src !== img.dataset.fallback) { img.src = img.dataset.fallback; } else if(img.dataset.local && img.dataset.local !== '' && img.src !== img.dataset.local) { img.src = img.dataset.local; } else { img.style.display='none'; if(img.nextElementSibling) img.nextElementSibling.style.display='flex'; }"
-                             onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
-                        <span style="font-size: 40px; display: none;">👹</span>
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                        <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
+                            <img src="${imgSrc}" 
+                                 alt="${session.title || 'Босс'}" 
+                                 data-fallback="${fallbackSrc}"
+                                 data-local="${localImagePath}"
+                                 style="max-width: 100%; max-height: 100%; object-fit: contain;"
+                                 onerror="const img = this; if(img.dataset.fallback && img.dataset.fallback !== '' && img.src !== img.dataset.fallback) { img.src = img.dataset.fallback; } else if(img.dataset.local && img.dataset.local !== '' && img.src !== img.dataset.local) { img.src = img.dataset.local; } else { img.style.display='none'; if(img.nextElementSibling) img.nextElementSibling.style.display='flex'; }"
+                                 onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
+                            <span style="font-size: 40px; display: none;">👹</span>
+                        </div>
+                        ${currentDamage > 0 ? `<div style="text-align: center; font-size: 11px; color: var(--tg-theme-hint-color, #999);">Мой урон: ${currentDamageFormatted}</div>` : ''}
                     </div>
                 `;
             } else if (session.title) {
@@ -1971,14 +1978,17 @@ async function loadBossInfo(showLoading = true) {
                     const currentBoss = window.allBosses.find(b => b.name === session.title);
                     if (currentBoss) {
                         bossImageHtml = `
-                            <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 12px; overflow: hidden; flex-shrink: 0;">
-                                <img src="${getBossImageUrl(currentBoss.id, currentBoss)}" 
-                                     alt="${session.title}" 
-                                     data-fallback="${getBossImageUrlFallback(currentBoss.id, currentBoss)}"
-                                     style="max-width: 100%; max-height: 100%; object-fit: contain;"
-                                     onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
-                                     onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
-                                <span style="font-size: 40px; display: none;">👹</span>
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                                <div class="boss-image" style="width: 100px; height: 100px; min-width: 100px; max-width: 100px; min-height: 100px; max-height: 100px; box-sizing: border-box; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 12px; overflow: hidden; flex-shrink: 0;">
+                                    <img src="${getBossImageUrl(currentBoss.id, currentBoss)}" 
+                                         alt="${session.title}" 
+                                         data-fallback="${getBossImageUrlFallback(currentBoss.id, currentBoss)}"
+                                         style="max-width: 100%; max-height: 100%; object-fit: contain;"
+                                         onerror="if(this.dataset.fallback && this.dataset.fallback !== '' && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }"
+                                         onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';">
+                                    <span style="font-size: 40px; display: none;">👹</span>
+                                </div>
+                                ${currentDamage > 0 ? `<div style="text-align: center; font-size: 11px; color: var(--tg-theme-hint-color, #999);">Мой урон: ${currentDamageFormatted}</div>` : ''}
                             </div>
                         `;
                     }
@@ -1998,10 +2008,6 @@ async function loadBossInfo(showLoading = true) {
                 return `${minutes}:${seconds.toString().padStart(2, '0')}`;
             }
             
-            // Получаем нанесенный урон из talentState
-            const currentDamage = (data.success && data.talentState && data.talentState.currentDamage) ? data.talentState.currentDamage : 0;
-            const currentDamageFormatted = formatNumberShort(currentDamage);
-            
             // Слайдер HP
             const currentHpShort = formatNumberShort(session.currentHp);
             const maxHpShort = formatNumberShort(session.maxHp);
@@ -2013,7 +2019,6 @@ async function loadBossInfo(showLoading = true) {
                             ${currentHpShort} / ${maxHpShort} (${hpPercent}%)
                         </div>
                     </div>
-                    ${currentDamage > 0 ? `<div style="text-align: center; margin-top: 4px; font-size: 11px; color: var(--tg-theme-hint-color, #999);">Нанесено урона: ${currentDamageFormatted}</div>` : ''}
                 </div>
             `;
             
@@ -5034,6 +5039,15 @@ function renderBossList(categoriesData) {
     
     container.innerHTML = html;
     
+    // Скрываем секцию порядка атаки, если нет боссов
+    setTimeout(() => {
+        const orderSection = document.getElementById('order-section');
+        if (orderSection && selectedBosses.length === 0) {
+            orderSection.style.display = 'none';
+        }
+        updateOrderCarousel();
+    }, 100);
+    
     console.log('📝 HTML вставлен в контейнер, длина:', html.length);
     console.log('📝 HTML содержит карусель:', html.includes('carousel-unified'));
     console.log('📝 HTML содержит карточки боссов:', html.includes('boss-card'));
@@ -5453,30 +5467,19 @@ function updateOrderCarousel() {
         console.log(`🗑️ [updateOrderCarousel] Удален босс с индексом ${indexToRemove} (0 оставшихся атак)`);
     }
     
+    const categorySection = orderCarousel.closest('.boss-category-section');
+    
     if (selectedBosses.length === 0) {
-        orderCarousel.innerHTML = `
-            <div style="padding: 4px; text-align: center; color: var(--tg-theme-hint-color, #999); font-size: 13px;">
-                Выберите боссов для атаки
-            </div>
-        `;
-        // Уменьшаем отступы секции, когда боссов нет
-        const categorySection = orderCarousel.closest('.boss-category-section');
+        // Скрываем всю секцию, когда нет боссов
         if (categorySection) {
-            categorySection.style.marginTop = '5px';
-            categorySection.style.marginBottom = '5px';
+            categorySection.style.display = 'none';
         }
-        const categoryTitle = categorySection?.querySelector('.category-title');
-        if (categoryTitle) {
-            categoryTitle.style.marginBottom = '5px';
-            categoryTitle.style.fontSize = '16px';
-        }
-        // Уменьшаем отступы контейнера карусели
-        const carouselContainer = orderCarousel.closest('.boss-carousel-container');
-        if (carouselContainer) {
-            carouselContainer.style.padding = '0';
-        }
-        orderCarousel.style.padding = '4px 8px';
         return;
+    }
+    
+    // Показываем секцию, когда есть боссы
+    if (categorySection) {
+        categorySection.style.display = 'block';
     }
     
     let html = '';
@@ -5532,7 +5535,6 @@ function updateOrderCarousel() {
     orderCarousel.innerHTML = html;
     
     // Восстанавливаем нормальные отступы, когда боссы есть
-    const categorySection = orderCarousel.closest('.boss-category-section');
     if (categorySection) {
         categorySection.style.marginTop = '30px';
         categorySection.style.marginBottom = '20px';
@@ -7717,16 +7719,9 @@ function displayLoadedCombos() {
         combosByBoss[combo.bossName].push(combo);
     });
     
-    let html = '<ul style="text-align: left; padding-left: 20px;">';
-    Object.keys(combosByBoss).forEach(bossName => {
-        const combos = combosByBoss[bossName];
-        html += `<li><strong>${bossName}</strong>`;
-        html += '</li>';
-    });
-    html += '</ul>';
-    
-    container.innerHTML = html;
-    listContainer.style.display = 'block';
+    // Не показываем блок с загруженными комбо
+    listContainer.style.display = 'none';
+    container.innerHTML = '';
     console.log('✅ [displayLoadedCombos] Комбо отображены');
 }
 
