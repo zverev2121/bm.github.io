@@ -1701,7 +1701,7 @@ function updateWeaponCountsDisplay() {
 }
 
 // Установка множителя атаки
-function setWeaponMultiplier(multiplier) {
+window.setWeaponMultiplier = function setWeaponMultiplier(multiplier) {
     weaponMultiplier = multiplier;
     
     // Обновляем активную кнопку в сегментеде
@@ -2089,6 +2089,8 @@ async function loadBossInfo(showLoading = true) {
                     updateWeaponCounts(),
                     loadBossWeapons()
                 ]);
+                // Инициализируем активную кнопку множителя
+                setWeaponMultiplier(weaponMultiplier);
             }
             
             // Убеждаемся, что секция выбора боссов всегда видна, даже когда есть активный бой
@@ -2323,7 +2325,7 @@ async function attackBossWithWeapon(weapon) {
     // Проверяем, нужен ли подтверждающий алерт для яд/самопал/финка при больших множителях
     const weaponsWithMultiplier = ['poison', 'gunshot', 'knife'];
     const count = weaponsWithMultiplier.includes(weapon) ? weaponMultiplier : 1;
-    const requiresConfirmation = weaponsWithMultiplier.includes(weapon) && (weaponMultiplier === 100 || weaponMultiplier === 1000);
+    const requiresConfirmation = weaponsWithMultiplier.includes(weapon) && (weaponMultiplier === 100 || weaponMultiplier === 1000 || weaponMultiplier === 5000);
     
     if (requiresConfirmation) {
         const weaponDisplayName = WEAPON_DISPLAY_NAMES[weapon] || weapon;
