@@ -4999,7 +4999,7 @@ function renderBossList(categoriesData) {
             <h3 class="category-title" style="margin-bottom: 15px; color: var(--tg-theme-text-color, #000000); font-size: 18px; font-weight: 600;">Порядок атаки</h3>
             <div class="boss-carousel-container" data-category-id="order">
                 <div class="boss-carousel" id="carousel-order">
-                    <div style="padding: 20px; text-align: center; color: var(--tg-theme-hint-color, #999);">
+                    <div style="padding: 8px; text-align: center; color: var(--tg-theme-hint-color, #999); font-size: 13px;">
                         Выберите боссов для атаки
                     </div>
                 </div>
@@ -5430,10 +5430,20 @@ function updateOrderCarousel() {
     
     if (selectedBosses.length === 0) {
         orderCarousel.innerHTML = `
-            <div style="padding: 20px; text-align: center; color: var(--tg-theme-hint-color, #999);">
+            <div style="padding: 8px; text-align: center; color: var(--tg-theme-hint-color, #999); font-size: 13px;">
                 Выберите боссов для атаки
             </div>
         `;
+        // Уменьшаем отступы секции, когда боссов нет
+        const categorySection = orderCarousel.closest('.boss-category-section');
+        if (categorySection) {
+            categorySection.style.marginTop = '15px';
+            categorySection.style.marginBottom = '10px';
+        }
+        const categoryTitle = categorySection?.querySelector('.category-title');
+        if (categoryTitle) {
+            categoryTitle.style.marginBottom = '8px';
+        }
         return;
     }
     
@@ -5488,6 +5498,17 @@ function updateOrderCarousel() {
     });
     
     orderCarousel.innerHTML = html;
+    
+    // Восстанавливаем нормальные отступы, когда боссы есть
+    const categorySection = orderCarousel.closest('.boss-category-section');
+    if (categorySection) {
+        categorySection.style.marginTop = '30px';
+        categorySection.style.marginBottom = '20px';
+    }
+    const categoryTitle = categorySection?.querySelector('.category-title');
+    if (categoryTitle) {
+        categoryTitle.style.marginBottom = '15px';
+    }
 }
 
 // Перемещение босса в порядке атаки по индексу
@@ -8489,7 +8510,7 @@ function displayComboReward(data) {
     }
     
     if (reward.stash) {
-        message += `Скрытность: ${reward.stash.count}\n`;
+        message += `Нычки: ${reward.stash.count}\n`;
     }
     
     if (reward.tattoos && reward.tattoos.length > 0) {
@@ -8498,7 +8519,7 @@ function displayComboReward(data) {
     
     // Также показываем zshReward если есть
     if (data.zshReward && data.zshReward.drops) {
-        message += `\nДропы:\n`;
+        message += `\nЗаныканный шмот:\n`;
         data.zshReward.drops.forEach(drop => {
             message += `${drop.name}: ${drop.qty}\n`;
         });
