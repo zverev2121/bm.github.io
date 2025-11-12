@@ -7145,8 +7145,24 @@ function parseComboFile(text) {
     
     // Функция для определения, является ли строка заголовком комбо (имя босса + режим)
     function parseComboHeader(line) {
+        // Если строка начинается с цифры, это точно не заголовок
+        if (/^\d+/.test(line.trim())) {
+            return null;
+        }
+        
+        // Если строка является оружием, это не заголовок
+        const weapon = parseWeaponFromLine(line);
+        if (weapon) {
+            return null;
+        }
+        
         const parts = line.split(/\s+/).filter(p => p);
         if (parts.length < 2) return null;
+        
+        // Первое слово не должно быть числом
+        if (/^\d+$/.test(parts[0])) {
+            return null;
+        }
         
         // Пробуем найти режим комбо в последних словах
         for (let i = parts.length - 1; i >= 0; i--) {
@@ -7155,7 +7171,8 @@ function parseComboFile(text) {
             // Проверяем режим комбо
             if (COMBO_MODE_MAPPING[word]) {
                 const bossName = parts.slice(0, i).join(' ').toLowerCase();
-                if (bossName) {
+                // Имя босса не должно быть пустым и не должно начинаться с цифры
+                if (bossName && !/^\d+/.test(bossName.trim())) {
                     return {
                         bossName: bossName,
                         comboMode: COMBO_MODE_MAPPING[word],
@@ -7171,7 +7188,8 @@ function parseComboFile(text) {
             );
             if (foundMode) {
                 const bossName = parts.slice(0, i).join(' ').toLowerCase();
-                if (bossName) {
+                // Имя босса не должно быть пустым и не должно начинаться с цифры
+                if (bossName && !/^\d+/.test(bossName.trim())) {
                     return {
                         bossName: bossName,
                         comboMode: null,
@@ -7185,6 +7203,11 @@ function parseComboFile(text) {
         if (parts.length >= 2) {
             const bossName = parts[0].toLowerCase();
             const secondPart = parts[1].toLowerCase();
+            
+            // Имя босса не должно быть числом
+            if (/^\d+$/.test(bossName)) {
+                return null;
+            }
             
             if (COMBO_MODE_MAPPING[secondPart]) {
                 return {
@@ -7227,7 +7250,20 @@ function parseComboFile(text) {
             continue;
         }
         
-        // Проверяем, является ли строка заголовком комбо (это проверяем первым, чтобы не пропустить заголовки)
+        // Проверяем, является ли строка оружием (перед проверкой заголовка, чтобы не принять оружие за заголовок)
+        const weapon = parseWeaponFromLine(line);
+        if (weapon) {
+            // Это оружие, не пропускаем
+            if (currentBossName) {
+                currentWeapons.push(weapon);
+                console.log(`✓ Распознано оружие: "${line}" -> ${weapon} (всего оружий: ${currentWeapons.length})`);
+            } else {
+                console.log(`[parseComboFile] Пропущено оружие "${line}" (нет активного босса)`);
+            }
+            continue;
+        }
+        
+        // Проверяем, является ли строка заголовком комбо (после проверки оружия, чтобы не принять оружие за заголовок)
         const headerInfo = parseComboHeader(line);
         if (headerInfo) {
             console.log(`[parseComboFile] Найден заголовок комбо: ${headerInfo.bossName} (режим: ${headerInfo.comboMode || headerInfo.mode || 'normal'})`);
@@ -7246,19 +7282,6 @@ function parseComboFile(text) {
             currentComboMode = headerInfo.comboMode;
             currentMode = headerInfo.mode;
             currentWeapons = [];
-            continue;
-        }
-        
-        // Проверяем, является ли строка оружием (перед проверкой разделителя, чтобы не пропустить короткие названия оружия типа "яд")
-        const weapon = parseWeaponFromLine(line);
-        if (weapon) {
-            // Это оружие, не пропускаем
-            if (currentBossName) {
-                currentWeapons.push(weapon);
-                console.log(`✓ Распознано оружие: "${line}" -> ${weapon} (всего оружий: ${currentWeapons.length})`);
-            } else {
-                console.log(`[parseComboFile] Пропущено оружие "${line}" (нет активного босса)`);
-            }
             continue;
         }
         
