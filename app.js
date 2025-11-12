@@ -7083,10 +7083,11 @@ function parseComboFile(text) {
     
     // Функция для проверки, является ли строка заголовком (не комбо)
     function isHeader(line) {
-        // Заголовки типа "Комбо на 10.11.25 👇 БЕСПРЕДЕЛЬЩИКИ"
+        // Заголовки типа "Комбо на 10.11.25 👇 БЕСПРЕДЕЛЬЩИКИ" или "Комбо на 12.11.25 👇 ВЕРТУХАИ"
         return /^комбо\s+на/i.test(line) || 
                /^👇/i.test(line) ||
-               /^(беспредельщики|вертухаи|боссы)/i.test(line);
+               /^(беспредельщики|вертухаи|боссы)/i.test(line) ||
+               /вертухаи/i.test(line);
     }
     
     // Функция для проверки, является ли строка информацией о восстановлении (не комбо)
@@ -7097,11 +7098,11 @@ function parseComboFile(text) {
     
     // Функция для парсинга оружия из строки
     function parseWeaponFromLine(line) {
-        // Убираем нумерацию в начале (1.пах, 1. пах, 1 пах, 1)пах)
+        // Убираем нумерацию в начале (1.пах, 1. пах, 1 пах, 1)пах, 1. Глаз, 10.пах)
         // Сначала обрабатываем формат с точкой/скобкой без пробела
-        line = line.replace(/^\d+[\.\)]([^\s])/, '$1'); // 1.пах -> пах
-        // Затем обрабатываем формат с пробелом
-        line = line.replace(/^\d+[\.\)]\s+/, ''); // 1. пах -> пах
+        line = line.replace(/^\d+[\.\)]([^\s])/, '$1'); // 1.пах -> пах, 10.пах -> пах
+        // Затем обрабатываем формат с пробелом после точки/скобки
+        line = line.replace(/^\d+[\.\)]\s+/, ''); // 1. пах -> пах, 1. Глаз -> Глаз
         // Обрабатываем формат без точки/скобки
         line = line.replace(/^\d+\s+/, ''); // 1 пах -> пах
         line = line.trim();
@@ -7199,7 +7200,41 @@ function parseComboFile(text) {
             }
         }
         
-        // Если не нашли режим, пробуем первые два слова как имя босса + режим
+        // Если не нашли режим, пробуем разные варианты:
+        // 1. Первое слово - режим, остальное - имя босса (например, "Пацанский Борзов", "авторитетный Палыч")
+        if (parts.length >= 2) {
+            const firstPart = parts[0].toLowerCase();
+            const secondPart = parts[1].toLowerCase();
+            
+            // Проверяем, является ли первое слово режимом
+            if (COMBO_MODE_MAPPING[firstPart]) {
+                const bossName = parts.slice(1).join(' ').toLowerCase();
+                if (bossName && !/^\d+/.test(bossName.trim())) {
+                    return {
+                        bossName: bossName,
+                        comboMode: COMBO_MODE_MAPPING[firstPart],
+                        mode: null
+                    };
+                }
+            }
+            
+            const foundModeFirst = Object.keys(BATTLE_MODE_INFO).find(key => 
+                BATTLE_MODE_INFO[key].name.toLowerCase().includes(firstPart) ||
+                key.toLowerCase() === firstPart
+            );
+            if (foundModeFirst) {
+                const bossName = parts.slice(1).join(' ').toLowerCase();
+                if (bossName && !/^\d+/.test(bossName.trim())) {
+                    return {
+                        bossName: bossName,
+                        comboMode: null,
+                        mode: foundModeFirst
+                    };
+                }
+            }
+        }
+        
+        // 2. Второе слово - режим, первое - имя босса (например, "Палыч авторитетный", "Борзов пацанский")
         if (parts.length >= 2) {
             const bossName = parts[0].toLowerCase();
             const secondPart = parts[1].toLowerCase();
@@ -8527,6 +8562,46 @@ function fallbackCopyTextToClipboard(text) {
     document.body.removeChild(textArea);
 }
 
+// Функция для форматирования текущей даты по МСК в формате "12.11.25"
+function formatCurrentDateMoscow() {
+    try {
+        const now = new Date();
+        
+        // Используем Intl API для правильной конвертации с учетом часового пояса МСК
+        try {
+            const formatter = new Intl.DateTimeFormat('ru-RU', {
+                timeZone: 'Europe/Moscow',
+                day: '2-digit',
+                month: '2-digit',
+                year: '2-digit'
+            });
+            
+            const parts = formatter.formatToParts(now);
+            const day = parts.find(p => p.type === 'day').value;
+            const month = parts.find(p => p.type === 'month').value;
+            const year = parts.find(p => p.type === 'year').value;
+            
+            return `${day}.${month}.${year}`;
+        } catch (e) {
+            // Fallback: МСК = UTC+3 (фиксированное смещение)
+            const moscowTime = new Date(now.getTime() + (3 * 60 * 60 * 1000));
+            const day = String(moscowTime.getUTCDate()).padStart(2, '0');
+            const month = String(moscowTime.getUTCMonth() + 1).padStart(2, '0');
+            const year = String(moscowTime.getUTCFullYear()).slice(-2);
+            
+            return `${day}.${month}.${year}`;
+        }
+    } catch (error) {
+        console.error('Ошибка форматирования даты:', error);
+        // Fallback: используем локальное время
+        const now = new Date();
+        const day = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const year = String(now.getFullYear()).slice(-2);
+        return `${day}.${month}.${year}`;
+    }
+}
+
 // Копирование всех комбо в буфер обмена
 window.copyAllCombosToClipboard = function() {
     if (!loadedCombos || loadedCombos.length === 0) {
@@ -8548,7 +8623,8 @@ window.copyAllCombosToClipboard = function() {
     });
     
     // Формируем текст всех комбо
-    let allCombosText = '';
+    const currentDate = formatCurrentDateMoscow();
+    let allCombosText = `Комбо на ${currentDate}\n`;
     const bossNames = Object.keys(combosByBoss);
     
     bossNames.forEach((bossName, bossIndex) => {
