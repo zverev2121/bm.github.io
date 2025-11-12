@@ -7157,7 +7157,14 @@ function parseComboFile(text) {
     // Функция для проверки, является ли строка информацией о восстановлении (не комбо)
     function isRestoreInfo(line) {
         // Строки типа "Потрачено на восстановление : 3 рубля" или "Потрачено на восстановление: 6 рубля"
-        return /^потрачено\s+на\s+восстановление/i.test(line);
+        // Проверяем, что строка начинается с "потрачено на восстановление" И содержит число или слово "рубля"/"рубль"
+        // Это нужно, чтобы не пропустить строки типа "ПАЛЫЧ пац", которые могут случайно совпасть
+        const restorePattern = /^потрачено\s+на\s+восстановление/i;
+        if (!restorePattern.test(line)) {
+            return false;
+        }
+        // Дополнительная проверка: должна быть информация о деньгах (число + рубля/рубль)
+        return /\d+\s*(рубля|рубль|₽)/i.test(line);
     }
     
     // Функция для парсинга оружия из строки
@@ -7183,7 +7190,19 @@ function parseComboFile(text) {
             return null;
         }
         
-        // Пробуем распарсить как оружие (сначала полную строку, потом первое слово)
+        // Пробуем распарсить как оружие (сначала первое слово, потом полную строку для многословных названий)
+        // Это более надежно, так как обычно оружие - это одно слово
+        if (parts.length > 0) {
+            let weaponName = parts[0].toLowerCase();
+            console.log(`[parseWeaponFromLine] Пробуем распарсить: "${weaponName}" (первое слово)`);
+            let apiWeapon = parseWeaponName(weaponName);
+            if (apiWeapon) {
+                console.log(`[parseWeaponFromLine] Найдено оружие (первое слово): "${weaponName}" -> ${apiWeapon}`);
+                return apiWeapon;
+            }
+        }
+        
+        // Если не нашли, пробуем полную строку (для многословных названий типа "коленом в ухо")
         let weaponName = parts.join(' ').toLowerCase();
         console.log(`[parseWeaponFromLine] Пробуем распарсить: "${weaponName}" (полная строка)`);
         let apiWeapon = parseWeaponName(weaponName);
@@ -7191,17 +7210,6 @@ function parseComboFile(text) {
         if (apiWeapon) {
             console.log(`[parseWeaponFromLine] Найдено оружие (полная строка): "${weaponName}" -> ${apiWeapon}`);
             return apiWeapon;
-        }
-        
-        // Если не нашли, пробуем первое слово
-        if (parts.length > 0) {
-            weaponName = parts[0].toLowerCase();
-            console.log(`[parseWeaponFromLine] Пробуем распарсить: "${weaponName}" (первое слово)`);
-            apiWeapon = parseWeaponName(weaponName);
-            if (apiWeapon) {
-                console.log(`[parseWeaponFromLine] Найдено оружие (первое слово): "${weaponName}" -> ${apiWeapon}`);
-                return apiWeapon;
-            }
         }
         
         console.log(`[parseWeaponFromLine] Не найдено оружие для: "${line}"`);
