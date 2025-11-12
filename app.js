@@ -1,56 +1,16 @@
-// Telegram Web App API
-// Проверяем, что мы в Telegram
-let tg = null;
-if (window.Telegram && window.Telegram.WebApp) {
-    tg = window.Telegram.WebApp;
-} else {
-    console.error('Telegram WebApp не доступен! Убедитесь, что Mini App открыт через Telegram');
-}
+// ==================== ГЛАВНЫЙ ФАЙЛ ПРИЛОЖЕНИЯ ====================
+// Модули загружаются в следующем порядке:
+// 1. telegram.js - инициализация Telegram WebApp
+// 2. api.js - API утилиты
+// 3. utils.js - утилиты форматирования
+// 4. ui.js - UI функции (модальные окна, статус)
+// 5. auth.js - авторизация и токены
+// 6. app.js - основной код приложения
 
-// Версия Mini App (для проверки обновлений)
-const APP_VERSION = '2.0.0';
-
-// Инициализация Mini App
-if (tg) {
-    tg.ready();
-    tg.expand();
-    // Отключаем вертикальные свайпы для предотвращения сворачивания при скролле
-    // Используем метод disableVerticalSwipes (Bot API 7.7+)
-    if (tg.disableVerticalSwipes) {
-        tg.disableVerticalSwipes();
-    }
-    // Также устанавливаем поле isVerticalSwipesEnabled напрямую (если доступно)
-    if (tg.isVerticalSwipesEnabled !== undefined) {
-        tg.isVerticalSwipesEnabled = false;
-    }
-    // Отключаем подтверждение закрытия, чтобы не блокировать скролл
-    if (tg.enableClosingConfirmation) {
-        tg.enableClosingConfirmation(false);
-    }
-} else {
-    console.error('Не удалось инициализировать Telegram WebApp');
-}
-
-// Функции для кастомного модального окна с темным фоном
-function showCustomModal(message) {
-    const modal = document.getElementById('custom-modal');
-    const modalBody = document.getElementById('custom-modal-body');
-    if (modal && modalBody) {
-        modalBody.textContent = message;
-        modal.style.display = 'flex';
-        // Блокируем прокрутку фона
-        document.body.style.overflow = 'hidden';
-    }
-}
-
-function closeCustomModal() {
-    const modal = document.getElementById('custom-modal');
-    if (modal) {
-        modal.style.display = 'none';
-        // Разблокируем прокрутку фона
-        document.body.style.overflow = '';
-    }
-}
+// Проверяем, что используется правильная версия
+console.log('Mini App версия:', window.APP_VERSION);
+console.log('API URL:', window.GAME_API_URL);
+console.log('Используется прокси:', !!window.API_SERVER_URL);
 
 // Функция переключения вкладок
 window.switchTab = function switchTab(tabName) {
@@ -134,31 +94,9 @@ window.switchTab = function switchTab(tabName) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// Базовый URL API игры
-// Загружается из localStorage или используется значение по умолчанию
-function getApiServerUrl() {
-    const saved = localStorage.getItem('api_server_url');
-    if (saved && saved.trim()) {
-        return saved.trim();
-    }
-    // Значение по умолчанию (можно изменить)
-    return 'https://carelessly-pioneering-wombat.cloudpub.ru/api';
-}
-
-function getGameApiUrl() {
-    const apiServerUrl = getApiServerUrl();
-    // Если указан API сервер, используем его, иначе прямое подключение
-    return apiServerUrl || 'https://the-prison.ru/api';
-}
-
-// Динамически получаем URL API
-let API_SERVER_URL = getApiServerUrl();
-let GAME_API_URL = getGameApiUrl();
-
-// Проверяем, что используется правильная версия
-console.log('Mini App версия:', APP_VERSION);
-console.log('API URL:', GAME_API_URL);
-console.log('Используется прокси:', !!API_SERVER_URL);
+// Используем глобальные переменные из api.js
+const API_SERVER_URL = window.API_SERVER_URL;
+const GAME_API_URL = window.GAME_API_URL;
 
 // Функции для работы с настройками
 async function loadSettings() {
@@ -1478,8 +1416,8 @@ function updateStatus(connected) {
     }
 }
 
-// Функция для расшифровки режима на русский (пац/блат/авто)
-function decodeMode(mode) {
+// Используем функции из utils.js
+const decodeMode = window.decodeMode || function(mode) {
     if (!mode) return 'N/A';
     const modeMap = {
         'blotnoy': 'Блат',
@@ -1488,10 +1426,9 @@ function decodeMode(mode) {
         'odin': 'Один'
     };
     return modeMap[mode.toLowerCase()] || mode;
-}
+};
 
-// Функция для расшифровки режима комбо
-function decodeComboMode(comboMode) {
+const decodeComboMode = window.decodeComboMode || function(comboMode) {
     if (!comboMode) return null;
     const comboModeMap = {
         'blotnoy': 'Блат',
@@ -1499,18 +1436,13 @@ function decodeComboMode(comboMode) {
         'avtoritetny': 'Авто'
     };
     return comboModeMap[comboMode.toLowerCase()] || comboMode;
-}
+};
 
-// Функция для форматирования времени из UTC в МСК (только часы:минуты:секунды)
-function formatTimeToMoscow(isoDateString) {
+const formatTimeToMoscow = window.formatTimeToMoscow || function(isoDateString) {
     if (!isoDateString) return 'N/A';
     try {
         const date = new Date(isoDateString);
-        
-        // Используем toLocaleString с timeZone для правильной конвертации в МСК
-        // Если браузер поддерживает, используем его, иначе вычисляем вручную
         try {
-            // Пытаемся использовать Intl API для правильной конвертации с учетом летнего времени
             const formatter = new Intl.DateTimeFormat('ru-RU', {
                 timeZone: 'Europe/Moscow',
                 hour: '2-digit',
@@ -1518,27 +1450,23 @@ function formatTimeToMoscow(isoDateString) {
                 second: '2-digit',
                 hour12: false
             });
-            
             const parts = formatter.formatToParts(date);
             const hours = parts.find(p => p.type === 'hour').value;
             const minutes = parts.find(p => p.type === 'minute').value;
             const seconds = parts.find(p => p.type === 'second').value;
-            
             return `${hours}:${minutes}:${seconds}`;
         } catch (e) {
-            // Fallback: МСК = UTC+3 (фиксированное смещение)
             const moscowTime = new Date(date.getTime() + (3 * 60 * 60 * 1000));
             const hours = String(moscowTime.getUTCHours()).padStart(2, '0');
             const minutes = String(moscowTime.getUTCMinutes()).padStart(2, '0');
             const seconds = String(moscowTime.getUTCSeconds()).padStart(2, '0');
-            
             return `${hours}:${minutes}:${seconds}`;
         }
     } catch (e) {
         console.error('Ошибка форматирования времени:', e);
         return isoDateString;
     }
-}
+};
 
 // Глобальная переменная для хранения количества оружий
 let weaponCounts = {
@@ -1556,8 +1484,8 @@ let weaponWeaponsData = null;
 // Глобальная переменная для хранения текущего множителя атаки
 let weaponMultiplier = 1;
 
-// Форматирование чисел в сокращенном виде (70.354кк, 3.123ккк, 7.5к)
-function formatNumberShort(num) {
+// Используем функции форматирования из utils.js
+const formatNumberShort = window.formatNumberShort || function(num) {
     if (num >= 1000000000) {
         // Миллиарды (ккк)
         const value = num / 1000000000;
