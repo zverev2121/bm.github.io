@@ -8942,7 +8942,10 @@ function displayResources(resources) {
                         <img src="images/bitseps.png" alt="Бицуха" style="width: 20px; height: 20px; object-fit: contain;">
                         <div><strong>Бицуха:</strong> ${formatNumber(resources.biceps || 0)}</div>
                     </div>
-                    <div><strong>Энергия:</strong> ${resources.energy || 0} / ${resources.max_energy || 0}</div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <img src="images/Energy.png" alt="Энергия" style="width: 20px; height: 20px; object-fit: contain;">
+                        <div><strong>Энергия:</strong> ${resources.energy || 0} / ${resources.max_energy || 0}</div>
+                    </div>
                 </div>
             </div>
             
@@ -8974,9 +8977,15 @@ function displayResources(resources) {
                         <img src="images/chefir.png" alt="Чифир" style="width: 20px; height: 20px; object-fit: contain;">
                         <div><strong>Чифир:</strong> ${formatNumber(resources.chefir || 0)}</div>
                     </div>
-                    <div><strong>Фишки:</strong> ${formatNumber(resources.chips || 0)}</div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <img src="images/pokerChips.webp" alt="Фишки" style="width: 20px; height: 20px; object-fit: contain;">
+                        <div><strong>Фишки:</strong> ${formatNumber(resources.chips || 0)}</div>
+                    </div>
                     <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div><strong>Тушенка:</strong> ${formatNumber(resources.stew || 0)}</div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <img src="images/stewBalance.webp" alt="Тушенка" style="width: 20px; height: 20px; object-fit: contain;">
+                            <div><strong>Тушенка:</strong> ${formatNumber(resources.stew || 0)}</div>
+                        </div>
                         ${(resources.stew || 0) > 0 ? `<button onclick="openStew()" style="padding: 4px 12px; font-size: 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Открыть</button>` : ''}
                     </div>
                     <div><strong>Синие спички:</strong> ${formatNumber(resources.blue_matches || 0)}</div>
@@ -8993,15 +9002,24 @@ function displayResources(resources) {
                 <h3 style="margin: 0 0 10px 0; font-size: 16px; font-weight: 600;">⚔️ Оружие</h3>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 14px;">
                     <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div><strong>Яд:</strong> ${formatNumber(resources.poison_count || 0)}</div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <img src="images/яд.png" alt="Яд" style="width: 20px; height: 20px; object-fit: contain;">
+                            <div><strong>Яд:</strong> ${formatNumber(resources.poison_count || 0)}</div>
+                        </div>
                         <button onclick="buyWeapon('poison', 18)" style="padding: 4px 8px; font-size: 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Купить</button>
                     </div>
                     <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div><strong>Самопал:</strong> ${formatNumber(resources.gunshot_count || 0)}</div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <img src="images/сам.png" alt="Самопал" style="width: 20px; height: 20px; object-fit: contain;">
+                            <div><strong>Самопал:</strong> ${formatNumber(resources.gunshot_count || 0)}</div>
+                        </div>
                         <button onclick="buyWeapon('gunshot', 5)" style="padding: 4px 8px; font-size: 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Купить</button>
                     </div>
                     <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div><strong>Финка:</strong> ${formatNumber(resources.knife_count || 0)}</div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <img src="images/финка.png" alt="Финка" style="width: 20px; height: 20px; object-fit: contain;">
+                            <div><strong>Финка:</strong> ${formatNumber(resources.knife_count || 0)}</div>
+                        </div>
                         <button onclick="buyWeapon('knife', 4)" style="padding: 4px 8px; font-size: 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Купить</button>
                     </div>
                 </div>
